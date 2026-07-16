@@ -4536,6 +4536,10 @@ function isLawyerFeeSettled(key){
 function getCasesRows(){
   const unique = getDedupedRAW();
   return unique.filter(r=>{
+    // حماية إضافية مباشرة: استبعاد أي صف رقم دعواه بعد التوحيد مجرد سنة (بلا
+    // رقم فعلي) — قضايا "سجل عام" فارغة لم تُخصَّص لها المحكمة رقماً بعد.
+    // هذا احتياط مباشر بغض النظر عن نجاح الفلترة الأصلية عند بناء RAW_DATA.
+    if(typeof isYearOnlyCaseNo === "function" && isYearOnlyCaseNo(shortCaseNo(r["رقم الدعوى"]))) return false;
     const key = caseKey(r);
     // مُزالة يدوياً (تسوية خارجية) → تختفي نهائياً
     if(isCaseRemoved(key)) return false;
