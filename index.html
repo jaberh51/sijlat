@@ -1489,7 +1489,13 @@ const appStorage = (function(){
 // بعد توحيد الأرقام إلى سنة مجرّدة بلا رقم (مثل "2026" بدل "107 - 2026")،
 // فتظهر كقضية "شبح" منفصلة عن القضية الحقيقية رغم أنها سجل فارغ لا فائدة منه.
 // هذا الفلتر لا يُعدِّل data.js إطلاقاً — فقط يستثني هذه الصفوف من الذاكرة والعرض.
-const RAW_DATA = SEED_DATA.filter(r => !/^\d{4}$/.test(shortCaseNo(r["رقم الدعوى"])));
+// نُزيل أي حروف اتجاه خفية (شائعة في بيانات إكسل العربية) أو مسافات قبل الفحص،
+// لأن وجودها يُفشل مطابقة /^\d{4}$/ رغم أن الرقم "يبدو" سنة مجرّدة بصرياً فقط.
+function isYearOnlyCaseNo(v){
+  const cleaned = String(v||"").replace(/[\u200b-\u200f\u202a-\u202e\ufeff\s]/g, "");
+  return /^\d{4}$/.test(cleaned);
+}
+const RAW_DATA = SEED_DATA.filter(r => !isYearOnlyCaseNo(shortCaseNo(r["رقم الدعوى"])));
 // عدد القضايا الفريدة — محسوب مسبقاً بدل استدعاء dedupeByCase في كل render
 let RAW_DATA_UNIQUE_COUNT = 0;
 
