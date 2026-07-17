@@ -5,11 +5,35 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>سجل الدعاوى</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Tajawal:wght@300;400;500;700;900&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+
+<!-- ===== Firebase Modular SDK (النسخة الحديثة الموصى بها من Google) ===== -->
+<!-- وحدة صغيرة (type=module) تستورد فقط الدوال المطلوبة فعلياً من Firebase
+     (تحميل أخف بكثير من نسخة Compat القديمة)، وتُعرّضها على window ليستخدمها
+     كود التطبيق الرئيسي (سكربت كلاسيكي عادي، غير module، لأنه يحتوي مئات
+     الدوال المستدعاة مباشرة من HTML عبر onclick=" ") دون الحاجة لإعادة كتابته بالكامل. -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+  import {
+    getDatabase, ref, get, set, update, onValue, off,
+    query, orderByKey, limitToLast, endBefore,
+    onChildAdded, onChildChanged, onChildRemoved
+  } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
+  import {
+    getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
+  } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+
+  window.__fbModular = {
+    initializeApp, getDatabase, ref, get, set, update, onValue, off,
+    query, orderByKey, limitToLast, endBefore,
+    onChildAdded, onChildChanged, onChildRemoved,
+    getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
+  };
+  window.dispatchEvent(new Event('fbModularReady'));
+</script>
+
 <style>
   :root{
     --paper:#f1efe9;
@@ -1321,7 +1345,7 @@ async function migrateLocalStorageToIDB(){
   localStorage.setItem('_idbMigrated', '1');
 }
 
-// ===== Firebase Realtime Database — مزامنة سحابية لحظية بين كل الأجهزة =====
+// ===== Firebase Realtime Database (Modular SDK) — مزامنة سحابية لحظية =====
 const firebaseConfig = {
   apiKey: "AIzaSyAmq4X4OKDiQvYRqDW_sinYnxByWkzdcIQ",
   authDomain: "system1-9aeee.firebaseapp.com",
@@ -1332,98 +1356,158 @@ const firebaseConfig = {
   appId: "1:974134205323:web:208ecb0f5499afe5bcad8e"
 };
 
-let fbDb = null;
-try{
-  firebase.initializeApp(firebaseConfig);
-  fbDb = firebase.database();
-}catch(e){
-  console.error("تعذّر تهيئة Firebase — سيعمل التطبيق محلياً فقط:", e);
+let fbApp = null, fbDb = null, fbAuth = null;
+let _fbModularWaitPromise = null;
+
+// ننتظر تحميل وحدة Firebase الحديثة (type=module في <head>) قبل أي استخدام —
+// قد تصل هذه الوحدة قبل أو بعد تنفيذ هذا الكود، فنتعامل مع الحالتين معاً.
+function waitForFbModular(){
+  if(_fbModularWaitPromise) return _fbModularWaitPromise;
+  _fbModularWaitPromise = new Promise((resolve)=>{
+    if(window.__fbModular){ resolve(window.__fbModular); return; }
+    window.addEventListener('fbModularReady', ()=> resolve(window.__fbModular), {once:true});
+    setTimeout(()=> resolve(window.__fbModular || null), 8000); // احتياط أقصى
+  });
+  return _fbModularWaitPromise;
 }
 
-async function fbGet(key){
-  if(!fbDb) return undefined;
+async function initFirebase(){
+  const fb = await waitForFbModular();
+  if(!fb){
+    console.error("تعذّر تحميل مكتبة Firebase الحديثة — سيعمل التطبيق محلياً فقط");
+    return;
+  }
   try{
-    const snap = await fbDb.ref(key).once('value');
-    const val = snap.val();
-    return (val === null || val === undefined) ? undefined : val;
-  }catch(e){ return undefined; }
+    fbApp = fb.initializeApp(firebaseConfig);
+    fbDb = fb.getDatabase(fbApp);
+    fbAuth = fb.getAuth(fbApp);
+  }catch(e){
+    console.error("تعذّر تهيئة Firebase:", e);
+  }
 }
-async function fbSet(key, value){
+
+// مفاتيح Firebase تمنع أحرفاً معيّنة ( . # $ [ ] / ) — بعض أسماء محاكمنا تحتوي
+// "/" (مثل "عمان / قسم شمال عمان")، لذا نُشفّر أي حرف ممنوع بصيغة قابلة للعكس.
+function encodeFbKey(key){
+  return String(key).replace(/[.#$\[\]\/]/g, ch => '~' + ch.charCodeAt(0) + '~');
+}
+function decodeFbKey(encoded){
+  return String(encoded).replace(/~(\d+)~/g, (m,code) => String.fromCharCode(+code));
+}
+
+// تحميل متدرّج للقضايا من Firebase — يجلب آخر 50 قضية أولاً (limitToLast) بدل
+// كل القضايا دفعة واحدة، ثم يُكمل الجلب في الخلفية دفعة تلو الأخرى، مستدعياً
+// onBatch مع كل دفعة جديدة فور وصولها ليُحدَّث العرض تدريجياً بلا انتظار الكل.
+const FB_BATCH_SIZE = 50;
+async function fbLoadCasesProgressive(onBatch){
+  if(!fbDb) return {};
+  const fb = window.__fbModular;
+  const casesRef = fb.ref(fbDb, 'master_cases');
+  let all = {};
+  let cursorKey = null;
+  while(true){
+    const q = cursorKey
+      ? fb.query(casesRef, fb.orderByKey(), fb.endBefore(cursorKey), fb.limitToLast(FB_BATCH_SIZE))
+      : fb.query(casesRef, fb.orderByKey(), fb.limitToLast(FB_BATCH_SIZE));
+    let snap;
+    try{ snap = await fb.get(q); }catch(e){ break; } // مثلاً لا اتصال إنترنت
+    if(!snap.exists()) break;
+    const keys = [];
+    const batch = {};
+    snap.forEach(child=>{
+      keys.push(child.key);
+      const dk = decodeFbKey(child.key);
+      batch[dk] = child.val();
+      all[dk] = child.val();
+    });
+    if(!keys.length) break;
+    if(onBatch) onBatch(batch, all);
+    cursorKey = keys[0]; // أصغر مفتاح في هذه الدفعة — بداية الدفعة التالية للخلف
+    if(keys.length < FB_BATCH_SIZE) break; // وصلنا لبداية البيانات
+  }
+  return all;
+}
+
+// حفظ كل القضايا دفعة واحدة عبر Multi-path Update (كتابة واحدة فعّالة لكل
+// العقد المتغيّرة، بدل استبدال الكتلة الكاملة كنص JSON كما في السابق)
+// deletedKeys: مفاتيح حُذفت محلياً ويجب حذف عقدتها من Firebase أيضاً (تعيين
+// المسار إلى null في Multi-path Update يحذف تلك العقدة تحديداً في Firebase)
+async function fbSaveAllCases(cache, deletedKeys){
   if(!fbDb) return false;
+  const fb = window.__fbModular;
   try{
-    if(key === 'master_cases') _lastWrittenJSON = value; // value already JSON-stringified string
-    await fbDb.ref(key).set(value);
+    const updates = {};
+    Object.keys(cache).forEach(k=>{ updates['master_cases/' + encodeFbKey(k)] = cache[k]; });
+    (deletedKeys||[]).forEach(k=>{ updates['master_cases/' + encodeFbKey(k)] = null; });
+    await fb.update(fb.ref(fbDb), updates);
     return true;
   }catch(e){ return false; }
 }
 
-// ترحيل تلقائي مرة واحدة: أي بيانات موجودة مسبقاً محلياً (من قبل ربط Firebase)
-// تُرفع للسحابة أول مرة، حتى لا يفقد المستخدم عمله السابق عند تفعيل المزامنة.
-async function migrateLocalToFirebaseIfNeeded(){
-  if(!fbDb) return;
-  const already = localStorage.getItem('_fbMigrated');
-  if(already) return;
-  const keysToMigrate = ['master_cases', 'last_import'];
-  for(const k of keysToMigrate){
-    const cloudVal = await fbGet(k);
-    if(cloudVal !== undefined) continue; // موجود سحابياً بالفعل — لا نستبدله
-    const localVal = await idbGet(k).catch(()=>undefined);
-    const raw = localVal !== undefined ? localVal : localStorage.getItem(k);
-    if(raw !== undefined && raw !== null){
-      await fbSet(k, raw);
-    }
-  }
-  localStorage.setItem('_fbMigrated', '1');
+// تتبّع أي مفاتيح حُذفت محلياً من masterCache (مثل تنظيف السجلات القديمة)
+// حتى يُصفّى نظيرها من Firebase عند الحفظ التالي بدل أن يبقى "يتيماً" هناك.
+let _pendingFbDeletions = new Set();
+function markKeyDeletedFromMaster(key){
+  _pendingFbDeletions.add(key);
 }
 
-// مزامنة لحظية: أي تغيير يحدث من أي جهاز آخر يصل هنا تلقائياً ويُحدَّث العرض فوراً
-let _fbSyncStarted = false;
-// نتجاهل الصدى الذي يُرسله Firebase لنا نحن أنفسنا بعد كل حفظ (يُطلق نفس حدث
-// "تحديث" حتى للجهاز الذي كتب البيانات، وليس فقط للأجهزة الأخرى)
-let _lastWrittenJSON = null;
+// إعادة رسم الصفحة الظاهرة فعلياً حالياً بعد أي تغيير قادم من جهاز آخر
+function afterRemoteChange(){
+  invalidateMasterCaseNoIndex();
+  invalidateRowIndex();
+  markRenderCacheDirty();
+  restoreFinancialFromMaster();
+  RAW_DATA_UNIQUE_COUNT = dedupeByCase(RAW_DATA).length;
+  if(currentSection === "cases" && document.getElementById("casesPage").style.display !== "none"){
+    casesAllRows = getCasesRows();
+    applyCasesFilter();
+    renderClosureNeededBox();
+  } else if(currentSection === "lawyer" && document.getElementById("lawyerPage").style.display !== "none"){
+    renderLwActionsBox();
+    renderLwStatsBox();
+  } else if(currentSection === "followups" && document.getElementById("followupPage").style.display !== "none"){
+    renderFollowupList();
+    renderFuStatsBox();
+  } else if(currentSection === "analysis" && document.getElementById("analysisPage").style.display !== "none"){
+    renderAnalysisPage();
+  } else {
+    render();
+  }
+  showToast("🔄 تحديث تلقائي من جهاز آخر", "ok");
+}
 
+// مزامنة لحظية على مستوى القضية الواحدة (وليس الكتلة كاملة) — أخف بكثير على
+// الشبكة، وتُميّز صدى حفظنا نحن أنفسنا تلقائياً بمقارنة القيمة الواردة بما
+// هو محفوظ بالفعل في masterCache (إن كانت مطابقة، فهي مجرد تأكيد لحفظنا).
+let _fbSyncStarted = false;
 function startRealtimeSync(){
   if(!fbDb || _fbSyncStarted) return;
   _fbSyncStarted = true;
-  fbDb.ref('master_cases').on('value', (snap)=>{
-    const rawVal = snap.val(); // نص JSON خام (نفس ما يُخزَّن عبر appStorage.set في كل مكان)
-    if(rawVal === null || rawVal === undefined || typeof rawVal !== "string") return;
-    // تجاهل الحدث الأول (وقت الاتصال) لأن التحميل الأولي للصفحة يتكفّل به أصلاً
+  const fb = window.__fbModular;
+  const casesRef = fb.ref(fbDb, 'master_cases');
+
+  function handleUpsert(snap){
     if(!window._appFullyLoaded) return;
-    if(rawVal === _lastWrittenJSON) return; // صدى حفظنا نحن أنفسنا — تجاهله
+    const key = decodeFbKey(snap.key);
+    const incoming = snap.val();
+    // صدى حفظنا نحن أنفسنا: القيمة الواردة مطابقة تماماً لما هو محفوظ بالفعل
+    if(JSON.stringify(incoming) === JSON.stringify(masterCache[key])) return;
+    masterCache[key] = incoming;
+    afterRemoteChange();
+  }
+  function handleRemove(snap){
+    if(!window._appFullyLoaded) return;
+    const key = decodeFbKey(snap.key);
+    if(masterCache[key] === undefined) return; // صدى حذفنا نحن أنفسنا
+    delete masterCache[key];
+    afterRemoteChange();
+  }
 
-    let parsed;
-    try{ parsed = JSON.parse(rawVal); }catch(e){ return; }
-    if(JSON.stringify(parsed) === JSON.stringify(masterCache)) return; // لا تغيير فعلي
-
-    // تحديث حقيقي من جهاز آخر — إعادة بناء كل الفهارس المرتبطة بشكل كامل
-    // وصحيح (وليس استبدال masterCache فقط)، لتفادي أي تضارب صامت لاحق.
-    masterCache = parsed;
-    invalidateMasterCaseNoIndex();
-    invalidateRowIndex();
-    markRenderCacheDirty();
-    restoreFinancialFromMaster();
-    RAW_DATA_UNIQUE_COUNT = dedupeByCase(RAW_DATA).length;
-
-    // إعادة رسم الصفحة الظاهرة فعلياً حالياً (وليس فقط الجدول الرئيسي)
-    if(currentSection === "cases" && document.getElementById("casesPage").style.display !== "none"){
-      casesAllRows = getCasesRows();
-      applyCasesFilter();
-      renderClosureNeededBox();
-    } else if(currentSection === "lawyer" && document.getElementById("lawyerPage").style.display !== "none"){
-      renderLwActionsBox();
-      renderLwStatsBox();
-    } else if(currentSection === "followups" && document.getElementById("followupPage").style.display !== "none"){
-      renderFollowupList();
-      renderFuStatsBox();
-    } else if(currentSection === "analysis" && document.getElementById("analysisPage").style.display !== "none"){
-      renderAnalysisPage();
-    } else {
-      render();
-    }
-    showToast("🔄 تحديث تلقائي من جهاز آخر", "ok");
-  });
+  fb.onChildAdded(casesRef, handleUpsert);
+  fb.onChildChanged(casesRef, handleUpsert);
+  fb.onChildRemoved(casesRef, handleRemove);
 }
+
 
 const appStorage = (function(){
   const hasWindowStorage = typeof window !== 'undefined'
@@ -1436,37 +1520,16 @@ const appStorage = (function(){
       async set(key, value){ return window.storage.set(key, value); }
     };
   }
-  // Firebase كأولوية أولى — يتيح فتح نفس البيانات من أي جهاز (حاسوب/هاتف/تابلت)
-  if(fbDb){
-    return {
-      async get(key){
-        await migrateLocalToFirebaseIfNeeded();
-        const v = await fbGet(key);
-        if(v !== undefined) return {key, value:v};
-        // لا اتصال بالإنترنت أو مفتاح غير موجود سحابياً — جرّب النسخة المحلية
-        const lv = await idbGet(key).catch(()=>undefined);
-        return lv !== undefined ? {key, value:lv} : null;
-      },
-      async set(key, value){
-        const ok = await fbSet(key, value);
-        // نسخة محلية فورية أيضاً — تعمل كخط دفاع أول عند انقطاع الإنترنت مؤقتاً
-        try{ await idbSet(key, value); }catch(e){}
-        if(ok) return {key, value};
-        // فشل الاتصال بالسحابة (غالباً انقطاع إنترنت) — البيانات محفوظة محلياً
-        // على الأقل، وستُزامَن لاحقاً عند نجاح عملية حفظ قادمة بعد عودة الاتصال
-        showToast("⚠️ تعذّر الاتصال بالسحابة — حُفظ محلياً مؤقتاً فقط", "warn");
-        return {key, value};
-      }
-    };
-  }
-  // IndexedDB كخيار احتياطي (سعة أكبر، لا يُجمّد الواجهة) — يعمل في كل المتصفحات الحديثة
+  // IndexedDB (سعة أكبر، لا يُجمّد الواجهة) — يعمل في كل المتصفحات الحديثة.
+  // ملاحظة: مفتاح "master_cases" لم يعد يمرّ من هنا إطلاقاً — له مسار مباشر
+  // خاص عبر Firebase (انظر fbLoadCasesProgressive / fbSaveAllCases)، وهذه
+  // الطبقة تُستخدَم فقط لمفاتيح صغيرة أخرى مثل "last_import".
   if('indexedDB' in window){
     return {
       async get(key){
         await migrateLocalStorageToIDB();
         const v = await idbGet(key);
         if(v !== undefined) return {key, value:v};
-        // احتياط: لو فشلت IndexedDB لسبب ما، جرّب localStorage كملاذ أخير
         try{
           const lv = localStorage.getItem(key);
           return lv === null ? null : {key, value:lv};
@@ -1475,7 +1538,6 @@ const appStorage = (function(){
       async set(key, value){
         const ok = await idbSet(key, value);
         if(ok) return {key, value};
-        // فشل IndexedDB — نحاول localStorage كملاذ أخير بدل فقدان البيانات كلياً
         try{
           localStorage.setItem(key, value);
           return {key, value};
@@ -1987,6 +2049,7 @@ async function cleanupMaster(){
           }
         });
         delete master[k];
+        markKeyDeletedFromMaster(k); // تسجيل الحذف ليُصفَّى نظيره من Firebase أيضاً عند الحفظ
         changed = true;
         return;
       }
@@ -2012,7 +2075,8 @@ async function cleanupMaster(){
     });
 
     if(changed){
-      await safeStorageSet('master_cases', JSON.stringify(master));
+      masterCache = master;
+      await saveMaster();
     }
     return changed;
   }catch(e){ return false; }
@@ -2075,19 +2139,60 @@ function partiesDetailHtml(r){
   `;
 }
 
+// في المعمارية الجديدة، masterCache هي دائماً النسخة الحيّة الموثوقة في الذاكرة
+// (تُحمَّل مرة واحدة عند بدء التشغيل عبر bootstrapMasterCache، وتبقى محدَّثة
+// تلقائياً بعدها عبر saveMaster() والمزامنة اللحظية). getMaster() لم تعد
+// تحتاج استعلاماً جديداً من التخزين في كل استدعاء — فقط تُعيد النسخة الحالية.
 async function getMaster(){
-  try{
-    const res = await appStorage.get('master_cases');
-    return res && res.value ? JSON.parse(res.value) : {};
-  }catch(e){
-    return {};
-  }
+  return masterCache;
 }
 
-// حفظ masterCache في التخزين — دالة مركزية تُستخدم بعد أي تعديل على masterCache
+// حفظ masterCache — نسخة محلية فورية دائماً (IndexedDB)، ثم رفعها لـ Firebase
+// كعقد فردية (وليس كتلة JSON واحدة)، ليبقى التحميل المتدرّج (limitToLast) ممكناً.
 async function saveMaster(){
   invalidateMasterCaseNoIndex();
-  return await safeStorageSet('master_cases', JSON.stringify(masterCache));
+  try{ await idbSet('master_cases', JSON.stringify(masterCache)); }catch(e){}
+  if(fbDb){
+    const deletions = [..._pendingFbDeletions];
+    const ok = await fbSaveAllCases(masterCache, deletions);
+    if(ok) _pendingFbDeletions.clear();
+    else showToast("⚠️ تعذّر الاتصال بالسحابة — حُفظ محلياً مؤقتاً فقط", "warn");
+  }
+  return {key:'master_cases', value: masterCache};
+}
+
+// تحميل أولي سريع عند بدء التشغيل: نبني masterCache فوراً من IndexedDB (محلي،
+// بلا انتظار شبكة) ليبدأ التطبيق بالعرض مباشرة، ثم — في الخلفية دون حجب أي
+// شيء — نُكمل التحميل المتدرّج من Firebase (٥٠ قضية في كل دفعة عبر limitToLast)
+// ونُحدِّث العرض تدريجياً كلما وصلت دفعة جديدة.
+async function bootstrapMasterCache(){
+  // 1) محلياً أولاً — فوري
+  let local = {};
+  try{
+    const raw = await idbGet('master_cases');
+    if(raw) local = JSON.parse(raw);
+  }catch(e){}
+  masterCache = local;
+  invalidateMasterCaseNoIndex();
+
+  // 2) Firebase في الخلفية — تدريجياً، لا يحجب أي شيء
+  if(fbDb){
+    fbLoadCasesProgressive((batch, allSoFar)=>{
+      // دمج كل دفعة فور وصولها (لا ننتظر اكتمال كل القضايا)
+      Object.assign(masterCache, batch);
+      invalidateMasterCaseNoIndex();
+      invalidateRowIndex();
+      markRenderCacheDirty();
+      restoreFinancialFromMaster();
+      RAW_DATA_UNIQUE_COUNT = dedupeByCase(RAW_DATA).length;
+      if(window._appFullyLoaded) render();
+    }).then(async (allFromCloud)=>{
+      // اكتمل كل التحميل من السحابة — نتأكد أن النسخة المحلية مطابقة تماماً
+      if(Object.keys(allFromCloud).length){
+        try{ await idbSet('master_cases', JSON.stringify(masterCache)); }catch(e){}
+      }
+    });
+  }
 }
 
 async function saveMasterFromRows(rows){
@@ -2182,8 +2287,9 @@ async function saveMasterFromRows(rows){
 
     master[key] = record;
   });
+  masterCache = master; // نفس المرجع أصلاً بعد التعديل الجديد على getMaster، لكن نُصرِّح صراحةً لمزيد من الوضوح
   try{
-    await safeStorageSet('master_cases', JSON.stringify(master));
+    await saveMaster();
   }catch(e){
     return null;
   }
@@ -5666,15 +5772,16 @@ function showFollowupDblClickMenu(e, key){
 async function initApp(){
   // ===== تهيئة سريعة عند فتح الصفحة (تعمل فقط بعد تسجيل دخول ناجح) =====
 
-  // 1) تنظيف الماستر القديم — مرة واحدة فقط (نتحقق من علامة في localStorage)
+  // 1) تحميل فوري من IndexedDB (محلي، بلا انتظار شبكة) — يبدأ Firebase تحميله
+  //    التدريجي في الخلفية بالتوازي دون حجب أي شيء لاحق في هذه الدالة.
+  await bootstrapMasterCache();
+
+  // 2) تنظيف الماستر القديم — مرة واحدة فقط (نتحقق من علامة في localStorage)
   const cleanupDone = localStorage.getItem('_cleanupDone');
   if(!cleanupDone){
     await cleanupMaster();
     localStorage.setItem('_cleanupDone', '1');
   }
-
-  // 2) قراءة الماستر من التخزين (مرة واحدة فقط)
-  masterCache = await getMaster(); invalidateMasterCaseNoIndex();
 
   // 3) saveMasterFromRows(SEED_DATA) — تُشغَّل فقط عند أول تشغيل أو تغيّر البيانات
   //    نتحقق بمقارنة عدد السجلات المحفوظة مع حجم SEED_DATA الحالي
@@ -5682,7 +5789,6 @@ async function initApp(){
   const needsSync = savedSeedCount !== SEED_DATA.length || Object.keys(masterCache).length === 0;
   if(needsSync){
     await saveMasterFromRows(SEED_DATA);
-    masterCache = await getMaster(); invalidateMasterCaseNoIndex();
     localStorage.setItem('_seedCount', String(SEED_DATA.length));
   }
 
@@ -5719,17 +5825,31 @@ async function initApp(){
   startRealtimeSync();
 }
 
-// ===== نظام المصادقة الحقيقي (Firebase Authentication) =====
+// ===== نظام المصادقة الحقيقي (Firebase Authentication — Modular SDK) =====
 // شاشة تسجيل الدخول تظهر أولاً دائماً وتُخفي كل محتوى التطبيق حتى يُصادَق
 // المستخدم عبر Firebase Auth — لا أحد يدخل التطبيق بلا حساب صحيح.
 let _appInitStarted = false;
 
-if(fbDb){
+(async ()=>{
+  // ننتظر تهيئة Firebase (وحدة type=module في الرأس) قبل أي تسجيل دخول —
+  // هذا لا يُؤخِّر رسم واجهة الصفحة إطلاقاً، فهي مرسومة بالفعل من HTML/CSS.
+  await initFirebase();
+
   const authEmail = document.getElementById("authEmail");
   const authPassword = document.getElementById("authPassword");
   const authError = document.getElementById("authError");
   const authSignInBtn = document.getElementById("authSignInBtn");
   const authScreen = document.getElementById("authScreen");
+
+  if(!fbAuth){
+    // تعذّر تهيئة Firebase (نادراً — انقطاع تام أو حجب المتصفح) — لا مصادقة
+    // ممكنة، نشغّل التطبيق مباشرة بلا حماية بدل تجميد الصفحة بشاشة دخول لن تعمل.
+    authScreen.style.display = "none";
+    initApp();
+    return;
+  }
+
+  const fb = window.__fbModular;
 
   async function doSignIn(){
     authError.textContent = "";
@@ -5742,7 +5862,7 @@ if(fbDb){
     authSignInBtn.disabled = true;
     authSignInBtn.textContent = "جارٍ الدخول...";
     try{
-      await firebase.auth().signInWithEmailAndPassword(email, pwd);
+      await fb.signInWithEmailAndPassword(fbAuth, email, pwd);
       // النجاح يُعالَج تلقائياً عبر onAuthStateChanged أدناه
     }catch(e){
       const messages = {
@@ -5763,7 +5883,7 @@ if(fbDb){
   authPassword.addEventListener("keydown", (e)=>{ if(e.key === "Enter") doSignIn(); });
   authEmail.addEventListener("keydown", (e)=>{ if(e.key === "Enter") authPassword.focus(); });
 
-  firebase.auth().onAuthStateChanged((user)=>{
+  fb.onAuthStateChanged(fbAuth, (user)=>{
     if(user){
       authScreen.style.display = "none";
       if(!_appInitStarted){
@@ -5782,14 +5902,9 @@ if(fbDb){
   });
 
   document.getElementById("signOutBtn").onclick = async ()=>{
-    await firebase.auth().signOut();
+    await fb.signOut(fbAuth);
   };
-} else {
-  // تعذّر تهيئة Firebase (نادراً) — لا مصادقة ممكنة، نشغّل التطبيق مباشرة
-  // بلا حماية بدل تجميد الصفحة بالكامل بشاشة دخول لن تعمل أبداً.
-  document.getElementById("authScreen").style.display = "none";
-  initApp();
-}
+})();
 
 document.getElementById("fuPrintBtn").onclick = printFollowupSheet;
 
