@@ -968,8 +968,26 @@
       </div>
     </div>
     <div class="app-version-tag" id="appVersionTag">الإصدار 2026.07.15-1</div>
-    <div style="text-align:center;margin-top:10px;">
+    <div style="text-align:center;margin-top:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
+      <button class="btn secondary" id="backupNowBtn" style="font-size:11.5px;padding:6px 14px;">💾 نسخة احتياطية الآن</button>
+      <button class="btn secondary" id="viewBackupsBtn" style="font-size:11.5px;padding:6px 14px;">📜 عرض النسخ الاحتياطية</button>
       <button class="btn secondary" id="signOutBtn" style="font-size:11.5px;padding:6px 14px;">🔒 تسجيل الخروج</button>
+    </div>
+  </div>
+</div>
+
+<div id="backupsPage" class="fu-page" style="display:none;">
+  <div class="fu-page-inner">
+    <div class="fu-page-header">
+      <div class="fu-page-title">📜 النسخ الاحتياطية</div>
+      <button class="btn secondary" id="backupsPageClose">✕ إغلاق والعودة</button>
+    </div>
+    <div class="fu-page-section">
+      <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:14px;">
+        نسخة تلقائية تُؤخَذ عند أول فتح للنظام كل يوم — يُحتفَظ بآخر 10 نسخ فقط تلقائياً.
+        الاسترجاع يستبدل كل بياناتك الحالية بمحتوى النسخة المختارة.
+      </div>
+      <div id="backupsList" style="display:flex;flex-direction:column;gap:10px;"></div>
     </div>
   </div>
 </div>
@@ -1493,6 +1511,142 @@ async function fbSaveAllCases(cache, deletedKeys){
 }
 let _lastFbSaveError = "";
 
+// ===== نظام النسخ الاحتياطية التلقائية اليومية =====
+const BACKUP_MAX_COUNT = 10;
+
+function getTodayDateStr(){
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+// حفظ نسخة كاملة من masterCache تحت مسار منفصل تماماً backups/{تاريخ اليوم}
+async function saveBackupNow(showFeedback){
+  if(!fbDb) return false;
+  const fb = window.__fbModular;
+  const dateStr = getTodayDateStr();
+  try{
+    const sanitized = sanitizeForFirebase(masterCache);
+    await fb.set(fb.ref(fbDb, 'backups/' + dateStr), sanitized);
+    await cleanupOldBackups();
+    if(showFeedback) showToast(`✓ تم أخذ نسخة احتياطية بتاريخ ${dateStr} (${Object.keys(masterCache).length} قضية)`, "ok");
+    return true;
+  }catch(e){
+    console.error("فشل أخذ نسخة احتياطية:", e);
+    if(showFeedback) showToast("⚠️ تعذّر أخذ نسخة احتياطية: " + (e.message || e), "warn");
+    return false;
+  }
+}
+
+// يحتفظ بآخر BACKUP_MAX_COUNT نسخة فقط — يحذف الأقدم تلقائياً عند تجاوز الحد
+async function cleanupOldBackups(){
+  if(!fbDb) return;
+  const fb = window.__fbModular;
+  try{
+    const snap = await fb.get(fb.ref(fbDb, 'backups'));
+    if(!snap.exists()) return;
+    const dates = [];
+    snap.forEach(child => dates.push(child.key));
+    dates.sort(); // صيغة "yyyy-mm-dd" تُرتَّب أبجدياً بشكل صحيح زمنياً
+    if(dates.length > BACKUP_MAX_COUNT){
+      const toDelete = dates.slice(0, dates.length - BACKUP_MAX_COUNT);
+      const updates = {};
+      toDelete.forEach(d => updates['backups/' + d] = null);
+      await fb.update(fb.ref(fbDb), updates);
+    }
+  }catch(e){ console.error("فشل تنظيف النسخ الاحتياطية القديمة:", e); }
+}
+
+// يُستدعى مرة عند كل بدء تشغيل — يتحقق من Firebase مباشرة (وليس هذا الجهاز
+// فقط) هل نسخة اليوم موجودة أصلاً، فلا تتكرر النسخة أكثر من مرة يومياً حتى
+// لو فُتح النظام من عدة أجهزة في نفس اليوم.
+async function checkAndRunDailyBackup(){
+  if(!fbDb) return;
+  const fb = window.__fbModular;
+  const todayStr = getTodayDateStr();
+  try{
+    const snap = await fb.get(fb.ref(fbDb, 'backups/' + todayStr));
+    if(snap.exists()) return; // نسخة اليوم موجودة بالفعل
+    await saveBackupNow(false); // صامتة — لا نُزعج المستخدم بإشعار كل صباح
+  }catch(e){ console.error("فشل فحص النسخة اليومية:", e); }
+}
+
+async function listBackups(){
+  if(!fbDb) return [];
+  const fb = window.__fbModular;
+  try{
+    const snap = await fb.get(fb.ref(fbDb, 'backups'));
+    if(!snap.exists()) return [];
+    const items = [];
+    snap.forEach(child => items.push({date: child.key, count: Object.keys(child.val()||{}).length}));
+    items.sort((a,b)=> b.date.localeCompare(a.date)); // الأحدث أولاً
+    return items;
+  }catch(e){ return []; }
+}
+
+async function restoreBackup(dateStr){
+  if(!fbDb) return false;
+  const fb = window.__fbModular;
+  try{
+    const snap = await fb.get(fb.ref(fbDb, 'backups/' + dateStr));
+    if(!snap.exists()) return false;
+    masterCache = restoreFromFirebase(snap.val());
+    invalidateMasterCaseNoIndex();
+    invalidateRowIndex();
+    markRenderCacheDirty();
+    restoreFinancialFromMaster();
+    RAW_DATA_UNIQUE_COUNT = dedupeByCase(RAW_DATA).length;
+    await saveMaster(); // رفع النسخة المُسترجَعة لتصبح هي master_cases الحالية فعلياً
+    buildChips();
+    buildFilters();
+    render();
+    return true;
+  }catch(e){
+    console.error("فشل استرجاع النسخة الاحتياطية:", e);
+    return false;
+  }
+}
+
+async function renderBackupsList(){
+  const listEl = document.getElementById("backupsList");
+  listEl.innerHTML = `<div class="fu-search-hint">جارٍ التحميل...</div>`;
+  const items = await listBackups();
+  if(!items.length){
+    listEl.innerHTML = `<div class="fu-tracked-empty">لا توجد نسخ احتياطية بعد — ستُؤخَذ أول نسخة تلقائياً غداً، أو اضغط "نسخة احتياطية الآن" من الصفحة الرئيسية.</div>`;
+    return;
+  }
+  listEl.innerHTML = items.map(item => `
+    <div class="fu-tracked-card lw-action-card" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+      <div>
+        <div style="font-weight:700;font-size:14px;">📅 ${escapeAttr(item.date)}</div>
+        <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;">${item.count} قضية محفوظة</div>
+      </div>
+      <button class="btn secondary restore-backup-btn" data-date="${escapeAttr(item.date)}">↩️ استرجاع هذه النسخة</button>
+    </div>
+  `).join("");
+
+  listEl.querySelectorAll(".restore-backup-btn").forEach(btn=>{
+    btn.onclick = async ()=>{
+      const dateStr = btn.getAttribute("data-date");
+      const pwd = await askPassword(`تأكيد استرجاع نسخة ${dateStr} — سيستبدل كل بياناتك الحالية. أدخل كلمة السر:`);
+      if(!(await verifyPassword(pwd, LW_STEP_PASS_HASH))){
+        showToast("⚠️ كلمة السر غير صحيحة", "warn");
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = "جارٍ الاسترجاع...";
+      const ok = await restoreBackup(dateStr);
+      if(ok){
+        showToast(`✓ تم استرجاع نسخة ${dateStr} بنجاح`, "ok");
+        goHome();
+      } else {
+        showToast("⚠️ تعذّر الاسترجاع", "warn");
+        btn.disabled = false;
+        btn.textContent = "↩️ استرجاع هذه النسخة";
+      }
+    };
+  });
+}
+
 // تحويل نصي "مستقر" — يُرتّب مفاتيح أي كائن أبجدياً قبل التحويل لنص، بحيث
 // تكون المقارنة بين نسختين متطابقتين بالمحتوى صحيحة دائماً، بغض النظر عن
 // ترتيب المفاتيح الفعلي (Firebase لا يضمن نفس ترتيب المفاتيح الذي كتبناه
@@ -1792,7 +1946,26 @@ function getRowByKey(key){
   }
   return _rowIndex.get(key);
 }
-function invalidateRowIndex(){ _rowIndex = null; _dedupedRAWCache = null; }
+function invalidateRowIndex(){ _rowIndex = null; _dedupedRAWCache = null; _txnSigIndex = null; }
+
+// فهرس سريع: رقم القضية → مجموعة بصمات معاملاته المالية الموجودة في RAW_DATA.
+// كان فحص "هل هذه المعاملة مكرَّرة؟" يمسح كل RAW_DATA خطياً (O(n)) لكل معاملة
+// جديدة — مع آلاف الصفوف ومئات المعاملات، هذا كان أبطأ مصدر أداء حقيقي.
+// الفهرس يجعل هذا الفحص فورياً (O(1)) بدل المسح الكامل في كل مرة.
+let _txnSigIndex = null;
+function getTxnSigIndex(){
+  if(_txnSigIndex === null){
+    _txnSigIndex = new Map();
+    RAW_DATA.forEach(r=>{
+      const hasFin = FINANCIAL_FIELDS.some(f => r[f] !== undefined && String(r[f]).trim() !== "");
+      if(!hasFin) return;
+      const key = caseKey(r);
+      if(!_txnSigIndex.has(key)) _txnSigIndex.set(key, new Set());
+      _txnSigIndex.get(key).add(txnSig(r));
+    });
+  }
+  return _txnSigIndex;
+}
 
 function getYear(v){
   const norm = normalizeCaseNo(v);
@@ -2657,8 +2830,8 @@ function renderYearList(rows){
         <span class="year-list-def">${defendantNameHtml(r)}</span>
       </div>
       <div class="year-list-details">
-        <div><strong>المحكمة:</strong> ${r["المحكمة"] || (masterCache[caseKey(r)]||{})["المحكمة"] || "—"}</div>
-        <div><strong>تاريخ الورود:</strong> ${r["تاريخ ورود الدعوى"] || (masterCache[caseKey(r)]||{})["تاريخ الورود"] || "—"}</div>
+        <div><strong>المحكمة:</strong> ${escapeAttr(r["المحكمة"] || (masterCache[caseKey(r)]||{})["المحكمة"] || "—")}</div>
+        <div><strong>تاريخ الورود:</strong> ${escapeAttr(r["تاريخ ورود الدعوى"] || (masterCache[caseKey(r)]||{})["تاريخ الورود"] || "—")}</div>
         <div><strong>الوصف الكامل:</strong> ${getDescForRow(r) || "—"}</div>
         ${dormantInfo}
         ${partiesDetailHtml(r)}
@@ -3695,8 +3868,8 @@ function renderFinSummary(){
       const rowAmt = parseFloat(String(r["المبلغ المحول"]||"0").replace(/,/g,"")) || 0;
       const subParts = [];
       if(r["الحوالة/الشيك"] && String(r["الحوالة/الشيك"]).trim()) subParts.push(`النوع: ${String(r["الحوالة/الشيك"]).trim()}`);
-      if(r["رقم الشيك/الحوالة"]) subParts.push(`رقم الشيك/الحوالة: ${r["رقم الشيك/الحوالة"]}`);
-      if(r["رقم مستند الصرف"]) subParts.push(`رقم مستند الصرف: ${r["رقم مستند الصرف"]}`);
+      if(r["رقم الشيك/الحوالة"]) subParts.push(`رقم الشيك/الحوالة: ${escapeAttr(r["رقم الشيك/الحوالة"])}`);
+      if(r["رقم مستند الصرف"]) subParts.push(`رقم مستند الصرف: ${escapeAttr(r["رقم مستند الصرف"])}`);
 
       const fin = getFinancialForRow(r);
       const allDates = fin.transactions.map(t => t["تاريخ الشيك/الحوالة"] || "—").join("، ");
@@ -3743,7 +3916,7 @@ function renderFinSummary(){
 
   rangeBtn.onclick = ()=>{
     if(!fromInput.value || !toInput.value){
-      alert("الرجاء تحديد تاريخ البداية وتاريخ النهاية");
+      showToast("⚠️ الرجاء تحديد تاريخ البداية وتاريخ النهاية", "warn");
       return;
     }
     // native <input type="date"> gives yyyy-mm-dd — build comparable Date objects (local, midnight)
@@ -3752,7 +3925,7 @@ function renderFinSummary(){
     const fromDate = new Date(fy, fm-1, fd);
     const toDate = new Date(ty, tm-1, td_, 23, 59, 59);
     if(fromDate > toDate){
-      alert("تاريخ البداية يجب أن يكون قبل تاريخ النهاية");
+      showToast("⚠️ تاريخ البداية يجب أن يكون قبل تاريخ النهاية", "warn");
       return;
     }
     sel.value = "";
@@ -3796,7 +3969,7 @@ function printFollowupSheet(){
         <td>${i+1}</td>
         <td>${escapeAttr(shortCaseNo(row["رقم الدعوى"]))}${getClientSuffixText(row)}</td>
         <td>${escapeAttr(getDefendantForRow(row))}</td>
-        <td>${row["المحكمة"]||"—"}</td>
+        <td>${escapeAttr(row["المحكمة"]||"—")}</td>
         <td><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${dotColor};"></span></td>
         <td style="font-size:9.5px;">${stepsText}</td>
       </tr>
@@ -3882,7 +4055,7 @@ function printFinancialSheet(label, rows, total){
         <td>${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${getClientSuffixText(r)}</td>
         <td>${getPlaintiffForRow(r) || "—"}</td>
         <td>${escapeAttr(getDefendantForRow(r))}</td>
-        <td>${r["تاريخ الشيك/الحوالة"] || "—"}</td>
+        <td>${escapeAttr(r["تاريخ الشيك/الحوالة"] || "—")}</td>
         <td class="p-amt">${amt.toLocaleString('ar',{minimumFractionDigits:2, maximumFractionDigits:2})}</td>
       </tr>
     `;
@@ -4117,6 +4290,7 @@ function restoreFinancialFromMaster(){
 
 function mergeRowsIntoRawData(newRows){
   let added = 0, updated = 0, skippedDuplicateTxn = 0, addedTxn = 0;
+  const sigIndex = getTxnSigIndex(); // فهرس بصمات المعاملات — يُبنى مرة واحدة فقط لكل هذا الاستدعاء
 
   newRows.forEach(nr=>{
     const key = caseKey(nr);
@@ -4127,16 +4301,19 @@ function mergeRowsIntoRawData(newRows){
     if(hasFin){
       // Financial rows represent individual transactions — only skip if this EXACT
       // transaction (same case + same amount/date/check/doc) already exists.
-      const isDuplicateTxn = RAW_DATA.some(r=>{
-        if(caseKey(r) !== key) return false;
-        return txnSig(r) === txnSig(nr);
-      });
+      // فحص فوري عبر الفهرس (O(1)) بدل مسح كل RAW_DATA خطياً (O(n)) لكل معاملة.
+      const sig = txnSig(nr);
+      const existingSigs = sigIndex.get(key);
+      const isDuplicateTxn = existingSigs ? existingSigs.has(sig) : false;
       if(isDuplicateTxn){
         skippedDuplicateTxn++;
         return;
       }
       RAW_DATA.push(nr);
       addedTxn++;
+      // تحديث الفهرس مباشرة بدل إبطاله بالكامل — أسرع بكثير
+      if(!sigIndex.has(key)) sigIndex.set(key, new Set());
+      sigIndex.get(key).add(sig);
       return;
     }
 
@@ -4147,13 +4324,12 @@ function mergeRowsIntoRawData(newRows){
       RAW_DATA.push(nr);
       added++;
     } else {
-      const idx = RAW_DATA.indexOf(existingRow);
-      const merged = {...existingRow};
+      // تحديث الصف الموجود مباشرة في مكانه (in-place) — نفس المرجع المخزَّن في
+      // RAW_DATA بالفعل، فلا حاجة للبحث عن فهرسه بـ indexOf (كان O(n) أيضاً).
       Object.keys(nr).forEach(field=>{
         const val = nr[field];
-        if(val !== undefined && String(val).trim() !== "") merged[field] = val;
+        if(val !== undefined && String(val).trim() !== "") existingRow[field] = val;
       });
-      if(idx !== -1) RAW_DATA[idx] = merged;
       updated++;
     }
   });
@@ -4593,10 +4769,25 @@ function goHome(){
   document.getElementById("lawyerPage").style.display = "none";
   document.getElementById("casesPage").style.display = "none";
   document.getElementById("analysisPage").style.display = "none";
+  document.getElementById("backupsPage").style.display = "none";
   document.body.style.overflow = "";
   currentSection = null;
   document.body.classList.remove("mode-remittances");
   saveCurrentSection('home');
+}
+
+function goBackups(){
+  document.getElementById("homePage").style.display = "none";
+  document.getElementById("mainWrap").style.display = "none";
+  document.getElementById("followupPage").style.display = "none";
+  document.getElementById("lawyerPage").style.display = "none";
+  document.getElementById("casesPage").style.display = "none";
+  document.getElementById("analysisPage").style.display = "none";
+  document.getElementById("backupsPage").style.display = "block";
+  document.body.style.overflow = "hidden";
+  currentSection = "backups";
+  document.body.classList.remove("mode-remittances");
+  renderBackupsList();
 }
 
 function goRemittances(){
@@ -4606,6 +4797,7 @@ function goRemittances(){
   document.getElementById("lawyerPage").style.display = "none";
   document.getElementById("casesPage").style.display = "none";
   document.getElementById("analysisPage").style.display = "none";
+  document.getElementById("backupsPage").style.display = "none";
   document.body.style.overflow = "";
   currentSection = "remittances";
   document.body.classList.add("mode-remittances");
@@ -4623,6 +4815,7 @@ function goFollowups(){
   document.getElementById("lawyerPage").style.display = "none";
   document.getElementById("casesPage").style.display = "none";
   document.getElementById("analysisPage").style.display = "none";
+  document.getElementById("backupsPage").style.display = "none";
   document.body.style.overflow = "hidden";
   currentSection = "followups";
   document.body.classList.remove("mode-remittances");
@@ -5330,6 +5523,7 @@ function goCases(){
   document.getElementById("followupPage").style.display = "none";
   document.getElementById("lawyerPage").style.display = "none";
   document.getElementById("analysisPage").style.display = "none";
+  document.getElementById("backupsPage").style.display = "none";
   document.getElementById("casesPage").style.display = "block";
   document.body.style.overflow = "hidden";
   currentSection = "cases";
@@ -5616,6 +5810,7 @@ function goAnalysis(){
   document.getElementById("lawyerPage").style.display = "none";
   document.getElementById("casesPage").style.display = "none";
   document.getElementById("analysisPage").style.display = "none";
+  document.getElementById("backupsPage").style.display = "none";
   document.getElementById("analysisPage").style.display = "block";
   document.body.style.overflow = "hidden";
   currentSection = "analysis";
@@ -5917,6 +6112,9 @@ async function initApp(){
   // يصل هنا تلقائياً ويُحدَّث العرض دون الحاجة لإعادة تحميل الصفحة يدوياً.
   window._appFullyLoaded = true;
   startRealtimeSync();
+
+  // 8) فحص/أخذ النسخة الاحتياطية اليومية — في الخلفية تماماً، لا يحجب شيئاً
+  checkAndRunDailyBackup();
 }
 
 // ===== نظام المصادقة الحقيقي (Firebase Authentication — Modular SDK) =====
@@ -5999,6 +6197,17 @@ let _appInitStarted = false;
     await fb.signOut(fbAuth);
   };
 })();
+
+document.getElementById("backupNowBtn").onclick = async ()=>{
+  const btn = document.getElementById("backupNowBtn");
+  btn.disabled = true;
+  btn.textContent = "جارٍ الحفظ...";
+  await saveBackupNow(true);
+  btn.disabled = false;
+  btn.textContent = "💾 نسخة احتياطية الآن";
+};
+document.getElementById("viewBackupsBtn").onclick = goBackups;
+document.getElementById("backupsPageClose").onclick = goHome;
 
 document.getElementById("fuPrintBtn").onclick = printFollowupSheet;
 
