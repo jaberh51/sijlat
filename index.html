@@ -1403,18 +1403,21 @@ function decodeFbKey(encoded){
 // كل القضايا دفعة واحدة، ثم يُكمل الجلب في الخلفية دفعة تلو الأخرى، مستدعياً
 // onBatch مع كل دفعة جديدة فور وصولها ليُحدَّث العرض تدريجياً بلا انتظار الكل.
 const FB_BATCH_SIZE = 50;
+const FB_MAX_BATCHES = 200; // حد أقصى مطلق (= ١٠٬٠٠٠ قضية) — يمنع أي حلقة لانهائية نهائياً
 async function fbLoadCasesProgressive(onBatch){
   if(!fbDb) return {};
   const fb = window.__fbModular;
   const casesRef = fb.ref(fbDb, 'master_cases');
   let all = {};
   let cursorKey = null;
-  while(true){
+  let iterations = 0;
+  while(iterations < FB_MAX_BATCHES){
+    iterations++;
     const q = cursorKey
       ? fb.query(casesRef, fb.orderByKey(), fb.endBefore(cursorKey), fb.limitToLast(FB_BATCH_SIZE))
       : fb.query(casesRef, fb.orderByKey(), fb.limitToLast(FB_BATCH_SIZE));
     let snap;
-    try{ snap = await fb.get(q); }catch(e){ break; } // مثلاً لا اتصال إنترنت
+    try{ snap = await fb.get(q); }catch(e){ break; } // مثلاً لا اتصال إنترنت أو رفض صلاحية
     if(!snap.exists()) break;
     const keys = [];
     const batch = {};
@@ -1426,8 +1429,15 @@ async function fbLoadCasesProgressive(onBatch){
     });
     if(!keys.length) break;
     if(onBatch) onBatch(batch, all);
-    cursorKey = keys[0]; // أصغر مفتاح في هذه الدفعة — بداية الدفعة التالية للخلف
+    const newCursorKey = keys[0]; // أصغر مفتاح في هذه الدفعة — بداية الدفعة التالية للخلف
+    // حماية إضافية: لو المؤشر لم يتقدّم فعلياً (نفس المفتاح مكرراً)، نتوقف فوراً
+    // بدل الدوران للأبد — هذا بالضبط ما كان يُجمّد الصفحة سابقاً.
+    if(newCursorKey === cursorKey) break;
+    cursorKey = newCursorKey;
     if(keys.length < FB_BATCH_SIZE) break; // وصلنا لبداية البيانات
+    // نُعطي المتصفح فرصة "للتنفّس" بين كل دفعة وأخرى — يمنع تجميد الواجهة
+    // حتى لو استغرق التحميل الكامل عدة ثوانٍ لعدد كبير جداً من القضايا.
+    await new Promise(r => setTimeout(r, 0));
   }
   return all;
 }
@@ -1490,6 +1500,17 @@ function startRealtimeSync(){
   const fb = window.__fbModular;
   const casesRef = fb.ref(fbDb, 'master_cases');
 
+  // تجميع (Debounce) استدعاءات إعادة الرسم: onChildAdded يُطلق حدثاً منفصلاً
+  // لكل قضية موجودة مسبقاً فور أول اتصال (سلوك طبيعي لـ Firebase) — مع مئات
+  // القضايا هذا يعني مئات استدعاءات render() فورية متتالية تُجمّد المتصفح.
+  // هنا نُحدِّث البيانات فوراً (رخيص)، لكن نؤجّل إعادة الرسم الفعلية (المكلفة)
+  // حتى تهدأ الأحداث المتلاحقة، فتُنفَّذ مرة واحدة فقط بدل مئات المرات.
+  let _remoteChangeTimer = null;
+  function scheduleRerender(){
+    clearTimeout(_remoteChangeTimer);
+    _remoteChangeTimer = setTimeout(afterRemoteChange, 250);
+  }
+
   function handleUpsert(snap){
     if(!window._appFullyLoaded) return;
     const key = decodeFbKey(snap.key);
@@ -1497,14 +1518,14 @@ function startRealtimeSync(){
     // صدى حفظنا نحن أنفسنا: القيمة الواردة مطابقة تماماً لما هو محفوظ بالفعل
     if(JSON.stringify(incoming) === JSON.stringify(masterCache[key])) return;
     masterCache[key] = incoming;
-    afterRemoteChange();
+    scheduleRerender();
   }
   function handleRemove(snap){
     if(!window._appFullyLoaded) return;
     const key = decodeFbKey(snap.key);
     if(masterCache[key] === undefined) return; // صدى حذفنا نحن أنفسنا
     delete masterCache[key];
-    afterRemoteChange();
+    scheduleRerender();
   }
 
   fb.onChildAdded(casesRef, handleUpsert);
