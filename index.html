@@ -9,6 +9,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
 <style>
   :root{
     --paper:#f1efe9;
@@ -895,6 +896,20 @@
 </head>
 <body>
 
+<div id="authScreen" style="position:fixed;inset:0;z-index:99999;background:var(--paper);display:flex;align-items:center;justify-content:center;padding:20px;">
+  <div style="background:var(--paper-raised);border:1px solid var(--line);border-radius:16px;padding:36px 32px;max-width:360px;width:100%;box-shadow:var(--shadow);text-align:center;">
+    <div class="seal" style="margin:0 auto 16px;">د</div>
+    <h2 style="font-family:'Amiri',serif;margin:0 0 6px;font-size:24px;color:var(--ink);">تسجيل الدخول</h2>
+    <div style="font-size:12.5px;color:var(--ink-soft);margin-bottom:22px;">سجل الدعاوى — دخول آمن</div>
+    <input type="email" id="authEmail" placeholder="البريد الإلكتروني" autocomplete="username"
+      style="width:100%;padding:11px 14px;border:1px solid var(--line);border-radius:9px;margin-bottom:10px;font-family:'Tajawal',sans-serif;font-size:14px;box-sizing:border-box;color:var(--ink);">
+    <input type="password" id="authPassword" placeholder="كلمة السر" autocomplete="current-password"
+      style="width:100%;padding:11px 14px;border:1px solid var(--line);border-radius:9px;margin-bottom:16px;font-family:'Tajawal',sans-serif;font-size:14px;box-sizing:border-box;color:var(--ink);">
+    <button id="authSignInBtn" class="btn" style="width:100%;justify-content:center;">دخول</button>
+    <div id="authError" style="color:#dc2626;font-size:12.5px;margin-top:12px;min-height:16px;font-weight:700;"></div>
+  </div>
+</div>
+
 <div id="homePage" class="home-page" style="display:none;">
   <div class="home-inner">
     <div class="home-header">
@@ -925,6 +940,9 @@
       </div>
     </div>
     <div class="app-version-tag" id="appVersionTag">الإصدار 2026.07.15-1</div>
+    <div style="text-align:center;margin-top:10px;">
+      <button class="btn secondary" id="signOutBtn" style="font-size:11.5px;padding:6px 14px;">🔒 تسجيل الخروج</button>
+    </div>
   </div>
 </div>
 
@@ -5645,8 +5663,8 @@ function showFollowupDblClickMenu(e, key){
   }, 0);
 }
 
-(async ()=>{
-  // ===== تهيئة سريعة عند فتح الصفحة =====
+async function initApp(){
+  // ===== تهيئة سريعة عند فتح الصفحة (تعمل فقط بعد تسجيل دخول ناجح) =====
 
   // 1) تنظيف الماستر القديم — مرة واحدة فقط (نتحقق من علامة في localStorage)
   const cleanupDone = localStorage.getItem('_cleanupDone');
@@ -5699,7 +5717,79 @@ function showFollowupDblClickMenu(e, key){
   // يصل هنا تلقائياً ويُحدَّث العرض دون الحاجة لإعادة تحميل الصفحة يدوياً.
   window._appFullyLoaded = true;
   startRealtimeSync();
-})();
+}
+
+// ===== نظام المصادقة الحقيقي (Firebase Authentication) =====
+// شاشة تسجيل الدخول تظهر أولاً دائماً وتُخفي كل محتوى التطبيق حتى يُصادَق
+// المستخدم عبر Firebase Auth — لا أحد يدخل التطبيق بلا حساب صحيح.
+let _appInitStarted = false;
+
+if(fbDb){
+  const authEmail = document.getElementById("authEmail");
+  const authPassword = document.getElementById("authPassword");
+  const authError = document.getElementById("authError");
+  const authSignInBtn = document.getElementById("authSignInBtn");
+  const authScreen = document.getElementById("authScreen");
+
+  async function doSignIn(){
+    authError.textContent = "";
+    const email = authEmail.value.trim();
+    const pwd = authPassword.value;
+    if(!email || !pwd){
+      authError.textContent = "أدخل البريد الإلكتروني وكلمة السر";
+      return;
+    }
+    authSignInBtn.disabled = true;
+    authSignInBtn.textContent = "جارٍ الدخول...";
+    try{
+      await firebase.auth().signInWithEmailAndPassword(email, pwd);
+      // النجاح يُعالَج تلقائياً عبر onAuthStateChanged أدناه
+    }catch(e){
+      const messages = {
+        "auth/invalid-email": "صيغة البريد الإلكتروني غير صحيحة",
+        "auth/user-not-found": "لا يوجد حساب بهذا البريد",
+        "auth/wrong-password": "كلمة السر غير صحيحة",
+        "auth/invalid-credential": "البريد أو كلمة السر غير صحيحة",
+        "auth/too-many-requests": "محاولات كثيرة فاشلة — انتظر قليلاً وحاول مجدداً"
+      };
+      authError.textContent = messages[e.code] || ("تعذّر تسجيل الدخول: " + (e.message || e));
+    }finally{
+      authSignInBtn.disabled = false;
+      authSignInBtn.textContent = "دخول";
+    }
+  }
+
+  authSignInBtn.onclick = doSignIn;
+  authPassword.addEventListener("keydown", (e)=>{ if(e.key === "Enter") doSignIn(); });
+  authEmail.addEventListener("keydown", (e)=>{ if(e.key === "Enter") authPassword.focus(); });
+
+  firebase.auth().onAuthStateChanged((user)=>{
+    if(user){
+      authScreen.style.display = "none";
+      if(!_appInitStarted){
+        _appInitStarted = true;
+        initApp();
+      }
+    } else {
+      authScreen.style.display = "flex";
+      // إخفاء كل صفحات التطبيق إن كان قد سجَّل خروجه أثناء التصفح
+      ["homePage","mainWrap","followupPage","lawyerPage","casesPage","analysisPage"].forEach(id=>{
+        const el = document.getElementById(id);
+        if(el) el.style.display = "none";
+      });
+      document.body.style.overflow = "";
+    }
+  });
+
+  document.getElementById("signOutBtn").onclick = async ()=>{
+    await firebase.auth().signOut();
+  };
+} else {
+  // تعذّر تهيئة Firebase (نادراً) — لا مصادقة ممكنة، نشغّل التطبيق مباشرة
+  // بلا حماية بدل تجميد الصفحة بالكامل بشاشة دخول لن تعمل أبداً.
+  document.getElementById("authScreen").style.display = "none";
+  initApp();
+}
 
 document.getElementById("fuPrintBtn").onclick = printFollowupSheet;
 
