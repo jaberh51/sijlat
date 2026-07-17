@@ -2222,12 +2222,22 @@ async function getMaster(){
 
 // حفظ masterCache — نسخة محلية فورية دائماً (IndexedDB)، ثم رفعها لـ Firebase
 // كعقد فردية (وليس كتلة JSON واحدة)، ليبقى التحميل المتدرّج (limitToLast) ممكناً.
-async function saveMaster(){
+// changedKeys: اختياري — مصفوفة مفاتيح القضايا التي تغيّرت فعلياً. إذا مُرِّرت،
+// يُرفَع لـ Firebase فقط هذه القضايا (سريع جداً)، بدل رفع كل الـ 800+ قضية في
+// كل مرة يتغيّر فيها حقل واحد بقضية واحدة — كان هذا السبب الحقيقي وراء البطء
+// والتجمّد عند أي تعديل بسيط. تُترَك بلا معامل فقط للعمليات الجماعية الحقيقية
+// (استيراد إكسيل، تنظيف الماستر) التي تحتاج فعلاً حفظ كل شيء دفعة واحدة.
+async function saveMaster(changedKeys){
   invalidateMasterCaseNoIndex();
   try{ await idbSet('master_cases', JSON.stringify(masterCache)); }catch(e){}
   if(fbDb){
     const deletions = [..._pendingFbDeletions];
-    const ok = await fbSaveAllCases(masterCache, deletions);
+    let toSave = masterCache;
+    if(changedKeys && changedKeys.length){
+      toSave = {};
+      changedKeys.forEach(k=>{ if(masterCache[k] !== undefined) toSave[k] = masterCache[k]; });
+    }
+    const ok = await fbSaveAllCases(toSave, deletions);
     if(ok) _pendingFbDeletions.clear();
     else showToast("⚠️ تعذّر الحفظ سحابياً — حُفظ محلياً فقط. السبب: " + (_lastFbSaveError || "غير معروف"), "warn");
   }
@@ -2842,7 +2852,7 @@ async function saveNote(key, text, statusEl){
     const master = masterCache;
     if(!master[key]) master[key] = {"رقم القضية": key.split("||")[0]};
     master[key]["ملاحظة"] = text.trim();
-    await saveMaster();
+    await saveMaster([key]);
     masterCache = master; invalidateMasterCaseNoIndex();
     if(statusEl){
       statusEl.textContent = "✓ حُفظت";
@@ -2882,7 +2892,7 @@ async function saveFollowup(key, data, statusEl){
       note: data.note !== undefined ? data.note : (existing.note || ""),
       updated: new Date().toISOString()
     };
-    await saveMaster();
+    await saveMaster([key]);
     masterCache = master; invalidateMasterCaseNoIndex();
     if(statusEl){
       statusEl.textContent = "✓ حُفظت";
@@ -2943,7 +2953,7 @@ async function setLawyerAction(key, actionText, sector){
     master[key]["محامي_خطوات"][autoStepId] = {done: true, date: new Date().toISOString()};
   }
 
-  await saveMaster();
+  await saveMaster([key]);
   masterCache = master; invalidateMasterCaseNoIndex();
   // إرسال نسخة إلى قسم المتابعات اليومية بحالة "تم الطلب"
   await saveFollowup(key, {active:true, action:actionText, status:"تم الطلب"});
@@ -2956,7 +2966,7 @@ async function removeLawyerAction(key){
     delete master[key]["محامي_اجراء"];
     delete master[key]["محامي_خطوات"]; // حذف الخطوات أيضاً عند حذف الإجراء
   }
-  await saveMaster();
+  await saveMaster([key]);
   masterCache = master; invalidateMasterCaseNoIndex();
 }
 
@@ -3256,7 +3266,7 @@ async function toggleLwStep(key, stepId, currentlyDone){
       date: new Date().toISOString()
     };
   }
-  await saveMaster();
+  await saveMaster([key]);
   masterCache = master; invalidateMasterCaseNoIndex();
   return true;
 }
@@ -4644,7 +4654,7 @@ async function markCaseRemoved(key){
   const master = masterCache;
   if(!master[key]) master[key] = {};
   master[key]["تسوية_خارجية"] = true;
-  await saveMaster();
+  await saveMaster([key]);
   masterCache = master; invalidateMasterCaseNoIndex();
 }
 
@@ -4661,7 +4671,7 @@ async function setManualRemainingOverride(key, value){
   if(!master[key]) master[key] = {};
   master[key]["متبقي_يدوي"] = value;
   delete master[key]["محصل_يدوي"]; // تجنّب تعارض تعديلين متضاربين معاً
-  await saveMaster();
+  await saveMaster([key]);
   masterCache = master; invalidateMasterCaseNoIndex();
 }
 
@@ -4671,7 +4681,7 @@ async function setManualCollectedOverride(key, value){
   if(!master[key]) master[key] = {};
   master[key]["محصل_يدوي"] = value;
   delete master[key]["متبقي_يدوي"]; // تجنّب تعارض تعديلين متضاربين معاً
-  await saveMaster();
+  await saveMaster([key]);
   masterCache = master; invalidateMasterCaseNoIndex();
 }
 
@@ -4680,7 +4690,7 @@ async function setManualRequestedOverride(key, value){
   const master = masterCache;
   if(!master[key]) master[key] = {};
   master[key]["مطلوب_يدوي"] = value;
-  await saveMaster();
+  await saveMaster([key]);
   masterCache = master; invalidateMasterCaseNoIndex();
 }
 
@@ -4689,7 +4699,7 @@ async function setManualAvailOverride(key, value){
   const master = masterCache;
   if(!master[key]) master[key] = {};
   master[key]["متاح_يدوي"] = value;
-  await saveMaster();
+  await saveMaster([key]);
   masterCache = master; invalidateMasterCaseNoIndex();
 }
 
@@ -4699,7 +4709,7 @@ async function setCaseTransferredToFollowups(key, value){
   const master = masterCache;
   if(!master[key]) master[key] = {};
   master[key]["مرحّل_للمتابعات"] = !!value;
-  await saveMaster();
+  await saveMaster([key]);
   masterCache = master; invalidateMasterCaseNoIndex();
 }
 
@@ -4707,7 +4717,7 @@ async function markCaseNeedsClosure(key){
   const master = masterCache;
   if(!master[key]) master[key] = {};
   master[key]["بحاجة_فصل"] = true;
-  await saveMaster();
+  await saveMaster([key]);
   masterCache = master; invalidateMasterCaseNoIndex();
 }
 
@@ -4721,7 +4731,7 @@ async function toggleLawyerFeeSettled(key, value){
   const master = masterCache;
   if(!master[key]) master[key] = {};
   master[key]["اتعاب_محامي_محاسبة"] = !!value;
-  await saveMaster();
+  await saveMaster([key]);
   masterCache = master; invalidateMasterCaseNoIndex();
 }
 
