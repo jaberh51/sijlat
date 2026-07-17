@@ -1424,8 +1424,9 @@ async function fbLoadCasesProgressive(onBatch){
     snap.forEach(child=>{
       keys.push(child.key);
       const dk = decodeFbKey(child.key);
-      batch[dk] = child.val();
-      all[dk] = child.val();
+      const restored = restoreFromFirebase(child.val());
+      batch[dk] = restored;
+      all[dk] = restored;
     });
     if(!keys.length) break;
     if(onBatch) onBatch(batch, all);
@@ -1442,22 +1443,31 @@ async function fbLoadCasesProgressive(onBatch){
   return all;
 }
 
-// حفظ كل القضايا دفعة واحدة عبر Multi-path Update (كتابة واحدة فعّالة لكل
-// العقد المتغيّرة، بدل استبدال الكتلة الكاملة كنص JSON كما في السابق)
-// deletedKeys: مفاتيح حُذفت محلياً ويجب حذف عقدتها من Firebase أيضاً (تعيين
-// المسار إلى null في Multi-path Update يحذف تلك العقدة تحديداً في Firebase)
-// تنظيف عميق لأي قيمة undefined داخل كائن/مصفوفة — Firebase يرفض الحفظ
-// بالكامل (كل الدفعة دفعة واحدة) إذا وُجدت قيمة undefined واحدة في أي مكان،
-// حتى لو كانت مئات القضايا الأخرى سليمة تماماً. هذا كان السبب الحقيقي وراء
-// رسالة "تعذّر الاتصال بالسحابة" المضلِّلة.
-function deepStripUndefined(val){
+// تنظيف شامل قبل الحفظ في Firebase: (أ) أي قيمة undefined تُستبدَل بـ null،
+// (ب) أي اسم حقل (property key) في أي مستوى من البيانات يحتوي على حرف ممنوع
+// ( . # $ / [ ] ) يُشفَّر بنفس آلية encodeFbKey — لأن Firebase يرفض هذه
+// الأحرف في "أي" مفتاح كائن، وليس فقط رقم القضية الرئيسي (مثل حقول
+// "الحوالة/الشيك" و"تاريخ الشيك/الحوالة" داخل كل معاملة مالية).
+function sanitizeForFirebase(val){
   if(val === undefined) return null;
   if(val === null || typeof val !== "object") return val;
-  if(Array.isArray(val)) return val.map(deepStripUndefined);
+  if(Array.isArray(val)) return val.map(sanitizeForFirebase);
   const out = {};
   Object.keys(val).forEach(k=>{
     const v = val[k];
-    if(v !== undefined) out[k] = deepStripUndefined(v);
+    if(v === undefined) return;
+    out[encodeFbKey(k)] = sanitizeForFirebase(v);
+  });
+  return out;
+}
+// العملية العكسية عند القراءة من Firebase — تُعيد أسماء الحقول لصيغتها
+// الأصلية (بالحرف "/" وغيره) حتى يستمر باقي التطبيق بالعمل بشكل طبيعي.
+function restoreFromFirebase(val){
+  if(val === null || typeof val !== "object") return val;
+  if(Array.isArray(val)) return val.map(restoreFromFirebase);
+  const out = {};
+  Object.keys(val).forEach(k=>{
+    out[decodeFbKey(k)] = restoreFromFirebase(val[k]);
   });
   return out;
 }
@@ -1471,7 +1481,7 @@ async function fbSaveAllCases(cache, deletedKeys){
   const fb = window.__fbModular;
   try{
     const updates = {};
-    Object.keys(cache).forEach(k=>{ updates['master_cases/' + encodeFbKey(k)] = deepStripUndefined(cache[k]); });
+    Object.keys(cache).forEach(k=>{ updates['master_cases/' + encodeFbKey(k)] = sanitizeForFirebase(cache[k]); });
     (deletedKeys||[]).forEach(k=>{ updates['master_cases/' + encodeFbKey(k)] = null; });
     await fb.update(fb.ref(fbDb), updates);
     return true;
@@ -1539,7 +1549,7 @@ function startRealtimeSync(){
   function handleUpsert(snap){
     if(!window._appFullyLoaded) return;
     const key = decodeFbKey(snap.key);
-    const incoming = snap.val();
+    const incoming = restoreFromFirebase(snap.val());
     // صدى حفظنا نحن أنفسنا: القيمة الواردة مطابقة تماماً لما هو محفوظ بالفعل
     if(JSON.stringify(incoming) === JSON.stringify(masterCache[key])) return;
     masterCache[key] = incoming;
