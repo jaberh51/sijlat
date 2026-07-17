@@ -967,7 +967,7 @@
         <div class="hb-desc">كل القضايا مع المبالغ الكلية والمحصّلة والمتبقية</div>
       </div>
     </div>
-    <div class="app-version-tag" id="appVersionTag">الإصدار 2026.07.15-1</div>
+    <div class="app-version-tag" id="appVersionTag">الإصدار 2026.07.18-1</div>
     <div style="text-align:center;margin-top:10px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
       <button class="btn secondary" id="backupNowBtn" style="font-size:11.5px;padding:6px 14px;">💾 نسخة احتياطية الآن</button>
       <button class="btn secondary" id="viewBackupsBtn" style="font-size:11.5px;padding:6px 14px;">📜 عرض النسخ الاحتياطية</button>
@@ -1166,6 +1166,12 @@
             <option value="متروكة">متروكة</option>
             <option value="إسقاط">إسقاط</option>
             <option value="مجددة">مجددة</option>
+          </select>
+          <select id="casesPageSizeSelect" class="cases-select" title="عدد القضايا في الصفحة الواحدة">
+            <option value="25">25 في الصفحة</option>
+            <option value="50">50 في الصفحة</option>
+            <option value="100">100 في الصفحة</option>
+            <option value="999999">عرض الكل</option>
           </select>
           <span id="casesCount" class="cases-count">0 قضية</span>
         </div>
@@ -1725,7 +1731,7 @@ function afterRemoteChange(){
   RAW_DATA_UNIQUE_COUNT = dedupeByCase(RAW_DATA).length;
   if(currentSection === "cases" && document.getElementById("casesPage").style.display !== "none"){
     casesAllRows = getCasesRows();
-    applyCasesFilter();
+    applyCasesFilter(true);
     renderClosureNeededBox();
   } else if(currentSection === "lawyer" && document.getElementById("lawyerPage").style.display !== "none"){
     renderLwActionsBox();
@@ -4893,7 +4899,7 @@ document.addEventListener('keydown', (e)=>{
 });
 
 // ===== صفحة القضايا =====
-const CASES_PAGE_SIZE = 50;
+let CASES_PAGE_SIZE = parseInt(localStorage.getItem('cases_page_size') || '25', 10);
 const CASES_MIN_REMAINING = 5; // الحد الأدنى للمبلغ المتبقي للظهور
 // نفس كلمة السر تُستخدم هنا أيضاً — بصمة SHA-256 معرّفة مسبقاً (LW_STEP_PASS_HASH)
 const CASES_REMOVE_PASS_HASH = LW_STEP_PASS_HASH;
@@ -5201,7 +5207,7 @@ function updateCasesSortUI(){
   });
 }
 
-function applyCasesFilter(){
+function applyCasesFilter(keepPage){
   const q = document.getElementById("casesSearch").value.trim();
   const status = document.getElementById("casesStatusFilter").value;
   casesFilteredRows = casesAllRows.filter(r=>{
@@ -5267,7 +5273,7 @@ function applyCasesFilter(){
     });
   }
 
-  casesCurrentPage = 0;
+  if(!keepPage) casesCurrentPage = 0;
   renderCasesPage();
 }
 
@@ -5454,7 +5460,7 @@ function renderCasesPage(){
           await markCaseNeedsClosure(key);
           casesSelected.delete(key);
           casesAllRows = getCasesRows();
-          applyCasesFilter();
+          applyCasesFilter(true);
           renderClosureNeededBox();
           showToast("✓ نُقلت القضية إلى قائمة \"بحاجة إلى فصل\" (قيد التنفيذ لا تُحذف)", "ok");
           return;
@@ -5468,7 +5474,7 @@ function renderCasesPage(){
         await markCaseRemoved(key);
         casesSelected.delete(key);
         casesAllRows = getCasesRows();
-        applyCasesFilter();
+        applyCasesFilter(true);
         showToast("✓ تمت إزالة القضية نهائياً", "ok");
       })();
       return;
@@ -5926,7 +5932,7 @@ function showCasesDblClickMenu(e, key){
       await markCaseRemoved(key);
       casesSelected.delete(key);
       casesAllRows = getCasesRows();
-      applyCasesFilter();
+      applyCasesFilter(true);
       showToast("✓ تمت إزالة القضية نهائياً", "ok");
       return;
     }
@@ -6040,6 +6046,14 @@ document.getElementById("casesSearch").addEventListener("input", ()=>{
   casesSearchTimer = setTimeout(()=> applyCasesFilter(), 250);
 });
 document.getElementById("casesStatusFilter").addEventListener("change", ()=> applyCasesFilter());
+
+document.getElementById("casesPageSizeSelect").value = String(CASES_PAGE_SIZE);
+document.getElementById("casesPageSizeSelect").addEventListener("change", (e)=>{
+  CASES_PAGE_SIZE = parseInt(e.target.value, 10);
+  localStorage.setItem('cases_page_size', String(CASES_PAGE_SIZE));
+  casesCurrentPage = 0; // تغيير حجم الصفحة نفسه يستدعي إعادة الترقيم من البداية منطقياً
+  renderCasesPage();
+});
 
 // Wire home buttons
 document.querySelectorAll(".home-btn").forEach(btn=>{
