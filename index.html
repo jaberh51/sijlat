@@ -1493,6 +1493,18 @@ async function fbSaveAllCases(cache, deletedKeys){
 }
 let _lastFbSaveError = "";
 
+// تحويل نصي "مستقر" — يُرتّب مفاتيح أي كائن أبجدياً قبل التحويل لنص، بحيث
+// تكون المقارنة بين نسختين متطابقتين بالمحتوى صحيحة دائماً، بغض النظر عن
+// ترتيب المفاتيح الفعلي (Firebase لا يضمن نفس ترتيب المفاتيح الذي كتبناه
+// محلياً، فمقارنة JSON.stringify المباشرة كانت تفشل رغم تطابق المحتوى فعلياً
+// — وهذا ما كان يُسبب رسائل "تحديث من جهاز آخر" الكاذبة المتكررة والبطء).
+function stableStringify(val){
+  if(val === null || typeof val !== "object") return JSON.stringify(val);
+  if(Array.isArray(val)) return "[" + val.map(stableStringify).join(",") + "]";
+  const keys = Object.keys(val).sort();
+  return "{" + keys.map(k => JSON.stringify(k) + ":" + stableStringify(val[k])).join(",") + "}";
+}
+
 // تتبّع أي مفاتيح حُذفت محلياً من masterCache (مثل تنظيف السجلات القديمة)
 // حتى يُصفّى نظيرها من Firebase عند الحفظ التالي بدل أن يبقى "يتيماً" هناك.
 let _pendingFbDeletions = new Set();
@@ -1551,7 +1563,8 @@ function startRealtimeSync(){
     const key = decodeFbKey(snap.key);
     const incoming = restoreFromFirebase(snap.val());
     // صدى حفظنا نحن أنفسنا: القيمة الواردة مطابقة تماماً لما هو محفوظ بالفعل
-    if(JSON.stringify(incoming) === JSON.stringify(masterCache[key])) return;
+    // (مقارنة مستقرة لا تتأثر بترتيب المفاتيح المختلف الذي يُعيده Firebase)
+    if(stableStringify(incoming) === stableStringify(masterCache[key])) return;
     masterCache[key] = incoming;
     scheduleRerender();
   }
