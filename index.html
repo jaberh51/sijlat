@@ -124,10 +124,6 @@
     overflow-y:auto;padding:24px 18px 60px;
   }
   .fu-page-inner{max-width:900px;margin:0 auto;}
-  /* توسيع صفحة القضايا تحديداً فقط (دون التأثير على بقية الصفحات) لتستفيد من
-     عرض الشاشة بالكامل تقريباً — يمنح عمود "الطرف" مساحة أكبر لعرض الاسم بلا
-     تكسير مفرط لعدة أسطر */
-  .cases-flex-inner{max-width:92vw;}
   .fu-page-header{
     display:flex;align-items:center;justify-content:space-between;gap:12px;
     border-bottom:2px solid var(--ink);padding-bottom:14px;margin-bottom:20px;flex-wrap:wrap;
@@ -244,7 +240,7 @@
   .cases-body-wrap thead{display:none;}
   .cases-table{width:100%;border-collapse:collapse;font-size:13px;}
   .cases-table th{background:var(--paper-raised);padding:9px 10px;text-align:right;font-weight:700;border-bottom:2px solid var(--line);white-space:nowrap;color:var(--ink);}
-  .cases-table td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  .cases-table td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:middle;white-space:nowrap;}
   .cases-table tr:hover td{background:var(--paper-raised);}
   .cases-table .amt-col{text-align:center;}
   .cases-table td.amt-col{text-align:center;}
@@ -1129,7 +1125,6 @@
               <th>الحالة</th>
               <th class="amt-col">📋 المطلوب</th>
               <th class="amt-col">✓ المحصّل</th>
-              <th class="amt-col" title="المحصّل الفعلي = المطلوب − (المتبقي + المتاح) = المبلغ الحقيقي المقبوض فعلياً">💵 المحصّل الفعلي</th>
               <th class="amt-col cases-sort-th" id="casesRemSortTh" style="cursor:pointer;position:relative;" title="اضغط للترتيب حسب المتبقي">
                 ⏳ المتبقي <span id="casesRemSortArrow"></span>
                 <div id="casesRemSortMenu" class="cases-sort-menu" style="display:none;">
@@ -4896,11 +4891,6 @@ function renderCasesPage(){
     const collected = fin.total > 0 ? fin.total : (rec ? parseNum(rec["مجموع المبالغ المقبوضة فعليا"]) : null);
     const rem = fin.remaining;
     const avail = getRowAvail(r);
-    // المحصّل الفعلي = المطلوب − (المتبقي + المتاح) — المبلغ الحقيقي المقبوض
-    // فعلياً، مستبعَداً منه أي مبلغ لا يزال "متاحاً" فقط ولم يُقبَض بعد.
-    // يُصفَّر إلى 0.00 إذا كانت النتيجة سالبة (بدل عرضها كرقم سالب).
-    const actualCollectedRaw = (req !== null && rem !== null) ? (req - (rem + (avail || 0))) : null;
-    const actualCollected = actualCollectedRaw !== null ? Math.max(0, actualCollectedRaw) : null;
 
     const statusClass = status === "قيد التنفيذ" ? "cases-badge-exec" :
                         status === "فصل" ? "cases-badge-closed" : "cases-badge-other";
@@ -4950,7 +4940,6 @@ function renderCasesPage(){
       <td data-col="الحالة"><span class="cases-badge ${statusClass}">${escapeAttr(status)}</span></td>
       <td class="amt-col amt-req" data-col="📋 المطلوب">${fmt(req)}</td>
       <td class="amt-col amt-col-collected" data-col="✓ المحصّل">${fmt(collected)}</td>
-      <td class="amt-col amt-col-collected" data-col="💵 المحصّل الفعلي">${fmt(actualCollected)}</td>
       <td class="amt-col ${remClass}" data-col="⏳ المتبقي">${fmt(rem)}${remEditHtml}</td>
       <td class="amt-col ${availClass}" data-col="💰 المتاح للقبض">${fmt(avail)}</td>
       <td class="cases-action-col">
