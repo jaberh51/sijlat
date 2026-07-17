@@ -1535,15 +1535,34 @@ function getTodayDateStr(){
 }
 
 // حفظ نسخة كاملة من masterCache تحت مسار منفصل تماماً backups/{تاريخ_وقت}
+// حفظ نسخة كاملة (ثقيلة) في backups/{مفتاح} + بيانات وصفية خفيفة منفصلة في
+// backups_meta/{مفتاح} (فقط التاريخ والعدد) — هذا الفصل هو ما يجعل عرض/تنظيف/
+// فحص النسخ سريعاً جداً لاحقاً، لأنها لن تحتاج تحميل المحتوى الثقيل الكامل
+// إلا عند الاسترجاع الفعلي لنسخة واحدة بعينها.
 async function saveBackupNow(showFeedback){
   if(!fbDb) return false;
   const fb = window.__fbModular;
   const key = getBackupTimestampKey();
   try{
-    const sanitized = sanitizeForFirebase(masterCache);
-    await fb.set(fb.ref(fbDb, 'backups/' + key), sanitized);
+    // تنظيف البيانات (تشفير أسماء الحقول الممنوعة) على دفعات صغيرة مع توقفات
+    // قصيرة بينها — بدل معالجة كل القضايا دفعة واحدة متزامنة (كانت تُجمّد
+    // الصفحة بالكامل لثوانٍ). النتيجة النهائية مطابقة تماماً، فقط أخف على الواجهة.
+    const keys = Object.keys(masterCache);
+    const sanitized = {};
+    const CHUNK_SIZE = 80;
+    for(let i = 0; i < keys.length; i += CHUNK_SIZE){
+      keys.slice(i, i + CHUNK_SIZE).forEach(k=>{
+        sanitized[encodeFbKey(k)] = sanitizeForFirebase(masterCache[k]);
+      });
+      if(i + CHUNK_SIZE < keys.length) await new Promise(r => setTimeout(r, 0));
+    }
+    const count = keys.length;
+    await fb.update(fb.ref(fbDb), {
+      ['backups/' + key]: sanitized,
+      ['backups_meta/' + key]: {count, savedAt: Date.now()}
+    });
     await cleanupOldBackups();
-    if(showFeedback) showToast(`✓ تم أخذ نسخة احتياطية (${Object.keys(masterCache).length} قضية)`, "ok");
+    if(showFeedback) showToast(`✓ تم أخذ نسخة احتياطية (${count} قضية)`, "ok");
     return true;
   }catch(e){
     console.error("فشل أخذ نسخة احتياطية:", e);
@@ -1553,12 +1572,13 @@ async function saveBackupNow(showFeedback){
 }
 
 // يحتفظ بآخر BACKUP_MAX_COUNT نسخة فقط بغض النظر عن توزيعها الزمني — يحذف
-// الأقدم تلقائياً بمجرد تجاوز الحد (حتى لو كانت كلها في نفس اليوم)
+// الأقدم تلقائياً بمجرد تجاوز الحد. يستخدم المسار الخفيف فقط لتحديد الأقدم،
+// ثم يحذف نسختها الثقيلة والخفيفة معاً.
 async function cleanupOldBackups(){
   if(!fbDb) return;
   const fb = window.__fbModular;
   try{
-    const snap = await fb.get(fb.ref(fbDb, 'backups'));
+    const snap = await fb.get(fb.ref(fbDb, 'backups_meta'));
     if(!snap.exists()) return;
     const keys = [];
     snap.forEach(child => keys.push(child.key));
@@ -1566,7 +1586,10 @@ async function cleanupOldBackups(){
     if(keys.length > BACKUP_MAX_COUNT){
       const toDelete = keys.slice(0, keys.length - BACKUP_MAX_COUNT);
       const updates = {};
-      toDelete.forEach(k => updates['backups/' + k] = null);
+      toDelete.forEach(k=>{
+        updates['backups/' + k] = null;
+        updates['backups_meta/' + k] = null;
+      });
       await fb.update(fb.ref(fbDb), updates);
     }
   }catch(e){ console.error("فشل تنظيف النسخ الاحتياطية القديمة:", e); }
@@ -1575,12 +1598,13 @@ async function cleanupOldBackups(){
 // يُستدعى مرة عند كل بدء تشغيل — يتحقق هل يوجد أي نسخة أُخذت اليوم أصلاً
 // (بصرف النظر عن الوقت)، فلا تتكرر النسخة التلقائية أكثر من مرة يومياً —
 // لكن هذا لا يمنعك من أخذ نسخ يدوية إضافية بالزر في نفس اليوم متى أردت.
+// يستخدم المسار الخفيف فقط (سريع)، لا يُحمِّل أي محتوى ثقيل.
 async function checkAndRunDailyBackup(){
   if(!fbDb) return;
   const fb = window.__fbModular;
   const todayPrefix = getTodayDateStr(); // مثال: "20260718"
   try{
-    const snap = await fb.get(fb.ref(fbDb, 'backups'));
+    const snap = await fb.get(fb.ref(fbDb, 'backups_meta'));
     let hasToday = false;
     if(snap.exists()){
       snap.forEach(child => { if(child.key.startsWith(todayPrefix + "_")) hasToday = true; });
@@ -1590,14 +1614,19 @@ async function checkAndRunDailyBackup(){
   }catch(e){ console.error("فشل فحص النسخة اليومية:", e); }
 }
 
+// عرض القائمة — يستخدم المسار الخفيف فقط (backups_meta)، فيكون فورياً تقريباً
+// بغض النظر عن حجم القضايا الفعلي داخل كل نسخة.
 async function listBackups(){
   if(!fbDb) return [];
   const fb = window.__fbModular;
   try{
-    const snap = await fb.get(fb.ref(fbDb, 'backups'));
+    const snap = await fb.get(fb.ref(fbDb, 'backups_meta'));
     if(!snap.exists()) return [];
     const items = [];
-    snap.forEach(child => items.push({key: child.key, count: Object.keys(child.val()||{}).length}));
+    snap.forEach(child => {
+      const v = child.val() || {};
+      items.push({key: child.key, count: v.count || 0});
+    });
     items.sort((a,b)=> b.key.localeCompare(a.key)); // الأحدث أولاً
     return items;
   }catch(e){ return []; }
@@ -6223,6 +6252,10 @@ document.getElementById("backupNowBtn").onclick = async ()=>{
   const btn = document.getElementById("backupNowBtn");
   btn.disabled = true;
   btn.textContent = "جارٍ الحفظ...";
+  // توقف قصير جداً (إطار رسم واحد) يسمح للمتصفح بعرض "جارٍ الحفظ..." فعلياً
+  // على الشاشة قبل بدء المعالجة الثقيلة المتزامنة (تنظيف كل القضايا) — بدونه
+  // يبدو الزر "متجمّداً" رغم أن العملية بدأت فعلاً.
+  await new Promise(r => setTimeout(r, 0));
   await saveBackupNow(true);
   btn.disabled = false;
   btn.textContent = "💾 نسخة احتياطية الآن";
