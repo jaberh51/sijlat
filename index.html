@@ -22,14 +22,18 @@
     onChildAdded, onChildChanged, onChildRemoved
   } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js";
   import {
-    getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
+    getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut,
+    EmailAuthProvider, reauthenticateWithCredential, updatePassword,
+    createUserWithEmailAndPassword
   } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
 
   window.__fbModular = {
     initializeApp, getDatabase, ref, get, set, update, onValue, off,
     query, orderByKey, limitToLast, endBefore,
     onChildAdded, onChildChanged, onChildRemoved,
-    getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut
+    getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut,
+    EmailAuthProvider, reauthenticateWithCredential, updatePassword,
+    createUserWithEmailAndPassword
   };
   window.dispatchEvent(new Event('fbModularReady'));
 </script>
