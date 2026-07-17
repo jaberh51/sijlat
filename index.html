@@ -1518,12 +1518,13 @@ const BACKUP_MAX_COUNT = 10;
 // نفس اليوم (كل واحدة بمفتاح فريد)، ويُرتَّب زمنياً بشكل صحيح تلقائياً كنص.
 function getBackupTimestampKey(){
   const d = new Date();
-  const pad = n => String(n).padStart(2,'0');
-  return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+  const pad = (n,len=2) => String(n).padStart(len,'0');
+  const rand = Math.floor(Math.random()*900+100); // رقم عشوائي 3 أرقام لضمان عدم التصادم المطلق
+  return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}${pad(d.getMilliseconds(),3)}_${rand}`;
 }
 // تحويل المفتاح لصيغة قابلة للقراءة: "18/07/2026 — 14:23:45"
 function formatBackupKey(key){
-  const m = String(key).match(/^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})$/);
+  const m = String(key).match(/^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})/);
   if(!m) return key;
   const [, y, mo, d, h, mi, s] = m;
   return `${d}/${mo}/${y} — ${h}:${mi}:${s}`;
