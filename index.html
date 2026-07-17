@@ -2260,18 +2260,29 @@ async function bootstrapMasterCache(){
 
   // 2) Firebase في الخلفية — تدريجياً، لا يحجب أي شيء
   if(fbDb){
-    fbLoadCasesProgressive((batch, allSoFar)=>{
-      // دمج كل دفعة فور وصولها (لا ننتظر اكتمال كل القضايا)
-      Object.assign(masterCache, batch);
-      invalidateMasterCaseNoIndex();
+    // تجميع (Debounce) المعالجة الثقيلة: مع ~819 قضية على دفعات الخمسين، كل
+    // دفعة كانت تُشغِّل restoreFinancialFromMaster() + render() كاملتين —
+    // أي حتى 17 عملية إعادة بناء ورسم متتالية عند كل فتح للنظام. هنا نُجمِّع
+    // كل الدفعات المتقاربة زمنياً في معالجة واحدة فقط بعد هدوء قصير.
+    let _batchTimer = null;
+    function processAccumulatedBatches(){
       invalidateRowIndex();
       markRenderCacheDirty();
       restoreFinancialFromMaster();
       RAW_DATA_UNIQUE_COUNT = dedupeByCase(RAW_DATA).length;
       if(window._appFullyLoaded) render();
+    }
+    fbLoadCasesProgressive((batch, allSoFar)=>{
+      // دمج كل دفعة فور وصولها في الذاكرة (رخيص) — لكن المعالجة الثقيلة مؤجَّلة
+      Object.assign(masterCache, batch);
+      invalidateMasterCaseNoIndex();
+      clearTimeout(_batchTimer);
+      _batchTimer = setTimeout(processAccumulatedBatches, 200);
     }).then(async (allFromCloud)=>{
-      // اكتمل كل التحميل من السحابة — نتأكد أن النسخة المحلية مطابقة تماماً
+      // اكتمل كل التحميل من السحابة — معالجة نهائية مضمونة + مزامنة IndexedDB
+      clearTimeout(_batchTimer);
       if(Object.keys(allFromCloud).length){
+        processAccumulatedBatches();
         try{ await idbSet('master_cases', JSON.stringify(masterCache)); }catch(e){}
       }
     });
