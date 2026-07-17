@@ -1511,24 +1511,38 @@ async function fbSaveAllCases(cache, deletedKeys){
 }
 let _lastFbSaveError = "";
 
-// ===== نظام النسخ الاحتياطية التلقائية اليومية =====
+// ===== نظام النسخ الاحتياطية — آخر 10 نسخ بغض النظر عن توزيعها الزمني =====
 const BACKUP_MAX_COUNT = 10;
 
+// مفتاح زمني دقيق (تاريخ + وقت) بصيغة "٢٠٢٦٠٧١٨_١٤٢٣٤٥" — يسمح بعدة نسخ في
+// نفس اليوم (كل واحدة بمفتاح فريد)، ويُرتَّب زمنياً بشكل صحيح تلقائياً كنص.
+function getBackupTimestampKey(){
+  const d = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
+// تحويل المفتاح لصيغة قابلة للقراءة: "18/07/2026 — 14:23:45"
+function formatBackupKey(key){
+  const m = String(key).match(/^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})$/);
+  if(!m) return key;
+  const [, y, mo, d, h, mi, s] = m;
+  return `${d}/${mo}/${y} — ${h}:${mi}:${s}`;
+}
 function getTodayDateStr(){
   const d = new Date();
-  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  return d.getFullYear() + String(d.getMonth()+1).padStart(2,'0') + String(d.getDate()).padStart(2,'0');
 }
 
-// حفظ نسخة كاملة من masterCache تحت مسار منفصل تماماً backups/{تاريخ اليوم}
+// حفظ نسخة كاملة من masterCache تحت مسار منفصل تماماً backups/{تاريخ_وقت}
 async function saveBackupNow(showFeedback){
   if(!fbDb) return false;
   const fb = window.__fbModular;
-  const dateStr = getTodayDateStr();
+  const key = getBackupTimestampKey();
   try{
     const sanitized = sanitizeForFirebase(masterCache);
-    await fb.set(fb.ref(fbDb, 'backups/' + dateStr), sanitized);
+    await fb.set(fb.ref(fbDb, 'backups/' + key), sanitized);
     await cleanupOldBackups();
-    if(showFeedback) showToast(`✓ تم أخذ نسخة احتياطية بتاريخ ${dateStr} (${Object.keys(masterCache).length} قضية)`, "ok");
+    if(showFeedback) showToast(`✓ تم أخذ نسخة احتياطية (${Object.keys(masterCache).length} قضية)`, "ok");
     return true;
   }catch(e){
     console.error("فشل أخذ نسخة احتياطية:", e);
@@ -1537,35 +1551,40 @@ async function saveBackupNow(showFeedback){
   }
 }
 
-// يحتفظ بآخر BACKUP_MAX_COUNT نسخة فقط — يحذف الأقدم تلقائياً عند تجاوز الحد
+// يحتفظ بآخر BACKUP_MAX_COUNT نسخة فقط بغض النظر عن توزيعها الزمني — يحذف
+// الأقدم تلقائياً بمجرد تجاوز الحد (حتى لو كانت كلها في نفس اليوم)
 async function cleanupOldBackups(){
   if(!fbDb) return;
   const fb = window.__fbModular;
   try{
     const snap = await fb.get(fb.ref(fbDb, 'backups'));
     if(!snap.exists()) return;
-    const dates = [];
-    snap.forEach(child => dates.push(child.key));
-    dates.sort(); // صيغة "yyyy-mm-dd" تُرتَّب أبجدياً بشكل صحيح زمنياً
-    if(dates.length > BACKUP_MAX_COUNT){
-      const toDelete = dates.slice(0, dates.length - BACKUP_MAX_COUNT);
+    const keys = [];
+    snap.forEach(child => keys.push(child.key));
+    keys.sort(); // الصيغة الزمنية تُرتَّب صحيحاً كنص أبجدي أيضاً
+    if(keys.length > BACKUP_MAX_COUNT){
+      const toDelete = keys.slice(0, keys.length - BACKUP_MAX_COUNT);
       const updates = {};
-      toDelete.forEach(d => updates['backups/' + d] = null);
+      toDelete.forEach(k => updates['backups/' + k] = null);
       await fb.update(fb.ref(fbDb), updates);
     }
   }catch(e){ console.error("فشل تنظيف النسخ الاحتياطية القديمة:", e); }
 }
 
-// يُستدعى مرة عند كل بدء تشغيل — يتحقق من Firebase مباشرة (وليس هذا الجهاز
-// فقط) هل نسخة اليوم موجودة أصلاً، فلا تتكرر النسخة أكثر من مرة يومياً حتى
-// لو فُتح النظام من عدة أجهزة في نفس اليوم.
+// يُستدعى مرة عند كل بدء تشغيل — يتحقق هل يوجد أي نسخة أُخذت اليوم أصلاً
+// (بصرف النظر عن الوقت)، فلا تتكرر النسخة التلقائية أكثر من مرة يومياً —
+// لكن هذا لا يمنعك من أخذ نسخ يدوية إضافية بالزر في نفس اليوم متى أردت.
 async function checkAndRunDailyBackup(){
   if(!fbDb) return;
   const fb = window.__fbModular;
-  const todayStr = getTodayDateStr();
+  const todayPrefix = getTodayDateStr(); // مثال: "20260718"
   try{
-    const snap = await fb.get(fb.ref(fbDb, 'backups/' + todayStr));
-    if(snap.exists()) return; // نسخة اليوم موجودة بالفعل
+    const snap = await fb.get(fb.ref(fbDb, 'backups'));
+    let hasToday = false;
+    if(snap.exists()){
+      snap.forEach(child => { if(child.key.startsWith(todayPrefix + "_")) hasToday = true; });
+    }
+    if(hasToday) return;
     await saveBackupNow(false); // صامتة — لا نُزعج المستخدم بإشعار كل صباح
   }catch(e){ console.error("فشل فحص النسخة اليومية:", e); }
 }
@@ -1577,17 +1596,17 @@ async function listBackups(){
     const snap = await fb.get(fb.ref(fbDb, 'backups'));
     if(!snap.exists()) return [];
     const items = [];
-    snap.forEach(child => items.push({date: child.key, count: Object.keys(child.val()||{}).length}));
-    items.sort((a,b)=> b.date.localeCompare(a.date)); // الأحدث أولاً
+    snap.forEach(child => items.push({key: child.key, count: Object.keys(child.val()||{}).length}));
+    items.sort((a,b)=> b.key.localeCompare(a.key)); // الأحدث أولاً
     return items;
   }catch(e){ return []; }
 }
 
-async function restoreBackup(dateStr){
+async function restoreBackup(key){
   if(!fbDb) return false;
   const fb = window.__fbModular;
   try{
-    const snap = await fb.get(fb.ref(fbDb, 'backups/' + dateStr));
+    const snap = await fb.get(fb.ref(fbDb, 'backups/' + key));
     if(!snap.exists()) return false;
     masterCache = restoreFromFirebase(snap.val());
     invalidateMasterCaseNoIndex();
@@ -1617,26 +1636,27 @@ async function renderBackupsList(){
   listEl.innerHTML = items.map(item => `
     <div class="fu-tracked-card lw-action-card" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
       <div>
-        <div style="font-weight:700;font-size:14px;">📅 ${escapeAttr(item.date)}</div>
+        <div style="font-weight:700;font-size:14px;">📅 ${escapeAttr(formatBackupKey(item.key))}</div>
         <div style="font-size:11.5px;color:var(--ink-soft);margin-top:2px;">${item.count} قضية محفوظة</div>
       </div>
-      <button class="btn secondary restore-backup-btn" data-date="${escapeAttr(item.date)}">↩️ استرجاع هذه النسخة</button>
+      <button class="btn secondary restore-backup-btn" data-key="${escapeAttr(item.key)}">↩️ استرجاع هذه النسخة</button>
     </div>
   `).join("");
 
   listEl.querySelectorAll(".restore-backup-btn").forEach(btn=>{
     btn.onclick = async ()=>{
-      const dateStr = btn.getAttribute("data-date");
-      const pwd = await askPassword(`تأكيد استرجاع نسخة ${dateStr} — سيستبدل كل بياناتك الحالية. أدخل كلمة السر:`);
+      const key = btn.getAttribute("data-key");
+      const label = formatBackupKey(key);
+      const pwd = await askPassword(`⚠️ استرجاع نسخة ${label} سيستبدل كل بياناتك الحالية بالكامل. أي تعديل حدث بعد هذا التاريخ ولم يُؤخَذ له نسخة احتياطية سيُفقَد نهائياً. أدخل كلمة السر للتأكيد:`);
       if(!(await verifyPassword(pwd, LW_STEP_PASS_HASH))){
         showToast("⚠️ كلمة السر غير صحيحة", "warn");
         return;
       }
       btn.disabled = true;
       btn.textContent = "جارٍ الاسترجاع...";
-      const ok = await restoreBackup(dateStr);
+      const ok = await restoreBackup(key);
       if(ok){
-        showToast(`✓ تم استرجاع نسخة ${dateStr} بنجاح`, "ok");
+        showToast(`✓ تم استرجاع نسخة ${label} بنجاح`, "ok");
         goHome();
       } else {
         showToast("⚠️ تعذّر الاسترجاع", "warn");
