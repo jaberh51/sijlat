@@ -1446,17 +1446,42 @@ async function fbLoadCasesProgressive(onBatch){
 // العقد المتغيّرة، بدل استبدال الكتلة الكاملة كنص JSON كما في السابق)
 // deletedKeys: مفاتيح حُذفت محلياً ويجب حذف عقدتها من Firebase أيضاً (تعيين
 // المسار إلى null في Multi-path Update يحذف تلك العقدة تحديداً في Firebase)
+// تنظيف عميق لأي قيمة undefined داخل كائن/مصفوفة — Firebase يرفض الحفظ
+// بالكامل (كل الدفعة دفعة واحدة) إذا وُجدت قيمة undefined واحدة في أي مكان،
+// حتى لو كانت مئات القضايا الأخرى سليمة تماماً. هذا كان السبب الحقيقي وراء
+// رسالة "تعذّر الاتصال بالسحابة" المضلِّلة.
+function deepStripUndefined(val){
+  if(val === undefined) return null;
+  if(val === null || typeof val !== "object") return val;
+  if(Array.isArray(val)) return val.map(deepStripUndefined);
+  const out = {};
+  Object.keys(val).forEach(k=>{
+    const v = val[k];
+    if(v !== undefined) out[k] = deepStripUndefined(v);
+  });
+  return out;
+}
+
+// حفظ كل القضايا دفعة واحدة عبر Multi-path Update (كتابة واحدة فعّالة لكل
+// العقد المتغيّرة، بدل استبدال الكتلة الكاملة كنص JSON كما في السابق)
+// deletedKeys: مفاتيح حُذفت محلياً ويجب حذف عقدتها من Firebase أيضاً (تعيين
+// المسار إلى null في Multi-path Update يحذف تلك العقدة تحديداً في Firebase)
 async function fbSaveAllCases(cache, deletedKeys){
   if(!fbDb) return false;
   const fb = window.__fbModular;
   try{
     const updates = {};
-    Object.keys(cache).forEach(k=>{ updates['master_cases/' + encodeFbKey(k)] = cache[k]; });
+    Object.keys(cache).forEach(k=>{ updates['master_cases/' + encodeFbKey(k)] = deepStripUndefined(cache[k]); });
     (deletedKeys||[]).forEach(k=>{ updates['master_cases/' + encodeFbKey(k)] = null; });
     await fb.update(fb.ref(fbDb), updates);
     return true;
-  }catch(e){ return false; }
+  }catch(e){
+    console.error("فشل الحفظ في Firebase — السبب الحقيقي:", e);
+    _lastFbSaveError = e && e.message ? e.message : String(e);
+    return false;
+  }
 }
+let _lastFbSaveError = "";
 
 // تتبّع أي مفاتيح حُذفت محلياً من masterCache (مثل تنظيف السجلات القديمة)
 // حتى يُصفّى نظيرها من Firebase عند الحفظ التالي بدل أن يبقى "يتيماً" هناك.
@@ -2181,7 +2206,7 @@ async function saveMaster(){
     const deletions = [..._pendingFbDeletions];
     const ok = await fbSaveAllCases(masterCache, deletions);
     if(ok) _pendingFbDeletions.clear();
-    else showToast("⚠️ تعذّر الاتصال بالسحابة — حُفظ محلياً مؤقتاً فقط", "warn");
+    else showToast("⚠️ تعذّر الحفظ سحابياً — حُفظ محلياً فقط. السبب: " + (_lastFbSaveError || "غير معروف"), "warn");
   }
   return {key:'master_cases', value: masterCache};
 }
