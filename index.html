@@ -5735,35 +5735,41 @@ function getMonthRawValue(r, monthId){
 
 // قيمة العمود المعروضة لشهر معيّن:
 // - الشهر الأول: القيمة الخام المجمّدة (نقطة البداية، لا شهر سابق للمقارنة به)
-// - ما بعده: **مجموع المعاملات المالية الفعلية المؤرَّخة** التي وصلت خلال
-//   الفترة بين تجميد الشهر السابق وتجميد هذا الشهر — وليس فرق رصيدين.
-//   هذا يحل مشكلة حقيقية: لو سُحب مبلغ قديم ووصل مبلغ جديد بنفس القيمة خلال
-//   نفس الفترة، فرق الرصيدين يُظهر "صفر" خطأً رغم وصول مبلغ جديد فعلاً —
-//   بينما جمع المعاملات المؤرَّخة يُظهر المبلغ الجديد بدقة دائماً.
+// - ما بعده: **الأكبر** بين طريقتين مختلفتين معاً (وليس واحدة فقط):
+//   (أ) مجموع المعاملات المالية المؤرَّخة الواصلة خلال الفترة — يحل مشكلة
+//       "سحب مبلغ قديم + وصول مبلغ جديد بنفس القيمة" التي كانت تُظهر صفراً
+//       خطأً بطريقة فرق الرصيدين القديمة.
+//   (ب) فرق رصيد "المتاح" الخام بين الشهرين — يحل مشكلة معاكسة: زيادة حقيقية
+//       في "المتاح" وصلت فقط عبر إعادة استيراد "معلومات القضايا" بلا أي
+//       ردية مؤرَّخة مرفقة معها، فلن تظهر في حساب المعاملات وحده.
+//   نأخذ "الأكبر" بينهما (وليس المجموع) لأن "المتاح" رقم تراكمي يشمل عادة
+//   أثر الرديات المؤرَّخة أصلاً ضمنه، فجمع الطريقتين قد يُضاعف نفس المبلغ.
 function getMonthColumnValue(r, monthIndex, months){
   if(monthIndex === 0){
     return getMonthRawValue(r, months[monthIndex].id);
   }
   const prevMonth = months[monthIndex-1];
   const thisMonth = months[monthIndex];
+  const balanceDiff = getMonthRawValue(r, thisMonth.id) - getMonthRawValue(r, prevMonth.id);
+
   const prevDate = prevMonth.updatedAt ? new Date(prevMonth.updatedAt) : null;
   const thisDate = thisMonth.updatedAt ? new Date(thisMonth.updatedAt) : null;
-  // احتياط: أشهر قديمة جُمِّدت قبل تسجيل تاريخ التحديث — نعود لفرق الرصيدين
-  // القديم كخطة بديلة أفضل من عرض صفر مضلِّل بلا أي بيانات تواريخ.
-  if(!prevDate || !thisDate){
-    return getMonthRawValue(r, thisMonth.id) - getMonthRawValue(r, prevMonth.id);
-  }
+  // احتياط: أشهر قديمة جُمِّدت قبل تسجيل تاريخ التحديث — لا بيانات تواريخ
+  // كافية لحساب مجموع المعاملات، فنكتفي بفرق الرصيد وحده.
+  if(!prevDate || !thisDate) return balanceDiff;
+
   const rec = masterCache[caseKey(r)];
   const transactions = (rec && rec["معاملات مالية"]) || [];
-  let sum = 0;
+  let txnSum = 0;
   transactions.forEach(t=>{
     const d = parseDate(t["تاريخ الشيك/الحوالة"]);
     if(!d) return;
     if(d > prevDate && d <= thisDate){
-      sum += parseNum(t["المبلغ المحول"]) || 0;
+      txnSum += parseNum(t["المبلغ المحول"]) || 0;
     }
   });
-  return sum;
+
+  return Math.max(txnSum, balanceDiff);
 }
 
 // تجميد قيمة "المتاح للقبض" الحالية لكل القضايا تحت شهر جديد (أو تحديث شهر
