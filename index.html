@@ -466,13 +466,35 @@
     display:inline-block;margin-inline-start:6px;font-size:10.5px;font-weight:700;
     background:#ede9fe;color:#6d28d9;border-radius:6px;padding:2px 7px;
   }
-  .stats-box-row{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:18px;}
+  .stats-box-row{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:14px;}
   .stats-box{
     flex:1;min-width:150px;background:var(--paper-raised);border:1px solid var(--line);
     border-radius:14px;padding:14px 18px;box-shadow:var(--shadow);text-align:center;
   }
   .stats-box-num{font-family:'Amiri',serif;font-size:26px;font-weight:700;color:var(--ink);}
   .stats-box-label{font-size:12px;color:var(--ink-soft);font-weight:700;margin-top:2px;}
+  .stats-box-icon{font-size:20px;margin-bottom:2px;}
+  .stats-box-eligible{border-top:4px solid var(--slate);}
+  .stats-box-eligible .stats-box-num{color:var(--slate);}
+  .stats-box-active{border-top:4px solid var(--brass);}
+  .stats-box-active .stats-box-num{color:var(--brass);}
+  .stats-box-remaining{border-top:4px solid var(--rust);}
+  .stats-box-remaining .stats-box-num{color:var(--rust);}
+  .dashboard-progress-wrap{
+    background:var(--paper-raised);border:1px solid var(--line);border-radius:14px;
+    padding:14px 18px;margin-bottom:18px;box-shadow:var(--shadow);
+  }
+  .dashboard-progress-label{
+    display:flex;justify-content:space-between;font-size:12.5px;font-weight:700;
+    color:var(--ink-soft);margin-bottom:8px;
+  }
+  .dashboard-progress-bar{
+    width:100%;height:14px;background:var(--slate-soft);border-radius:8px;overflow:hidden;
+  }
+  .dashboard-progress-fill{
+    height:100%;background:linear-gradient(90deg,var(--brass),var(--green));
+    border-radius:8px;transition:width .4s ease;
+  }
 
   /* شارات الموكلين — تصميم أنيق وبرّاق (تدرّج لوني + توهج لامع خفيف) */
   .client-badge{
@@ -1056,6 +1078,13 @@
     </div>
 
     <div class="stats-box-row" id="fuStatsBox"></div>
+    <div class="dashboard-progress-wrap" id="fuProgressWrap" style="display:none;">
+      <div class="dashboard-progress-label">
+        <span>نسبة المتابعة من القضايا القابلة للمتابعة</span>
+        <span id="fuProgressPct">0%</span>
+      </div>
+      <div class="dashboard-progress-bar"><div class="dashboard-progress-fill" id="fuProgressFill" style="width:0%;"></div></div>
+    </div>
 
     <div class="fu-page-section">
       <div class="fu-page-subtitle">
@@ -1078,6 +1107,13 @@
     </div>
 
     <div class="stats-box-row" id="lwStatsBox"></div>
+    <div class="dashboard-progress-wrap" id="lwProgressWrap" style="display:none;">
+      <div class="dashboard-progress-label">
+        <span>نسبة القضايا المتابَعة حالياً من القابلة للمتابعة</span>
+        <span id="lwProgressPct">0%</span>
+      </div>
+      <div class="dashboard-progress-bar"><div class="dashboard-progress-fill" id="lwProgressFill" style="width:0%;"></div></div>
+    </div>
 
     <div class="fu-page-section">
       <div class="fu-page-subtitle">🔎 ابحث عن قضية لتسجيل مراسلة معها</div>
@@ -3217,38 +3253,76 @@ function countCasesInExecution(){
   return getDedupedRAW().filter(r => (r["حالة الدعوى"]||"").trim() === "قيد التنفيذ").length;
 }
 
+// القضايا "القابلة للمتابعة" فعلياً: قيد التنفيذ، مع استثناء صريح لأي قضية
+// عليها علامة "تسوية خارج المحكمة" داخلياً (حتى لو ما زالت حالتها الرسمية
+// في بيانات المحكمة تقول "قيد التنفيذ" لعدم تحديثها هناك بعد)
+function countEligibleForFollowup(){
+  return getDedupedRAW().filter(r=>{
+    const status = (r["حالة الدعوى"]||"").trim();
+    if(status !== "قيد التنفيذ") return false;
+    const rec = masterCache[caseKey(r)];
+    if(rec && rec["تسوية_خارجية"]) return false;
+    return true;
+  }).length;
+}
+
 function renderLwStatsBox(){
   const box = document.getElementById("lwStatsBox");
   if(!box) return;
-  const execCount = countCasesInExecution();
-  const lwCount = document.getElementById("lwActionsCount")?.textContent || "0";
+  const eligible = countEligibleForFollowup();
+  const activeCount = parseInt(document.getElementById("lwActionsCount")?.textContent || "0", 10);
+  const remaining = Math.max(0, eligible - activeCount);
   box.innerHTML = `
-    <div class="stats-box">
-      <div class="stats-box-num">${execCount}</div>
-      <div class="stats-box-label">إجمالي القضايا قيد التنفيذ</div>
+    <div class="stats-box stats-box-eligible">
+      <div class="stats-box-icon">📁</div>
+      <div class="stats-box-num">${eligible}</div>
+      <div class="stats-box-label">قضايا قابلة للمتابعة</div>
     </div>
-    <div class="stats-box">
-      <div class="stats-box-num">${lwCount}</div>
-      <div class="stats-box-label">قضايا متابعة المحامي</div>
+    <div class="stats-box stats-box-active">
+      <div class="stats-box-icon">⚖️</div>
+      <div class="stats-box-num">${activeCount}</div>
+      <div class="stats-box-label">قضايا متابعة حالياً</div>
+    </div>
+    <div class="stats-box stats-box-remaining">
+      <div class="stats-box-icon">⏳</div>
+      <div class="stats-box-num">${remaining}</div>
+      <div class="stats-box-label">قضايا متبقية</div>
     </div>
   `;
+  const pct = eligible > 0 ? Math.round((activeCount/eligible)*100) : 0;
+  const wrap = document.getElementById("lwProgressWrap");
+  if(wrap){
+    wrap.style.display = eligible > 0 ? "block" : "none";
+    document.getElementById("lwProgressFill").style.width = pct + "%";
+    document.getElementById("lwProgressPct").textContent = pct + "%";
+  }
 }
 
 function renderFuStatsBox(){
   const box = document.getElementById("fuStatsBox");
   if(!box) return;
-  const execCount = countCasesInExecution();
-  const fuCount = document.getElementById("fuCount")?.textContent || "0";
+  const eligible = countEligibleForFollowup();
+  const fuCount = parseInt(document.getElementById("fuCount")?.textContent || "0", 10);
+  const remaining = Math.max(0, eligible - fuCount);
   box.innerHTML = `
-    <div class="stats-box">
-      <div class="stats-box-num">${execCount}</div>
-      <div class="stats-box-label">إجمالي القضايا قيد التنفيذ</div>
-    </div>
-    <div class="stats-box">
+    <div class="stats-box stats-box-active">
+      <div class="stats-box-icon">📌</div>
       <div class="stats-box-num">${fuCount}</div>
-      <div class="stats-box-label">قضايا المتابعات</div>
+      <div class="stats-box-label">قضايا المتابعة</div>
+    </div>
+    <div class="stats-box stats-box-remaining">
+      <div class="stats-box-icon">⏳</div>
+      <div class="stats-box-num">${remaining}</div>
+      <div class="stats-box-label">قضايا متبقية</div>
     </div>
   `;
+  const pct = eligible > 0 ? Math.round((fuCount/eligible)*100) : 0;
+  const wrap = document.getElementById("fuProgressWrap");
+  if(wrap){
+    wrap.style.display = eligible > 0 ? "block" : "none";
+    document.getElementById("fuProgressFill").style.width = pct + "%";
+    document.getElementById("fuProgressPct").textContent = pct + "%";
+  }
 }
 
 function openLawyerPage(){
