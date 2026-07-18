@@ -5822,12 +5822,24 @@ function getMonthColumnValue(r, monthIndex, months){
 // موجود بالفعل — نفس الدالة تُستخدَم للحالتين، فقط تستبدل القيمة القديمة)
 async function freezeNewMonth(monthId){
   const rows = getDedupedRAW();
+  let decreasedCount = 0;
   rows.forEach(r=>{
     const key = caseKey(r);
     const avail = getRowAvail(r);
+    const newVal = avail !== null ? avail : 0;
     if(!masterCache[key]) masterCache[key] = {};
     if(!masterCache[key]["تحليل_اشهر"]) masterCache[key]["تحليل_اشهر"] = {};
-    masterCache[key]["تحليل_اشهر"][monthId] = avail !== null ? avail : 0;
+    const existingRaw = masterCache[key]["تحليل_اشهر"][monthId];
+    const existingNum = existingRaw !== undefined ? parseFloat(existingRaw) : null;
+    // القاعدة: "المتاح" المسجَّل لأي شهر لا يُسمح له بالنقصان أبداً — فقط
+    // بالزيادة. النقصان يعني غالباً تحصيلاً (سحباً) فعلياً، وهذا لا يخصّ
+    // "كم مبلغ جديد وصل" الذي يقيسه هذا التحليل أصلاً.
+    if(existingNum !== null && !isNaN(existingNum) && newVal < existingNum){
+      decreasedCount++;
+      masterCache[key]["تحليل_اشهر"][monthId] = existingNum; // الاحتفاظ بأعلى قيمة سابقة
+    } else {
+      masterCache[key]["تحليل_اشهر"][monthId] = newVal;
+    }
   });
   await saveMaster();
   // تسجيل تاريخ آخر تحديث لهذا الشهر تحديداً (يظهر تحت اسم الشهر في الجدول)
@@ -5836,6 +5848,9 @@ async function freezeNewMonth(monthId){
   if(idx !== -1){
     months[idx].updatedAt = getAccurateNow().toISOString();
     saveAnalysisMonths(months);
+  }
+  if(decreasedCount > 0){
+    showToast(`ℹ️ ${decreasedCount} قضية انخفض متاحها (على الأرجح تحصيل) — احتُفظ بأعلى قيمة مسجَّلة لها`, "ok");
   }
 }
 
