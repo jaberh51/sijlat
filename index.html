@@ -282,10 +282,12 @@
   .amt-col-remaining-due{color:#991b1b;font-weight:700;}
   .amt-col-remaining-ok{color:#065f46;font-weight:700;}
   .amt-col-avail{color:#1d4ed8;font-weight:700;}
-  .amt-col-m6{color:#1d4ed8;font-weight:700;}
-  .amt-col-m7-pos{color:#059669;font-weight:700;}
-  .amt-col-m7-neg{color:#dc2626;font-weight:700;}
-  .amt-col-m7-zero{color:var(--ink-soft);font-weight:700;}
+  .analysis-amt-neutral{color:var(--ink);font-weight:700;}
+  .analysis-month-updated{
+    font-size:9.5px;font-weight:400;color:var(--ink-soft);margin-top:2px;white-space:nowrap;
+    transition:opacity .6s ease, max-height .6s ease;max-height:14px;overflow:hidden;
+  }
+  .analysis-month-updated-hide{opacity:0;max-height:0;margin-top:0;}
   .cases-add-month-th{width:44px;text-align:center;}
   .cases-add-month-btn{
     width:30px;height:30px;border-radius:50%;border:1.5px dashed #0d9488;
@@ -298,19 +300,11 @@
   #analysisTable{table-layout:fixed;}
   #analysisTable th, #analysisTable td{overflow:hidden;text-overflow:ellipsis;}
   .analysis-month-label{display:inline-block;}
-  .analysis-month-del{
-    background:none;border:none;color:#dc2626;font-size:11px;cursor:pointer;
-    margin-inline-start:4px;padding:1px 4px;border-radius:4px;
-  }
-  .analysis-month-del:hover{background:#fee2e2;}
   .analysis-month-refresh{
     background:none;border:none;color:#0d9488;font-size:12px;cursor:pointer;
     margin-inline-start:2px;padding:1px 4px;border-radius:4px;
   }
   .analysis-month-refresh:hover{background:#ccfbf1;}
-  .analysis-month-updated{
-    font-size:9.5px;font-weight:400;color:var(--ink-soft);margin-top:2px;white-space:nowrap;
-  }
   .col-tooltip{
     position:fixed;z-index:99999;background:var(--ink,#222);color:#fff;
     font-family:'Tajawal',sans-serif;font-size:12.5px;font-weight:700;
@@ -5817,15 +5811,6 @@ async function refreshLastAnalysisMonth(){
   renderAnalysisPage();
 }
 
-// حذف شهر (مؤقت — لحين استقرار القاعدة الحسابية النهائية)
-async function deleteAnalysisMonth(monthId){
-  let months = getAnalysisMonths();
-  months = months.filter(m => m.id !== monthId);
-  saveAnalysisMonths(months);
-  showToast("✓ تم حذف الشهر", "ok");
-  renderAnalysisPage();
-}
-
 async function openAnalysisPage(){
   await ensureFirstMonth();
   analysisAllRows = getDedupedRAW();
@@ -5868,7 +5853,6 @@ function renderAnalysisHeader(months){
     }catch(e){ return ""; }
   };
   const monthsHtml = months.map((m,i)=>{
-    const icon = i === 0 ? "🔵" : "🟢";
     const isLast = i === months.length - 1;
     // زر التحديث يظهر فقط فوق آخر شهر — بمجرد إضافة شهر جديد، ينتقل الزر
     // معه تلقائياً، ويبقى الشهر الذي قبله مقفلاً للأبد بلا أي زر تحديث
@@ -5876,10 +5860,9 @@ function renderAnalysisHeader(months){
       ? `<button class="analysis-month-refresh" id="analysisRefreshLastBtn" title="تحديث هذا الشهر بأحدث الأرقام">🔄</button>`
       : "";
     return `<th class="amt-col" style="width:${w.perMonth};">
-      <span class="analysis-month-label">${icon} ${escapeAttr(m.label)}</span>
+      <span class="analysis-month-label">${escapeAttr(m.label)}</span>
       ${refreshBtn}
-      <button class="analysis-month-del" data-month-id="${escapeAttr(m.id)}" title="حذف هذا الشهر (مؤقت)">✕</button>
-      <div class="analysis-month-updated">${m.updatedAt ? "آخر تحديث: " + escapeAttr(fmtUpdateDate(m.updatedAt)) : ""}</div>
+      <div class="analysis-month-updated" data-updated="1">${m.updatedAt ? "آخر تحديث: " + escapeAttr(fmtUpdateDate(m.updatedAt)) : ""}</div>
     </th>`;
   }).join("");
   const canAdd = canAddNewAnalysisMonth();
@@ -5898,12 +5881,13 @@ function renderAnalysisHeader(months){
   if(refreshBtnEl){
     refreshBtnEl.onclick = (e)=>{ e.stopPropagation(); refreshLastAnalysisMonth(); };
   }
-  headerRow.querySelectorAll(".analysis-month-del").forEach(btn=>{
-    btn.onclick = (e)=>{
-      e.stopPropagation();
-      deleteAnalysisMonth(btn.getAttribute("data-month-id"));
-    };
-  });
+  // "آخر تحديث" يظهر لثوانٍ معدودة فقط ثم يختفي تلقائياً (بدل البقاء دائماً
+  // مشغولاً مكاناً في رأس الجدول) — يعمل عند كل إعادة رسم للصفحة
+  setTimeout(()=>{
+    headerRow.querySelectorAll('[data-updated="1"]').forEach(el=>{
+      el.classList.add("analysis-month-updated-hide");
+    });
+  }, 2500);
 }
 
 function renderAnalysisPage(){
@@ -5935,11 +5919,10 @@ function renderAnalysisPage(){
     const def = getDefendantForRow(r);
     const monthsHtml = months.map((m,i)=>{
       const val = getMonthColumnValue(r, i, months);
-      const cls = i === 0 ? "amt-col-m6" : (val > 0 ? "amt-col-m7-pos" : val < 0 ? "amt-col-m7-neg" : "amt-col-m7-zero");
-      return `<td class="amt-col ${cls}" data-col="${escapeAttr(m.label)}">${fmtAmt(val)}</td>`;
+      return `<td class="amt-col analysis-amt-neutral" data-col="${escapeAttr(m.label)}">${fmtAmt(val)}</td>`;
     }).join("");
     return `<tr>
-      <td class="cases-cell-no" data-col="رقم القضية">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${getClientBadgeHtml(r)}</td>
+      <td class="cases-cell-no" data-col="رقم القضية">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}</td>
       <td data-col="الطرف">${escapeAttr(def)}</td>
       <td data-col="المحكمة">${escapeAttr(displayCourtName(r["المحكمة"]))}</td>
       ${monthsHtml}
@@ -5985,16 +5968,15 @@ function renderAnalysisSummary(months){
 
 function printAnalysis(){
   const months = getAnalysisMonths();
-  const monthHeaders = months.map((m,i)=> `<th>${i===0?'🔵':'🟢'} ${escapeAttr(m.label)}</th>`).join("");
+  const monthHeaders = months.map((m,i)=> `<th>${escapeAttr(m.label)}</th>`).join("");
   const rows = analysisFilteredRows.map(r=>{
     const def = getDefendantForRow(r);
     const cells = months.map((m,i)=>{
       const v = getMonthColumnValue(r, i, months);
-      const color = i === 0 ? '#1d4ed8' : (v > 0 ? '#059669' : v < 0 ? '#dc2626' : '#666');
-      return `<td style="text-align:center;color:${color}">${fmtAmt(v)}</td>`;
+      return `<td style="text-align:center;">${fmtAmt(v)}</td>`;
     }).join("");
     return `<tr>
-      <td>${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${getClientSuffixText(r)}</td>
+      <td>${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}</td>
       <td>${escapeAttr(def)}</td>
       <td>${escapeAttr(displayCourtName(r["المحكمة"]))}</td>
       ${cells}
