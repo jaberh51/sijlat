@@ -5733,13 +5733,37 @@ function getMonthRawValue(r, monthId){
   return isNaN(n) ? 0 : n;
 }
 
-// قيمة العمود المعروضة لشهر معيّن حسب ترتيبه:
-// الشهر الأول = القيمة الخام المجمّدة، وما بعده = فرقه عن الشهر الذي قبله مباشرة
+// قيمة العمود المعروضة لشهر معيّن:
+// - الشهر الأول: القيمة الخام المجمّدة (نقطة البداية، لا شهر سابق للمقارنة به)
+// - ما بعده: **مجموع المعاملات المالية الفعلية المؤرَّخة** التي وصلت خلال
+//   الفترة بين تجميد الشهر السابق وتجميد هذا الشهر — وليس فرق رصيدين.
+//   هذا يحل مشكلة حقيقية: لو سُحب مبلغ قديم ووصل مبلغ جديد بنفس القيمة خلال
+//   نفس الفترة، فرق الرصيدين يُظهر "صفر" خطأً رغم وصول مبلغ جديد فعلاً —
+//   بينما جمع المعاملات المؤرَّخة يُظهر المبلغ الجديد بدقة دائماً.
 function getMonthColumnValue(r, monthIndex, months){
-  const value = getMonthRawValue(r, months[monthIndex].id);
-  if(monthIndex === 0) return value;
-  const prevValue = getMonthRawValue(r, months[monthIndex-1].id);
-  return value - prevValue;
+  if(monthIndex === 0){
+    return getMonthRawValue(r, months[monthIndex].id);
+  }
+  const prevMonth = months[monthIndex-1];
+  const thisMonth = months[monthIndex];
+  const prevDate = prevMonth.updatedAt ? new Date(prevMonth.updatedAt) : null;
+  const thisDate = thisMonth.updatedAt ? new Date(thisMonth.updatedAt) : null;
+  // احتياط: أشهر قديمة جُمِّدت قبل تسجيل تاريخ التحديث — نعود لفرق الرصيدين
+  // القديم كخطة بديلة أفضل من عرض صفر مضلِّل بلا أي بيانات تواريخ.
+  if(!prevDate || !thisDate){
+    return getMonthRawValue(r, thisMonth.id) - getMonthRawValue(r, prevMonth.id);
+  }
+  const rec = masterCache[caseKey(r)];
+  const transactions = (rec && rec["معاملات مالية"]) || [];
+  let sum = 0;
+  transactions.forEach(t=>{
+    const d = parseDate(t["تاريخ الشيك/الحوالة"]);
+    if(!d) return;
+    if(d > prevDate && d <= thisDate){
+      sum += parseNum(t["المبلغ المحول"]) || 0;
+    }
+  });
+  return sum;
 }
 
 // تجميد قيمة "المتاح للقبض" الحالية لكل القضايا تحت شهر جديد (أو تحديث شهر
