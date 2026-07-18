@@ -5834,12 +5834,12 @@ function applyAnalysisFilter(){
   renderAnalysisPage();
 }
 
-// عرض ثابت لأعمدة رقم القضية/الطرف/المحكمة، وأعمدة الأشهر تتقلص تلقائياً كلما زاد عددها
+// عرض ثابت لأعمدة رقم القضية/الطرف/المحكمة، وعمود كل شهر عرضه صغير وثابت
+// (وليس نسبة من "منطقة أشهر" كبيرة) — لأنه مع شهر واحد فقط كانت هذه المنطقة
+// تحجز 50% من عرض الجدول كاملاً، فيظهر فراغ كبير جداً قبل الرقم داخل الخلية.
 function computeAnalysisColWidths(monthsCount){
-  const fixed = {no:"13%", party:"22%", court:"12%", addBtn:"3%"};
-  const monthsRegion = 50; // النسبة المتبقية للأشهر مجتمعة
-  const perMonth = Math.max(4, monthsRegion / Math.max(1, monthsCount));
-  return {...fixed, perMonth: perMonth + "%"};
+  const perMonth = 9; // عرض ثابت صغير ومعقول لكل عمود شهر بغض النظر عن العدد
+  return {no:"13%", party:"30%", court:"14%", addBtn:"3%", perMonth: perMonth + "%"};
 }
 
 function renderAnalysisHeader(months){
