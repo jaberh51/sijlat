@@ -5715,14 +5715,60 @@ let analysisCurrentPage = 0;
 let analysisSearchTimer = null;
 
 // قائمة الأشهر مُخزَّنة عالمياً (وليست لكل قضية) في localStorage
-function getAnalysisMonths(){
-  try{
-    const raw = localStorage.getItem('analysis_months');
-    return raw ? JSON.parse(raw) : [];
-  }catch(e){ return []; }
+// ذاكرة تخزين مؤقت لقائمة الأشهر — null يعني "لم تُحمَّل بعد من Firebase".
+// هذا يجعل كل أجهزتك ترى نفس قائمة الأشهر بالضبط، بدل أن يحتفظ كل جهاز
+// بقائمته المحلية المستقلة (السبب الحقيقي وراء الاختلاف بين نسختك المحلية
+// ونسخة الإنترنت الذي لاحظته).
+let analysisMonthsCache = null;
+
+// تحميل قائمة الأشهر من Firebase — يُستدعى مرة واحدة فقط عند أول فتح لصفحة
+// التحليل. إذا لم يوجد شيء في Firebase بعد، يُرحِّل أي قائمة محلية قديمة
+// موجودة في هذا الجهاز تحديداً (مرة واحدة) بدل فقدانها.
+async function loadAnalysisMonthsFromFirebase(){
+  if(analysisMonthsCache !== null) return; // مُحمَّلة بالفعل
+  let months = [];
+  if(fbDb){
+    const fb = window.__fbModular;
+    try{
+      const snap = await fb.get(fb.ref(fbDb, 'analysis_months'));
+      if(snap.exists()){
+        months = snap.val() || [];
+      } else {
+        const raw = localStorage.getItem('analysis_months');
+        if(raw){
+          try{ months = JSON.parse(raw); }catch(e){ months = []; }
+          if(months.length) await fb.set(fb.ref(fbDb, 'analysis_months'), months);
+        }
+      }
+    }catch(e){
+      console.error("فشل تحميل قائمة الأشهر من Firebase:", e);
+      try{
+        const raw = localStorage.getItem('analysis_months');
+        months = raw ? JSON.parse(raw) : [];
+      }catch(e2){ months = []; }
+    }
+  } else {
+    try{
+      const raw = localStorage.getItem('analysis_months');
+      months = raw ? JSON.parse(raw) : [];
+    }catch(e){ months = []; }
+  }
+  analysisMonthsCache = months;
 }
+
+function getAnalysisMonths(){
+  return analysisMonthsCache || [];
+}
+
 function saveAnalysisMonths(months){
-  localStorage.setItem('analysis_months', JSON.stringify(months));
+  analysisMonthsCache = months;
+  try{ localStorage.setItem('analysis_months', JSON.stringify(months)); }catch(e){} // احتياط محلي إضافي
+  if(fbDb){
+    const fb = window.__fbModular;
+    fb.set(fb.ref(fbDb, 'analysis_months'), months).catch(e=>{
+      console.error("فشل حفظ قائمة الأشهر في Firebase:", e);
+    });
+  }
 }
 
 // القيمة المجمّدة لقضية معيّنة في شهر معيّن (خام، غير مطروح منها شيء)
@@ -5842,6 +5888,7 @@ async function refreshLastAnalysisMonth(){
 }
 
 async function openAnalysisPage(){
+  await loadAnalysisMonthsFromFirebase();
   await ensureFirstMonth();
   analysisAllRows = getDedupedRAW();
   document.getElementById("analysisSearch").value = "";
