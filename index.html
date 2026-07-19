@@ -681,6 +681,23 @@
   .lw-filters-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
   .lw-card-row{display:flex;flex-direction:row;align-items:center;gap:10px;direction:rtl;}
   .lw-card-name{flex:1;font-weight:700;font-size:13px;color:var(--ink);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  /* ===== تصميم متجاوب لبطاقات صندوق المتابعات: الشاشات الضيّقة (الهواتف)
+     تحديداً تحصل على تكديس عمودي (الاسم بسطر كامل العرض بلا قص، ثم الأزرار
+     أسفله)، بينما الشاشات الواسعة (الحاسوب) تبقى بتصميمها الأفقي الحالي دون
+     أي تغيير — الحدّ الفاصل 640px هو المعيار القياسي لتمييز الهاتف عن الحاسوب. */
+  @media (max-width: 640px){
+    .lw-card-row{flex-direction:column;align-items:stretch;gap:8px;}
+    .lw-card-name{
+      white-space:normal;overflow:visible;text-overflow:clip;
+      width:100%;font-size:14px;line-height:1.4;
+    }
+    .lw-steps-grid{
+      grid-template-columns:repeat(5, minmax(0,1fr));width:100%;
+    }
+    .lw-transfer-btn, .lw-fold-btn, .lw-action-remove, .lw-party2-add{
+      align-self:flex-start;
+    }
+  }
   .lw-action-meta{display:none;}
   .lw-steps-grid{
     display:grid;grid-template-columns:repeat(5, 78px);gap:6px;align-items:center;flex:none;
