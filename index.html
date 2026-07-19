@@ -711,6 +711,12 @@
     transition:background .15s ease, color .15s ease, border-color .15s ease, transform .1s ease;
   }
   .lw-step-btn:hover{border-color:var(--slate);background:var(--slate-soft);transform:translateY(-1px);}
+  .lw-step-btn.lw-step-progress{
+    background:linear-gradient(135deg,#a16207,#78350f);color:#fff;border-color:#78350f;
+    box-shadow:0 2px 6px rgba(120,53,15,.35);
+  }
+  .lw-step-btn.lw-step-progress::before{content:"⏳";}
+  .lw-step-btn.lw-step-progress:hover{filter:brightness(1.1);transform:translateY(-1px);}
   .lw-step-btn.lw-step-done{
     background:linear-gradient(135deg,var(--brass),#8a6023);color:#fff;border-color:var(--brass);
     box-shadow:0 2px 6px rgba(169,120,47,.35);
@@ -3868,9 +3874,13 @@ function getLwSteps(key){
   return (master[key] && master[key]["محامي_خطوات"]) ? master[key]["محامي_خطوات"] : {};
 }
 
-async function toggleLwStep(key, stepId, currentlyDone){
-  if(currentlyDone){
-    const pwd = await askPassword("أدخل كلمة السر لإلغاء هذه الخطوة:");
+// نظام ثلاث حالات للخطوة: فارغة (لم تبدأ) → "قيد المتابعة" (بضغطة عادية،
+// بلا كلمة سر) → "منجز" (بضغطة مطوّلة 5 ثوانٍ، بلا كلمة سر أيضاً للتفعيل).
+// الإلغاء الوحيد الذي يحتاج كلمة سر هو الخروج من حالة "منجز" تحديداً (يرجع
+// للصفر مباشرة، وليس إلى "قيد المتابعة").
+async function toggleLwStep(key, stepId, currentStatus, newStatus){
+  if(currentStatus === "done" && !newStatus){
+    const pwd = await askPassword("أدخل كلمة السر لإلغاء هذه الخطوة المُنجَزة:");
     if(!(await verifyPassword(pwd, LW_STEP_PASS_HASH))){
       showToast("⚠️ كلمة السر غير صحيحة", "warn");
       return false;
@@ -3879,11 +3889,11 @@ async function toggleLwStep(key, stepId, currentlyDone){
   const master = masterCache;
   if(!master[key]) master[key] = {};
   if(!master[key]["محامي_خطوات"]) master[key]["محامي_خطوات"] = {};
-  if(currentlyDone){
+  if(!newStatus){
     delete master[key]["محامي_خطوات"][stepId];
   } else {
     master[key]["محامي_خطوات"][stepId] = {
-      done: true,
+      status: newStatus,
       date: new Date().toISOString()
     };
   }
@@ -3916,6 +3926,10 @@ function toggleCaseFolded(key){
   if(set.has(key)) set.delete(key); else set.add(key);
   saveFoldedCasesSet(set);
 }
+
+// متغيّرات عامة لكشف "الضغطة المطوّلة" (5 ثوانٍ) على أزرار خطوات المتابعة
+let _stepLongPressTimer = null;
+let _stepLongPressFired = false;
 
 function renderLwActionsBox(){
   const listEl = document.getElementById("lwActionsBox");
@@ -4020,8 +4034,9 @@ function renderLwActionsBox(){
           : `<span class="lw-sector-badge lw-sector-badge-locked" title="انتهت مهلة التعديل (ساعة واحدة من الإضافة)">${escapeAttr(item.sector)}</span>`)
       : "";
     const stepsHtml = LW_STEPS.map(s=>{
-      const done = item.steps[s.id] && item.steps[s.id].done;
-      const stepDate = done ? new Date(item.steps[s.id].date) : null;
+      const stepData = item.steps[s.id];
+      const status = stepData ? (stepData.status || (stepData.done ? "done" : "")) : ""; // توافق مع بيانات قديمة كانت تخزّن done:true
+      const stepDate = status ? new Date(stepData.date) : null;
       const stepDateStr = stepDate
         ? `${WEEKDAY_NAMES_AR[stepDate.getDay()]} ${stepDate.toLocaleDateString('ar-EG')} ${stepDate.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})}`
         : "";
@@ -4030,13 +4045,23 @@ function renderLwActionsBox(){
       // راتب/لاحق عند وجود تحصيل) — تبقى ظاهرة في مكانها الثابت لكن باهتة
       // وغير فعّالة، بدل الاختفاء الذي يكسر محاذاة الأعمدة بين البطاقات.
       const isApplicable = applicableStepIds.includes(s.id);
+      const statusClass = status === "done" ? "lw-step-done" : status === "progress" ? "lw-step-progress" : "";
+      const statusLabel = status === "done" ? "✓ منجز" : status === "progress" ? "⏳ قيد المتابعة" : "";
+      let titleText;
+      if(!isApplicable){
+        titleText = "غير متاح لهذه القضية";
+      } else if(status){
+        titleText = s.label + " — " + statusLabel + " — " + stepDateStr + " (اضغط مطوّلاً 5 ثوانٍ للتحديد كمُنجَز)";
+      } else {
+        titleText = s.label + " (اضغط مطوّلاً 5 ثوانٍ للتحديد كمُنجَز)";
+      }
       return `<button
-          class="lw-step-btn ${done ? 'lw-step-done' : ''} ${isApplicable ? '' : 'lw-step-disabled'}"
+          class="lw-step-btn ${statusClass} ${isApplicable ? '' : 'lw-step-disabled'}"
           data-key="${escapeAttr(item.key)}"
           data-step="${escapeAttr(s.id)}"
-          data-done="${done ? '1' : '0'}"
+          data-status="${status}"
           ${isApplicable ? '' : 'disabled'}
-          title="${isApplicable ? s.label + (done ? '\n✓ ' + stepDateStr : '') : 'غير متاح لهذه القضية'}"
+          title="${escapeAttr(titleText)}"
         >${shortLabel}</button>`;
     }).join("");
     // حساب المبالغ — المصدر الأساسي هو masterCache لأن RAW_DATA لا يحتوي على هذه الحقول
@@ -4087,14 +4112,16 @@ function renderLwActionsBox(){
         const isP2Step = (s.id === "step_kitabHasm" || s.id === "step_hajzMukafa");
         const blockedByCollected = s.id === "step_kitabHasm" && hasCollected;
         const active = isP2Step && !blockedByCollected;
-        const done = p2.steps && p2.steps[s.id] && p2.steps[s.id].done;
+        const stepData = p2.steps && p2.steps[s.id];
+        const status = stepData ? (stepData.status || (stepData.done ? "done" : "")) : "";
+        const statusClass = status === "done" ? "lw-step-done" : status === "progress" ? "lw-step-progress" : "";
         return `<button
-            class="lw-step-btn ${done ? 'lw-step-done' : ''} ${active ? '' : 'lw-step-disabled'}"
+            class="lw-step-btn ${statusClass} ${active ? '' : 'lw-step-disabled'}"
             data-key="${escapeAttr(item.key)}"
             data-p2step="${escapeAttr(s.id)}"
-            data-done="${done ? '1' : '0'}"
+            data-status="${status}"
             ${active ? '' : 'disabled'}
-            title="${active ? s.label : 'غير متاح للطرف الثاني'}"
+            title="${active ? s.label + '\n(اضغط مطوّلاً 5 ثوانٍ للتحديد كمُنجَز)' : 'غير متاح للطرف الثاني'}"
           >${s.shortLabel}</button>`;
       }).join("");
       party2ExtraRow = `
@@ -4124,6 +4151,42 @@ function renderLwActionsBox(){
 
   // Event delegation — مستمع واحد على الحاوية بدل مستمع لكل زر خطوة ولكل زر حذف.
   // مهم خاصة هنا لأن هذه القائمة قد تحتوي عشرات القضايا × 7 أزرار خطوات لكل واحدة.
+  // ===== كشف "الضغطة المطوّلة" (5 ثوانٍ) على أزرار الخطوات — تُفعِّل حالة
+  // "منجز" مباشرة، بمعزل عن الضغطة العادية القصيرة (التي تُفعِّل "قيد المتابعة")
+  const startLongPress = (e)=>{
+    const btn = e.target.closest(".lw-step-btn:not([disabled])");
+    if(!btn) return;
+    _stepLongPressFired = false;
+    clearTimeout(_stepLongPressTimer);
+    _stepLongPressTimer = setTimeout(async ()=>{
+      _stepLongPressFired = true;
+      const currentStatus = btn.getAttribute("data-status") || "";
+      if(currentStatus === "done") return; // منجزة أصلاً، لا شيء إضافي
+      const key = btn.getAttribute("data-key");
+      const stepId = btn.getAttribute("data-step") || btn.getAttribute("data-p2step");
+      const isP2 = btn.hasAttribute("data-p2step");
+      if(isP2){
+        const rec = masterCache[key];
+        if(rec && rec["محامي_طرف2"]){
+          if(!rec["محامي_طرف2"].steps) rec["محامي_طرف2"].steps = {};
+          rec["محامي_طرف2"].steps[stepId] = {status:"done", date:new Date().toISOString()};
+          await saveMaster([key]);
+        }
+      } else {
+        await toggleLwStep(key, stepId, currentStatus, "done");
+      }
+      showToast("✓ تم تحديد الخطوة كمُنجَزة", "ok");
+      renderLwActionsBox();
+    }, 5000);
+  };
+  const cancelLongPress = ()=>{ clearTimeout(_stepLongPressTimer); };
+  listEl.onmousedown = startLongPress;
+  listEl.ontouchstart = startLongPress;
+  listEl.onmouseup = cancelLongPress;
+  listEl.onmouseleave = cancelLongPress;
+  listEl.ontouchend = cancelLongPress;
+  listEl.ontouchcancel = cancelLongPress;
+
   listEl.onclick = async (e)=>{
     const addP2Btn = e.target.closest(".lw-party2-add");
     if(addP2Btn){
@@ -4138,21 +4201,26 @@ function renderLwActionsBox(){
     }
     const p2StepBtn = e.target.closest("[data-p2step]");
     if(p2StepBtn){
+      if(_stepLongPressFired){ _stepLongPressFired = false; return; }
       const key = p2StepBtn.getAttribute("data-key");
       const stepId = p2StepBtn.getAttribute("data-p2step");
-      const done = p2StepBtn.getAttribute("data-done") === "1";
-      if(done){
-        const pwd = await askPassword("أدخل كلمة السر لإلغاء هذه الخطوة:");
+      const currentStatus = p2StepBtn.getAttribute("data-status") || "";
+      let newStatus;
+      if(!currentStatus) newStatus = "progress";
+      else if(currentStatus === "progress") newStatus = "";
+      else { // "done"
+        const pwd = await askPassword("أدخل كلمة السر لإلغاء هذه الخطوة المُنجَزة:");
         if(!(await verifyPassword(pwd, LW_STEP_PASS_HASH))){
           showToast("⚠️ كلمة السر غير صحيحة", "warn");
           return;
         }
+        newStatus = "";
       }
       const rec = masterCache[key];
       if(rec && rec["محامي_طرف2"]){
         if(!rec["محامي_طرف2"].steps) rec["محامي_طرف2"].steps = {};
-        if(done) delete rec["محامي_طرف2"].steps[stepId];
-        else rec["محامي_طرف2"].steps[stepId] = {done:true, date:new Date().toISOString()};
+        if(!newStatus) delete rec["محامي_طرف2"].steps[stepId];
+        else rec["محامي_طرف2"].steps[stepId] = {status:newStatus, date:new Date().toISOString()};
         await saveMaster([key]);
         renderLwActionsBox();
       }
@@ -4214,10 +4282,12 @@ function renderLwActionsBox(){
     }
     const stepBtn = e.target.closest(".lw-step-btn");
     if(stepBtn){
+      if(_stepLongPressFired){ _stepLongPressFired = false; return; }
       const key = stepBtn.getAttribute("data-key");
       const stepId = stepBtn.getAttribute("data-step");
-      const done = stepBtn.getAttribute("data-done") === "1";
-      const ok = await toggleLwStep(key, stepId, done);
+      const currentStatus = stepBtn.getAttribute("data-status") || "";
+      const newStatus = !currentStatus ? "progress" : (currentStatus === "progress" ? "" : "");
+      const ok = await toggleLwStep(key, stepId, currentStatus, newStatus);
       if(ok) renderLwActionsBox();
       return;
     }
