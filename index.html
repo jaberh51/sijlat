@@ -345,6 +345,58 @@
     font-size:12px;color:var(--ink-soft);background:var(--paper);border:1px dashed var(--line);
     border-radius:10px;padding:8px 14px;margin-top:10px;
   }
+
+  /* ===== الهيكل الجديد: بطاقات تحليل أنيقة بدل جدول تقليدي ===== */
+  .analysis-months-bar{
+    display:flex;align-items:stretch;gap:8px;flex-wrap:wrap;margin:16px 0 6px;
+  }
+  .analysis-month-pill{
+    display:flex;flex-direction:column;align-items:center;gap:2px;
+    background:var(--paper-raised);border:1.5px solid var(--line);border-radius:12px;
+    padding:8px 16px;min-width:76px;position:relative;
+  }
+  .analysis-month-pill.is-last{border-color:var(--brass);background:linear-gradient(135deg,#fdf6e9,var(--paper-raised));}
+  .analysis-month-pill-label{font-family:'Amiri',serif;font-size:19px;font-weight:700;color:var(--ink);line-height:1;}
+  .analysis-month-pill-hint{font-size:9.5px;color:var(--ink-soft);}
+  .analysis-month-pill .analysis-month-refresh{position:absolute;top:-8px;left:-8px;background:var(--brass);color:#fff;border-radius:50%;width:22px;height:22px;font-size:11px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 5px rgba(0,0,0,.2);}
+  .analysis-month-pill .analysis-month-refresh:hover{filter:brightness(1.1);}
+  .analysis-add-pill{
+    display:flex;align-items:center;justify-content:center;
+    border:1.5px dashed var(--brass);border-radius:12px;background:transparent;
+    color:var(--brass);font-size:24px;font-weight:700;cursor:pointer;min-width:52px;padding:0 14px;
+  }
+  .analysis-add-pill:hover:not(:disabled){background:#fdf6e9;}
+  .analysis-add-pill:disabled{border-color:var(--line);color:var(--line);cursor:not-allowed;}
+
+  .analysis-cards{display:flex;flex-direction:column;gap:8px;margin-top:12px;}
+  .analysis-card{
+    display:grid;align-items:center;gap:10px;
+    background:var(--paper-raised);border:1px solid var(--line);border-radius:12px;
+    padding:11px 16px;box-shadow:0 1px 3px rgba(0,0,0,.04);
+    transition:transform .12s ease, box-shadow .12s ease;
+  }
+  .analysis-card:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.08);}
+  .analysis-card-finished{opacity:0.55;}
+  .analysis-card-finished:hover{opacity:0.85;}
+  .analysis-card-main{display:flex;flex-direction:column;gap:3px;min-width:0;}
+  .analysis-card-party{font-weight:700;font-size:14px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .analysis-card-meta{display:flex;gap:8px;align-items:center;font-size:11.5px;color:var(--ink-soft);flex-wrap:wrap;}
+  .analysis-card-caseno{background:var(--slate-soft);color:var(--slate);border-radius:6px;padding:1px 8px;font-weight:700;}
+  .analysis-card-months{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;}
+  .analysis-card-month{
+    display:flex;flex-direction:column;align-items:center;gap:1px;
+    border-radius:9px;padding:6px 12px;min-width:62px;
+  }
+  .analysis-card-month-val{font-family:'Amiri',serif;font-size:17px;font-weight:700;line-height:1;}
+  .analysis-card-month-name{font-size:9px;color:var(--ink-soft);}
+  .analysis-card-month.zero{background:var(--paper);}
+  .analysis-card-month.zero .analysis-card-month-val{color:var(--ink-soft);}
+  .analysis-card-month.positive{background:linear-gradient(135deg,#ecfdf5,#d1fae5);}
+  .analysis-card-month.positive .analysis-card-month-val{color:#059669;}
+  @media(max-width:640px){
+    .analysis-card{grid-template-columns:1fr !important;}
+    .analysis-card-months{justify-content:flex-start;}
+  }
   .cases-finished-box{
     background:linear-gradient(135deg,#f0fdf4,#dcfce7);
     border:1.5px solid #86efac;border-radius:12px;
@@ -475,21 +527,52 @@
     border-radius:8px;padding:4px 10px;font-size:13px;display:inline-block;
   }
   .lw-action-picker{
-    display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;
+    display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;padding:12px;
+    background:var(--paper);border:1px dashed var(--line);border-radius:12px;
   }
   .lw-action-opt, .lw-sector-opt{
-    font-family:'Tajawal',sans-serif;background:var(--paper);border:1px solid var(--line);
-    border-radius:8px;padding:5px 10px;font-size:12px;color:var(--ink);cursor:pointer;
+    font-family:'Tajawal',sans-serif;background:var(--paper-raised);border:1.5px solid var(--line);
+    border-radius:999px;padding:7px 15px;font-size:12.5px;font-weight:700;color:var(--ink);cursor:pointer;
+    box-shadow:0 1px 2px rgba(0,0,0,.05);transition:all .15s ease;
   }
-  .lw-action-opt:hover, .lw-sector-opt:hover{background:var(--brass-soft);border-color:var(--brass);}
+  .lw-action-opt:hover, .lw-sector-opt:hover{background:var(--brass-soft);border-color:var(--brass);color:#7a5a1f;transform:translateY(-1px);}
   .lw-picker-title{
-    width:100%;font-size:11.5px;font-weight:700;color:var(--ink-soft);
+    width:100%;font-size:12px;font-weight:700;color:var(--brass);
     margin-bottom:2px;
   }
   .lw-sector-badge{
     display:inline-block;margin-inline-start:6px;font-size:10.5px;font-weight:700;
-    background:#ede9fe;color:#6d28d9;border-radius:6px;padding:2px 7px;
+    background:#ede9fe;color:#6d28d9;border:none;border-radius:6px;padding:2px 7px;cursor:pointer;
+    position:relative;
   }
+  .lw-sector-badge:hover{background:#ddd6fe;}
+  .lw-resector-menu{
+    position:absolute;z-index:60;margin-top:4px;
+    background:var(--paper,#fff);border:1px solid var(--line,#ddd);border-radius:10px;
+    box-shadow:0 6px 20px rgba(0,0,0,.15);padding:6px;display:flex;flex-direction:column;gap:3px;min-width:130px;
+  }
+  .lw-resector-menu button{
+    font-family:'Tajawal',sans-serif;font-size:12px;font-weight:700;
+    background:none;border:none;padding:7px 10px;border-radius:6px;cursor:pointer;
+    text-align:right;color:var(--ink,#222);white-space:nowrap;
+  }
+  .lw-resector-menu button:hover{background:#ede9fe;color:#6d28d9;}
+  .lw-party2-add{
+    margin-top:8px;font-family:'Tajawal',sans-serif;font-size:11.5px;font-weight:700;
+    background:none;border:1px dashed var(--slate);color:var(--slate);border-radius:8px;
+    padding:5px 12px;cursor:pointer;
+  }
+  .lw-party2-add:hover{background:var(--slate-soft);}
+  .lw-party2-row{
+    margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    background:var(--paper);border:1px dashed var(--line);border-radius:8px;padding:6px 10px;
+  }
+  .lw-party2-name{font-size:12px;font-weight:700;color:var(--ink);}
+  .lw-party2-remove{
+    background:none;border:1px solid #dc2626;color:#dc2626;border-radius:6px;
+    padding:2px 8px;font-size:11px;cursor:pointer;margin-inline-start:auto;
+  }
+  .lw-party2-remove:hover{background:#fee2e2;}
   .stats-box-row{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:14px;}
   .stats-box{
     flex:1;min-width:150px;background:var(--paper-raised);border:1px solid var(--line);
@@ -548,25 +631,27 @@
   .lw-action-remove{padding:3px 9px;font-size:12px;flex:none;}
   .lw-action-card{padding:10px 14px;}
   .lw-box-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .lw-filters-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
   .lw-card-row{display:flex;flex-direction:row;align-items:center;gap:10px;direction:rtl;}
   .lw-card-name{flex:1;font-weight:700;font-size:13px;color:var(--ink);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .lw-action-meta{display:none;}
-  .lw-steps-grid{display:flex;flex-direction:row;flex-wrap:nowrap;gap:10px;align-items:center;flex:0 0 auto;}
+  .lw-steps-grid{display:flex;flex-direction:row;flex-wrap:wrap;gap:6px;align-items:center;flex:0 0 auto;}
   .lw-step-btn{
-    display:flex;align-items:center;justify-content:center;
-    font-family:'Tajawal',sans-serif;font-size:8px;font-weight:700;
-    background:#e5e7eb;color:#6b7280;border:2px solid #d1d5db;
-    border-radius:50%;width:26px;height:26px;cursor:pointer;text-align:center;
-    padding:2px;line-height:1.1;
-    transition:background .15s, color .15s, border-color .15s, box-shadow .15s;
-    box-shadow:0 1px 2px rgba(0,0,0,.12);flex:none;
+    display:flex;align-items:center;justify-content:center;gap:3px;
+    font-family:'Tajawal',sans-serif;font-size:10.5px;font-weight:700;
+    background:var(--paper);color:var(--slate);border:1.5px solid var(--line);
+    border-radius:999px;padding:6px 12px;cursor:pointer;text-align:center;
+    line-height:1;white-space:nowrap;
+    transition:background .15s ease, color .15s ease, border-color .15s ease, transform .1s ease;
+    flex:none;
   }
-  .lw-step-btn:hover{background:#d1d5db;border-color:#9ca3af;}
+  .lw-step-btn:hover{border-color:var(--slate);background:var(--slate-soft);transform:translateY(-1px);}
   .lw-step-btn.lw-step-done{
-    background:#00e000;color:#fff;border-color:#00b300;
-    box-shadow:0 0 6px 2px rgba(0,200,0,.6);
+    background:linear-gradient(135deg,var(--brass),#8a6023);color:#fff;border-color:var(--brass);
+    box-shadow:0 2px 6px rgba(169,120,47,.35);
   }
-  .lw-step-btn.lw-step-done:hover{background:#00c400;border-color:#009900;}
+  .lw-step-btn.lw-step-done::before{content:"✓";font-weight:900;}
+  .lw-step-btn.lw-step-done:hover{filter:brightness(1.08);transform:translateY(-1px);}
   .lw-step-date{display:none;}
 
   /* نسخة غير تفاعلية من أزرار الخطوات لصفحة المتابعات (قراءة فقط) */
@@ -1152,6 +1237,16 @@
         <div class="fu-page-subtitle">📋 صندوق المتابعات (<span id="lwActionsCount">0</span>)</div>
         <button class="btn secondary" id="lwPrintBtn">🖨️ طباعة</button>
       </div>
+      <div class="lw-filters-row">
+        <select id="lwFilterClient" class="cases-select">
+          <option value="">كل الوكلاء</option>
+          <option value="J">جابر</option>
+          <option value="H">حنين</option>
+        </select>
+        <select id="lwFilterYear" class="cases-select">
+          <option value="">كل السنوات</option>
+        </select>
+      </div>
       <div id="lwActionsBox" class="fu-tracked-list"></div>
     </div>
   </div>
@@ -1181,6 +1276,21 @@
     <div style="display:flex;gap:10px;justify-content:flex-end;">
       <button id="pwdModalCancel" class="btn secondary" style="padding:8px 18px;">إلغاء</button>
       <button id="pwdModalConfirm" class="btn" style="padding:8px 18px;">تأكيد</button>
+    </div>
+  </div>
+</div>
+
+<!-- نافذة نص مستقلة تماماً (وليست حقلاً يتبدّل نوعه) — بعض لوحات مفاتيح
+     الهواتف "تعلق" على وضع كلمة السر (إنجليزي فقط) حتى بعد تبديل type برمجياً
+     إذا شارك الحقل مع كلمة السر، لذا نستخدم حقلاً مستقلاً بالكامل للنص العادي. -->
+<div id="textModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:var(--paper,#fff);border-radius:14px;padding:28px 24px;min-width:280px;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,.25);direction:rtl;font-family:'Tajawal',sans-serif;">
+    <div id="textModalTitle" style="font-weight:700;font-size:16px;margin-bottom:14px;color:var(--ink,#222);">أدخل قيمة</div>
+    <input id="textModalInput" type="text" placeholder=""
+      style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-family:'Tajawal',sans-serif;font-size:14px;margin-bottom:14px;box-sizing:border-box;">
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button id="textModalCancel" class="btn secondary" style="padding:8px 18px;">إلغاء</button>
+      <button id="textModalConfirm" class="btn" style="padding:8px 18px;">تأكيد</button>
     </div>
   </div>
 </div>
@@ -1307,16 +1417,14 @@
         <input type="text" id="analysisSearch" class="fu-search-input" placeholder="ابحث باسم الطرف، رقم القضية، أو اسم المحكمة...">
         <span id="analysisCount" class="cases-count">0 قضية</span>
       </div>
+      <label class="closure-checkbox-label" style="margin-top:8px;">
+        <input type="checkbox" id="analysisHideFinished">
+        🚫 إخفاء القضايا المنتهية مالياً (<span id="analysisFinishedCount">0</span>)
+      </label>
       <div class="analysis-hint">💡 يُتاح إنشاء شهر تحليل جديد فقط من يوم 25 من كل شهر فصاعداً، حتى تصل كل المبالغ من جميع الجهات أولاً. يمكنك تحديث الشهر الأخير في أي وقت عبر 🔄.</div>
-      <div class="cases-table-wrap">
-        <table class="cases-table" id="analysisTable">
-          <thead>
-            <tr id="analysisHeaderRow"></tr>
-          </thead>
-          <tbody id="analysisTbody"></tbody>
-        </table>
-        <div id="analysisEmpty" class="fu-search-hint" style="display:none;">لا توجد قضايا مطابقة</div>
-      </div>
+      <div class="analysis-months-bar" id="analysisMonthsBar"></div>
+      <div class="analysis-cards" id="analysisCards"></div>
+      <div id="analysisEmpty" class="fu-search-hint" style="display:none;">لا توجد قضايا مطابقة</div>
       <div class="cases-pager" id="analysisPager"></div>
     </div>
   </div>
@@ -3394,6 +3502,17 @@ function runLwSearch(q){
     return;
   }
   const unique = getDedupedRAW();
+  // إذا كان البحث رقماً بحتاً، نطابق رقم القضية تحديداً (وليس أي رقم يحتويه
+  // كنص) — يمنع ظهور "1152" أو "52" عند البحث عن "152".
+  const isNumericQuery = /^\d+$/.test(q);
+  const caseNoMatches = (r)=>{
+    if(isNumericQuery){
+      const norm = shortCaseNo(r["رقم الدعوى"]); // صيغة "رقم - سنة"
+      const numPart = norm.split(" - ")[0];
+      return numPart === q;
+    }
+    return (r["رقم الدعوى"]||"").includes(q);
+  };
   lwSearchMatches = unique.filter(r =>{
     const key = caseKey(r);
     // استبعاد القضايا "الميتة": المُزالة نهائياً (تسوية خارجية) أو المنقولة
@@ -3402,7 +3521,7 @@ function runLwSearch(q){
     if(isCaseNeedsClosure(key)) return false;
     return r["حالة الدعوى"] !== "فصل" &&
       !getLawyerAction(key) && (
-        (r["رقم الدعوى"]||"").includes(q) ||
+        caseNoMatches(r) ||
         (r["المحكمة"]||"").includes(q) ||
         (r["وصف الدعوى"]||"").includes(q) ||
         getDefendantNames(r).some(n => n.includes(q)) ||
@@ -3509,7 +3628,11 @@ function renderSectorPicker(picker, key, rowEl){
 
 // الخطوة الثانية: عرض الإجراءات المتاحة لهذا القطاع تحديداً فقط
 function renderActionPickerForSector(picker, key, rowEl, sector){
-  const applicable = getApplicableActions(sector);
+  // إذا كان يوجد مبلغ محصّل فعلاً لهذه القضية، فـ"حسم راتب" لم يعد منطقياً
+  // كخيار (الكتاب أُرسل فعلاً وأثمر تحصيلاً) — يُستبعَد من القائمة تلقائياً.
+  const row = getRowByKey(key);
+  const hasCollected = row ? (getFinancialForRow(row).total > 0) : false;
+  const applicable = getApplicableActions(sector, hasCollected);
   picker.innerHTML = `
     <div class="lw-picker-title">⚖️ الإجراء (${escapeAttr(sector)}):</div>
     ${applicable.map(a =>
@@ -3573,10 +3696,14 @@ function getApplicableSteps(sector){
   return SECTOR_STEPS_MAP[sector] || LW_STEPS.map(s=>s.id);
 }
 
-// الإجراءات القابلة للاختيار عند بدء المتابعة، مُصفّاة حسب القطاع
-function getApplicableActions(sector){
+// الإجراءات القابلة للاختيار عند بدء المتابعة، مُصفّاة حسب القطاع، وتستثني
+// "حسم راتب" تحديداً إن كان يوجد بالفعل مبلغ محصّل لهذه القضية (الكتاب أُرسل
+// فعلاً وأثمر، فلا داعي لعرضه كخيار جديد للاختيار).
+function getApplicableActions(sector, hasCollected){
   const steps = getApplicableSteps(sector);
-  return LAWYER_ACTIONS.filter(a => steps.includes(LW_ACTION_STEP_MAP[a]));
+  let actions = LAWYER_ACTIONS.filter(a => steps.includes(LW_ACTION_STEP_MAP[a]));
+  if(hasCollected) actions = actions.filter(a => a !== "حسم راتب");
+  return actions;
 }
 // ===== تشفير كلمات المرور (Web Crypto API) =====
 // بدل تخزين كلمة السر كنص صريح في الكود (يظهر لأي شخص يفتح "عرض المصدر")،
@@ -3633,7 +3760,7 @@ async function toggleLwStep(key, stepId, currentlyDone){
 function renderLwActionsBox(){
   const listEl = document.getElementById("lwActionsBox");
   const countEl = document.getElementById("lwActionsCount");
-  const items = [];
+  let items = [];
   Object.entries(masterCache).forEach(([key, rec])=>{
     // استبعاد القضايا "الميتة": المُزالة نهائياً أو المنقولة لقائمة "بحاجة إلى فصل"
     if(rec["تسوية_خارجية"]) return;
@@ -3643,9 +3770,29 @@ function renderLwActionsBox(){
     if(rec["مرحّل_للمتابعات"]) return;
     if(rec["محامي_اجراء"]){
       let row = getRowByKey(key);
-      items.push({key, row, info: rec["محامي_اجراء"], steps: rec["محامي_خطوات"] || {}, sector: rec["نوع_العمل"] || ""});
+      const client = row ? getPlaintiffForRow(row) : "";
+      const clientCode = client.includes("جابر") ? "J" : client.includes("حنين") ? "H" : "";
+      const year = row ? getCaseYearNum(row).year : null;
+      items.push({key, row, info: rec["محامي_اجراء"], steps: rec["محامي_خطوات"] || {}, sector: rec["نوع_العمل"] || "", clientCode, year});
     }
   });
+
+  // تعبئة قائمة السنوات ديناميكياً من السنوات الموجودة فعلياً بين المتابعات
+  const yearSelect = document.getElementById("lwFilterYear");
+  const currentYearVal = yearSelect.value;
+  const years = [...new Set(items.map(i=>i.year).filter(y=>y && !isNaN(y)))].sort((a,b)=>b-a);
+  yearSelect.innerHTML = `<option value="">كل السنوات</option>` + years.map(y=>`<option value="${y}">${y}</option>`).join("");
+  yearSelect.value = years.includes(parseInt(currentYearVal,10)) ? currentYearVal : "";
+
+  // تطبيق الفلترة (وكيل + سنة معاً) قبل أي ترتيب أو عرض
+  const clientFilter = document.getElementById("lwFilterClient").value;
+  const yearFilter = yearSelect.value;
+  const filteredItems = items.filter(i=>{
+    if(clientFilter && i.clientCode !== clientFilter) return false;
+    if(yearFilter && String(i.year) !== yearFilter) return false;
+    return true;
+  });
+
   // ترتيب حسب المبلغ المتبقي — الأقل أعلى، الأكبر أسفل
   const getRemaining = (item)=>{
     const rec = masterCache[item.key];
@@ -3655,21 +3802,23 @@ function renderLwActionsBox(){
     if(req === null) return 0;
     return req - (fin.total || 0);
   };
-  items.sort((a,b)=>{
+  filteredItems.sort((a,b)=>{
     const ra = getRemaining(a), rb = getRemaining(b);
     if(ra !== rb) return ra - rb;
     return new Date(b.info.date) - new Date(a.info.date);
   });
+  const totalBeforeFilter = items.length;
+  items = filteredItems; // من هنا فصاعداً items = القائمة المُفلترة والمرتّبة
 
-  countEl.textContent = items.length;
+  countEl.textContent = `${items.length}${items.length!==totalBeforeFilter ? ' من '+totalBeforeFilter : ''}`;
   if(!items.length){
-    listEl.innerHTML = `<div class="fu-tracked-empty">لا توجد إجراءات مسجّلة بعد. اختر قضية من البحث بالأعلى.</div>`;
+    listEl.innerHTML = `<div class="fu-tracked-empty">${totalBeforeFilter ? 'لا توجد نتائج مطابقة لهذه الفلترة.' : 'لا توجد إجراءات مسجّلة بعد. اختر قضية من البحث بالأعلى.'}</div>`;
     return;
   }
   listEl.innerHTML = items.map(item=>{
     const label = item.row ? `${escapeAttr(shortCaseNo(item.row["رقم الدعوى"]))}${getClientBadgeHtml(item.row)} · ${escapeAttr(getDefendantForRow(item.row))}` : item.key;
     const applicableStepIds = getApplicableSteps(item.sector);
-    const sectorBadge = item.sector ? `<span class="lw-sector-badge">${escapeAttr(item.sector)}</span>` : "";
+    const sectorBadge = item.sector ? `<button class="lw-sector-badge" data-key="${escapeAttr(item.key)}" data-resector="1" title="اضغط لتغيير نوع العمل">${escapeAttr(item.sector)} ✎</button>` : "";
     const stepsHtml = LW_STEPS.filter(s => applicableStepIds.includes(s.id)).map(s=>{
       const done = item.steps[s.id] && item.steps[s.id].done;
       const stepDate = done ? new Date(item.steps[s.id].date) : null;
@@ -3711,6 +3860,25 @@ function renderLwActionsBox(){
     // من هذا الصندوق ولا تعود إلا عبر "إزالتها" من صفحة المتابعات نفسها.
     const transferHtml = `<button class="lw-transfer-btn" data-key="${escapeAttr(item.key)}" title="ترحيل هذه القضية إلى صفحة المتابعات">🚚 ترحيل</button>`;
 
+    // طرف ثانٍ (مشتكى عليه إضافي بنفس القضية) — يُضاف يدوياً، وله خطوتا
+    // متابعة خاصتان به فقط (كتاب حسم لاحق + حجز مكافأة)، منفصلتان عن خطوات
+    // الطرف الأول تماماً.
+    const p2 = rec ? rec["محامي_طرف2"] : null;
+    let party2Html;
+    if(p2 && p2.name){
+      const s1 = p2.steps && p2.steps.step_kitabHasm && p2.steps.step_kitabHasm.done;
+      const s2 = p2.steps && p2.steps.step_hajzMukafa && p2.steps.step_hajzMukafa.done;
+      party2Html = `
+        <div class="lw-party2-row" data-key="${escapeAttr(item.key)}">
+          <span class="lw-party2-name">👤 ${escapeAttr(p2.name)}</span>
+          <button class="lw-step-btn ${s1?'lw-step-done':''}" data-key="${escapeAttr(item.key)}" data-p2step="step_kitabHasm" data-done="${s1?'1':'0'}" title="كتاب حسم لاحق">ح.حسم</button>
+          <button class="lw-step-btn ${s2?'lw-step-done':''}" data-key="${escapeAttr(item.key)}" data-p2step="step_hajzMukafa" data-done="${s2?'1':'0'}" title="حجز مكافأة">ح.مكافأة</button>
+          <button class="lw-party2-remove" data-key="${escapeAttr(item.key)}" title="حذف الطرف الثاني">✕</button>
+        </div>`;
+    } else {
+      party2Html = `<button class="lw-party2-add" data-key="${escapeAttr(item.key)}" title="إضافة مشتكى عليه ثانٍ لهذه القضية">+ طرف ثانٍ</button>`;
+    }
+
     return `
       <div class="fu-tracked-card lw-action-card" data-key="${escapeAttr(item.key)}">
         <div class="lw-card-row">
@@ -3719,6 +3887,7 @@ function renderLwActionsBox(){
           ${transferHtml}
           <button class="btn secondary lw-action-remove" data-key="${escapeAttr(item.key)}">✕</button>
         </div>
+        ${party2Html}
       </div>
     `;
   }).join("");
@@ -3726,6 +3895,81 @@ function renderLwActionsBox(){
   // Event delegation — مستمع واحد على الحاوية بدل مستمع لكل زر خطوة ولكل زر حذف.
   // مهم خاصة هنا لأن هذه القائمة قد تحتوي عشرات القضايا × 7 أزرار خطوات لكل واحدة.
   listEl.onclick = async (e)=>{
+    const addP2Btn = e.target.closest(".lw-party2-add");
+    if(addP2Btn){
+      const key = addP2Btn.getAttribute("data-key");
+      const name = await askInput("اكتب اسم الطرف الثاني (مشتكى عليه إضافي):", {type:"text"});
+      if(!name || !name.trim()) return;
+      if(!masterCache[key]) masterCache[key] = {};
+      masterCache[key]["محامي_طرف2"] = {name: name.trim(), steps:{}};
+      await saveMaster([key]);
+      renderLwActionsBox();
+      return;
+    }
+    const p2StepBtn = e.target.closest("[data-p2step]");
+    if(p2StepBtn){
+      const key = p2StepBtn.getAttribute("data-key");
+      const stepId = p2StepBtn.getAttribute("data-p2step");
+      const done = p2StepBtn.getAttribute("data-done") === "1";
+      if(done){
+        const pwd = await askPassword("أدخل كلمة السر لإلغاء هذه الخطوة:");
+        if(!(await verifyPassword(pwd, LW_STEP_PASS_HASH))){
+          showToast("⚠️ كلمة السر غير صحيحة", "warn");
+          return;
+        }
+      }
+      const rec = masterCache[key];
+      if(rec && rec["محامي_طرف2"]){
+        if(!rec["محامي_طرف2"].steps) rec["محامي_طرف2"].steps = {};
+        if(done) delete rec["محامي_طرف2"].steps[stepId];
+        else rec["محامي_طرف2"].steps[stepId] = {done:true, date:new Date().toISOString()};
+        await saveMaster([key]);
+        renderLwActionsBox();
+      }
+      return;
+    }
+    const removeP2Btn = e.target.closest(".lw-party2-remove");
+    if(removeP2Btn){
+      const key = removeP2Btn.getAttribute("data-key");
+      const pwd = await askPassword("أدخل كلمة السر لحذف الطرف الثاني:");
+      if(!(await verifyPassword(pwd, LW_STEP_PASS_HASH))){
+        showToast("⚠️ كلمة السر غير صحيحة", "warn");
+        return;
+      }
+      if(masterCache[key]) delete masterCache[key]["محامي_طرف2"];
+      await saveMaster([key]);
+      renderLwActionsBox();
+      return;
+    }
+    const resectorBtn = e.target.closest('[data-resector="1"]');
+    if(resectorBtn){
+      // إغلاق أي قائمة اختيار قطاع أخرى مفتوحة حالياً
+      listEl.querySelectorAll(".lw-resector-menu").forEach(m=> m.remove());
+      const key = resectorBtn.getAttribute("data-key");
+      const menu = document.createElement("div");
+      menu.className = "lw-resector-menu";
+      menu.innerHTML = WORK_SECTORS.map(s=>
+        `<button data-sector="${escapeAttr(s)}">${escapeAttr(s)}</button>`
+      ).join("");
+      resectorBtn.after(menu);
+      menu.querySelectorAll("button").forEach(btn=>{
+        btn.onclick = async (ev)=>{
+          ev.stopPropagation();
+          let sector = btn.getAttribute("data-sector");
+          if(sector === "أخرى"){
+            const custom = await askInput("اكتب نوع العمل يدوياً:", {type:"text"});
+            if(!custom || !custom.trim()){ menu.remove(); return; }
+            sector = custom.trim();
+          }
+          if(!masterCache[key]) masterCache[key] = {};
+          masterCache[key]["نوع_العمل"] = sector;
+          await saveMaster([key]);
+          showToast(`✓ تم تحديث نوع العمل إلى "${sector}"`, "ok");
+          renderLwActionsBox();
+        };
+      });
+      return;
+    }
     const stepBtn = e.target.closest(".lw-step-btn");
     if(stepBtn){
       const key = stepBtn.getAttribute("data-key");
@@ -4884,6 +5128,36 @@ function saveCurrentSection(section){
 // ===== نافذة كلمة السر المخصصة (تستبدل prompt) =====
 function askInput(title, opts){
   opts = opts || {};
+  // كلمة السر تستخدم نافذتها المخصَّصة، وأي نص عادي يستخدم نافذة مستقلة تماماً
+  // (حقل إدخال مختلف بالكامل) — لتفادي مشكلة لوحات المفاتيح التي "تعلق" على
+  // وضع كلمة السر (إنجليزي فقط) عند مشاركة نفس الحقل بين النوعين.
+  if((opts.type || "password") !== "password"){
+    return new Promise((resolve)=>{
+      const modal = document.getElementById("textModal");
+      const input = document.getElementById("textModalInput");
+      const titleEl = document.getElementById("textModalTitle");
+      const confirmBtn = document.getElementById("textModalConfirm");
+      const cancelBtn = document.getElementById("textModalCancel");
+      titleEl.textContent = title || "أدخل قيمة";
+      input.value = opts.defaultValue || "";
+      input.placeholder = opts.placeholder || "";
+      modal.style.display = "flex";
+      setTimeout(()=> { input.focus(); input.select(); }, 50);
+      function cleanup(val){
+        modal.style.display = "none";
+        confirmBtn.removeEventListener("click", onConfirm);
+        cancelBtn.removeEventListener("click", onCancel);
+        input.removeEventListener("keydown", onKey);
+        resolve(val);
+      }
+      function onConfirm(){ cleanup(input.value); }
+      function onCancel(){ cleanup(null); }
+      function onKey(e){ if(e.key==="Enter") cleanup(input.value); if(e.key==="Escape") cleanup(null); }
+      confirmBtn.addEventListener("click", onConfirm);
+      cancelBtn.addEventListener("click", onCancel);
+      input.addEventListener("keydown", onKey);
+    });
+  }
   return new Promise((resolve)=>{
     const modal = document.getElementById("pwdModal");
     const input = document.getElementById("pwdModalInput");
@@ -4891,14 +5165,12 @@ function askInput(title, opts){
     const confirmBtn = document.getElementById("pwdModalConfirm");
     const cancelBtn = document.getElementById("pwdModalCancel");
     titleEl.textContent = title || "أدخل قيمة";
-    input.type = opts.type || "password";
     input.value = opts.defaultValue || "";
-    input.placeholder = opts.placeholder || (input.type === "password" ? "كلمة السر..." : "");
+    input.placeholder = opts.placeholder || "كلمة السر...";
     modal.style.display = "flex";
     setTimeout(()=> { input.focus(); input.select(); }, 50);
     function cleanup(val){
       modal.style.display = "none";
-      input.type = "password"; // إعادة الضبط للاستخدام الافتراضي (كلمة سر)
       confirmBtn.removeEventListener("click", onConfirm);
       cancelBtn.removeEventListener("click", onCancel);
       input.removeEventListener("keydown", onKey);
@@ -5802,7 +6074,7 @@ function getMonthColumnValue(r, monthIndex, months){
   const thisDate = thisMonth.updatedAt ? new Date(thisMonth.updatedAt) : null;
   // احتياط: أشهر قديمة جُمِّدت قبل تسجيل تاريخ التحديث — لا بيانات تواريخ
   // كافية لحساب مجموع المعاملات، فنكتفي بفرق الرصيد وحده.
-  if(!prevDate || !thisDate) return balanceDiff;
+  if(!prevDate || !thisDate) return Math.max(balanceDiff, 0);
 
   const rec = masterCache[caseKey(r)];
   const transactions = (rec && rec["معاملات مالية"]) || [];
@@ -5815,7 +6087,9 @@ function getMonthColumnValue(r, monthIndex, months){
     }
   });
 
-  return Math.max(txnSum, balanceDiff);
+  // "صفر" حدّ أدنى مطلق دائماً — صافي أي شهر لا يجب أن يكون سالباً أبداً
+  // (السحب ليس "وصولاً سلبياً"، هو ببساطة "لا شيء جديد وصل هذا الشهر")
+  return Math.max(txnSum, balanceDiff, 0);
 }
 
 // تجميد قيمة "المتاح للقبض" الحالية لكل القضايا تحت شهر جديد (أو تحديث شهر
@@ -5852,6 +6126,17 @@ async function freezeNewMonth(monthId){
   if(decreasedCount > 0){
     showToast(`ℹ️ ${decreasedCount} قضية انخفض متاحها (على الأرجح تحصيل) — احتُفظ بأعلى قيمة مسجَّلة لها`, "ok");
   }
+}
+
+// قضية "منتهية مالياً": المطلوب = المحصّل (فالمتبقي صفر) والمتاح صفر أيضاً —
+// لا يوجد أي مبلغ معلّق أو متاح لهذه القضية بعد الآن، فلن تصلها أي رديّة
+// مستقبلية. نفس التعريف المستخدَم بالضبط في صفحة القضايا (لا نكرّر منطقاً مختلفاً).
+function isCaseFinishedFinancially(r){
+  const fin = getFinancialForRow(r);
+  const req = fin.requested;
+  const rem = fin.remaining;
+  const avail = getRowAvail(r);
+  return req !== null && rem === 0 && (avail === null || avail === 0);
 }
 
 // إنشاء الشهر الأول تلقائياً عند أول فتح للصفحة — لا يتكرر بعد ذلك أبداً
@@ -5907,13 +6192,20 @@ async function openAnalysisPage(){
   await ensureFirstMonth();
   analysisAllRows = getDedupedRAW();
   document.getElementById("analysisSearch").value = "";
+  document.getElementById("analysisHideFinished").checked = localStorage.getItem('analysis_hide_finished') === '1';
   analysisCurrentPage = 0;
   applyAnalysisFilter();
 }
 
 function applyAnalysisFilter(){
   const q = document.getElementById("analysisSearch").value.trim();
+  const hideFinished = document.getElementById("analysisHideFinished").checked;
+
+  const finishedCount = analysisAllRows.filter(isCaseFinishedFinancially).length;
+  document.getElementById("analysisFinishedCount").textContent = finishedCount;
+
   analysisFilteredRows = analysisAllRows.filter(r=>{
+    if(hideFinished && isCaseFinishedFinancially(r)) return false;
     if(q.length >= 2){
       return (r["رقم الدعوى"]||"").includes(q) ||
              (r["المحكمة"]||"").includes(q) ||
@@ -5934,59 +6226,48 @@ function computeAnalysisColWidths(monthsCount){
   return {no:"14%", party:"24%", court:"14%", addBtn:"3%", perMonth: perMonth + "%"};
 }
 
-function renderAnalysisHeader(months){
-  const headerRow = document.getElementById("analysisHeaderRow");
-  const w = computeAnalysisColWidths(months.length);
+// تصيير شريط الأشهر العلوي الأنيق (بدل رأس الجدول القديم)
+function renderAnalysisMonthsBar(months){
+  const bar = document.getElementById("analysisMonthsBar");
   const fmtUpdateDate = (iso)=>{
     if(!iso) return "";
-    try{
-      const d = new Date(iso);
-      return d.toLocaleDateString('ar-EG', {day:'2-digit', month:'2-digit', year:'numeric'});
-    }catch(e){ return ""; }
+    try{ return new Date(iso).toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit'}); }
+    catch(e){ return ""; }
   };
-  const monthsHtml = months.map((m,i)=>{
+  const pills = months.map((m,i)=>{
     const isLast = i === months.length - 1;
-    // زر التحديث يظهر فقط فوق آخر شهر — بمجرد إضافة شهر جديد، ينتقل الزر
-    // معه تلقائياً، ويبقى الشهر الذي قبله مقفلاً للأبد بلا أي زر تحديث
     const refreshBtn = isLast
       ? `<button class="analysis-month-refresh" id="analysisRefreshLastBtn" title="تحديث هذا الشهر بأحدث الأرقام">🔄</button>`
       : "";
-    return `<th class="amt-col" style="width:${w.perMonth};">
-      <span class="analysis-month-label">${escapeAttr(m.label)}</span>
+    const updated = (isLast && m.updatedAt)
+      ? `<span class="analysis-month-pill-hint" data-updated="1">${escapeAttr(fmtUpdateDate(m.updatedAt))}</span>`
+      : "";
+    return `<div class="analysis-month-pill${isLast ? " is-last" : ""}">
       ${refreshBtn}
-      <div class="analysis-month-updated" data-updated="1">${m.updatedAt ? "آخر تحديث: " + escapeAttr(fmtUpdateDate(m.updatedAt)) : ""}</div>
-    </th>`;
+      <span class="analysis-month-pill-label">${escapeAttr(m.label)}</span>
+      ${updated}
+    </div>`;
   }).join("");
   const canAdd = canAddNewAnalysisMonth();
-  const addBtnTitle = canAdd ? "إضافة شهر جديد" : "يُتاح إضافة شهر جديد فقط من يوم 25 من الشهر فصاعداً";
-  headerRow.innerHTML = `
-    <th style="width:${w.no};">رقم القضية</th>
-    <th style="width:${w.party};">الطرف</th>
-    <th style="width:${w.court};">المحكمة</th>
-    ${monthsHtml}
-    <th class="cases-add-month-th" style="width:${w.addBtn};">
-      <button id="analysisAddMonthBtn" class="cases-add-month-btn" title="${addBtnTitle}" ${canAdd ? "" : "disabled"}>+</button>
-    </th>
-  `;
+  const addBtnTitle = canAdd ? "إضافة شهر جديد" : "يُتاح فقط من يوم 25 فصاعداً";
+  bar.innerHTML = pills +
+    `<button class="analysis-add-pill" id="analysisAddMonthBtn" title="${addBtnTitle}" ${canAdd ? "" : "disabled"}>+</button>`;
+
   document.getElementById("analysisAddMonthBtn").onclick = ()=>{ addAnalysisMonth(); };
   const refreshBtnEl = document.getElementById("analysisRefreshLastBtn");
   if(refreshBtnEl){
     refreshBtnEl.onclick = (e)=>{ e.stopPropagation(); refreshLastAnalysisMonth(); };
   }
-  // "آخر تحديث" يظهر لثوانٍ معدودة فقط ثم يختفي تلقائياً (بدل البقاء دائماً
-  // مشغولاً مكاناً في رأس الجدول) — يعمل عند كل إعادة رسم للصفحة
   setTimeout(()=>{
-    headerRow.querySelectorAll('[data-updated="1"]').forEach(el=>{
-      el.classList.add("analysis-month-updated-hide");
-    });
-  }, 2500);
+    bar.querySelectorAll('[data-updated="1"]').forEach(el=>{ el.style.transition="opacity .6s"; el.style.opacity="0"; });
+  }, 2800);
 }
 
 function renderAnalysisPage(){
   const months = getAnalysisMonths();
-  renderAnalysisHeader(months);
+  renderAnalysisMonthsBar(months);
 
-  const tbody = document.getElementById("analysisTbody");
+  const cardsEl = document.getElementById("analysisCards");
   const emptyEl = document.getElementById("analysisEmpty");
   const pagerEl = document.getElementById("analysisPager");
   const countEl = document.getElementById("analysisCount");
@@ -5994,7 +6275,7 @@ function renderAnalysisPage(){
   countEl.textContent = `${total} قضية`;
 
   if(!total){
-    tbody.innerHTML = "";
+    cardsEl.innerHTML = "";
     emptyEl.style.display = "block";
     pagerEl.innerHTML = "";
     renderAnalysisSummary(months);
@@ -6007,19 +6288,31 @@ function renderAnalysisPage(){
   const start = analysisCurrentPage * ANALYSIS_PAGE_SIZE;
   const pageRows = analysisFilteredRows.slice(start, start + ANALYSIS_PAGE_SIZE);
 
-  tbody.innerHTML = pageRows.map(r=>{
+  // عرض الشبكة: العمود الأول للمعلومات، والباقي لبطاقات الأشهر
+  const gridCols = `minmax(0,1fr) auto`;
+
+  cardsEl.innerHTML = pageRows.map(r=>{
     const def = getDefendantForRow(r);
+    const finished = isCaseFinishedFinancially(r);
     const monthsHtml = months.map((m,i)=>{
       const val = getMonthColumnValue(r, i, months);
-      return `<td class="amt-col analysis-amt-neutral" data-col="${escapeAttr(m.label)}">${fmtAmt(val)}</td>`;
+      const cls = val > 0 ? "positive" : "zero";
+      return `<div class="analysis-card-month ${cls}">
+        <span class="analysis-card-month-val">${fmtAmt(val)}</span>
+        <span class="analysis-card-month-name">${escapeAttr(m.label)}</span>
+      </div>`;
     }).join("");
-    return `<tr>
-      <td class="cases-cell-no" data-col="رقم القضية">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}</td>
-      <td data-col="الطرف">${escapeAttr(def)}</td>
-      <td data-col="المحكمة">${escapeAttr(displayCourtName(r["المحكمة"]))}</td>
-      ${monthsHtml}
-      <td></td>
-    </tr>`;
+    const finishedBadge = finished ? `<span class="cases-finished-badge" title="المطلوب = المحصّل، ولا يوجد متبقٍ أو متاح">✅ منتهية</span>` : "";
+    return `<div class="analysis-card${finished ? " analysis-card-finished" : ""}" style="grid-template-columns:${gridCols};">
+      <div class="analysis-card-main">
+        <div class="analysis-card-party">${escapeAttr(def)} ${finishedBadge}</div>
+        <div class="analysis-card-meta">
+          <span class="analysis-card-caseno">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}</span>
+          <span>${escapeAttr(displayCourtName(r["المحكمة"]))}</span>
+        </div>
+      </div>
+      <div class="analysis-card-months">${monthsHtml}</div>
+    </div>`;
   }).join("");
 
   if(totalPages > 1){
@@ -6115,6 +6408,10 @@ document.getElementById("analysisPrintBtn").onclick = ()=>{ printAnalysis(); };
 document.getElementById("analysisSearch").addEventListener("input", ()=>{
   clearTimeout(analysisSearchTimer);
   analysisSearchTimer = setTimeout(()=> applyAnalysisFilter(), 250);
+});
+document.getElementById("analysisHideFinished").addEventListener("change", (e)=>{
+  localStorage.setItem('analysis_hide_finished', e.target.checked ? '1' : '0');
+  applyAnalysisFilter();
 });
 
 document.getElementById("casesPageClose").onclick = ()=>{ goHome(); };
@@ -6521,6 +6818,8 @@ document.getElementById("lwSearchInput").addEventListener("input", (e)=>{
   lwPageSearchTimer = setTimeout(()=> runLwSearch(v), 200);
 });
 
+document.getElementById("lwFilterClient").addEventListener("change", renderLwActionsBox);
+document.getElementById("lwFilterYear").addEventListener("change", renderLwActionsBox);
 document.getElementById("lwPrintBtn").onclick = ()=>{
   const items = [];
   Object.entries(masterCache).forEach(([key, rec])=>{
