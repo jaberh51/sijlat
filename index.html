@@ -571,13 +571,11 @@
   }
   .lw-party2-add:hover{background:var(--slate-soft);border-style:solid;}
   .lw-party2-row{
-    margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-    background:var(--paper);border:1px dashed var(--line);border-radius:8px;padding:6px 10px;
+    margin-top:6px;padding-top:8px;border-top:1px dashed var(--line);
   }
-  .lw-party2-name{font-size:12px;font-weight:700;color:var(--ink);}
   .lw-party2-remove{
     background:none;border:1px solid #dc2626;color:#dc2626;border-radius:6px;
-    padding:2px 8px;font-size:11px;cursor:pointer;margin-inline-start:auto;
+    padding:2px 8px;font-size:11px;cursor:pointer;flex:none;
   }
   .lw-party2-remove:hover{background:#fee2e2;}
   .stats-box-row{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:14px;}
@@ -3928,15 +3926,27 @@ function renderLwActionsBox(){
     let party2ExtraRow = "";
     let addP2InlineBtn = "";
     if(p2 && p2.name){
-      const s1 = p2.steps && p2.steps.step_kitabHasm && p2.steps.step_kitabHasm.done;
-      const s2 = p2.steps && p2.steps.step_hajzMukafa && p2.steps.step_hajzMukafa.done;
-      const p2KitabHasmBtn = hasCollected ? "" :
-        `<button class="lw-step-btn ${s1?'lw-step-done':''}" data-key="${escapeAttr(item.key)}" data-p2step="step_kitabHasm" data-done="${s1?'1':'0'}" title="كتاب حسم لاحق">${LW_STEP_SHORT.step_kitabHasm}</button>`;
+      // نفس شبكة الأزرار الخماسية للطرف الأول بالضبط — فقط "لاحق" و"ح.مكافأة"
+      // فعّالتان لهذا الطرف، والباقي يظهر معطَّلاً (باهتاً) للحفاظ على نفس
+      // محاذاة الأعمدة بين صفّي الطرف الأول والثاني.
+      const p2StepsHtml = LW_STEPS.map(s=>{
+        const isP2Step = (s.id === "step_kitabHasm" || s.id === "step_hajzMukafa");
+        const blockedByCollected = s.id === "step_kitabHasm" && hasCollected;
+        const active = isP2Step && !blockedByCollected;
+        const done = p2.steps && p2.steps[s.id] && p2.steps[s.id].done;
+        return `<button
+            class="lw-step-btn ${done ? 'lw-step-done' : ''} ${active ? '' : 'lw-step-disabled'}"
+            data-key="${escapeAttr(item.key)}"
+            data-p2step="${escapeAttr(s.id)}"
+            data-done="${done ? '1' : '0'}"
+            ${active ? '' : 'disabled'}
+            title="${active ? s.label : 'غير متاح للطرف الثاني'}"
+          >${s.shortLabel}</button>`;
+      }).join("");
       party2ExtraRow = `
-        <div class="lw-party2-row" data-key="${escapeAttr(item.key)}">
-          <span class="lw-party2-name">👤 ${escapeAttr(p2.name)}</span>
-          ${p2KitabHasmBtn}
-          <button class="lw-step-btn ${s2?'lw-step-done':''}" data-key="${escapeAttr(item.key)}" data-p2step="step_hajzMukafa" data-done="${s2?'1':'0'}" title="حجز مكافأة">${LW_STEP_SHORT.step_hajzMukafa}</button>
+        <div class="lw-card-row lw-party2-row" data-key="${escapeAttr(item.key)}">
+          <div class="lw-card-name">👤 ${escapeAttr(p2.name)}</div>
+          <div class="lw-steps-grid">${p2StepsHtml}</div>
           <button class="lw-party2-remove" data-key="${escapeAttr(item.key)}" title="حذف الطرف الثاني">✕</button>
         </div>`;
     } else {
