@@ -550,6 +550,8 @@
     position:relative;
   }
   .lw-sector-badge:hover{background:#ddd6fe;}
+  .lw-sector-badge-locked{cursor:default;opacity:0.85;}
+  .lw-sector-badge-locked:hover{background:#ede9fe;}
   .lw-resector-menu{
     position:absolute;z-index:60;margin-top:4px;
     background:var(--paper,#fff);border:1px solid var(--line,#ddd);border-radius:10px;
@@ -697,6 +699,10 @@
     transition:background .15s;
   }
   .lw-transfer-btn:hover{background:#dbeafe;}
+  .lw-transfer-btn:disabled{
+    background:#f1f0ec;color:#a8a49a;border-color:#ddd9cd;cursor:not-allowed;opacity:0.8;
+  }
+  .lw-transfer-btn:disabled:hover{background:#f1f0ec;}
   .lw-amt{font-size:11px;font-weight:700;padding:2px 7px;border-radius:6px;white-space:nowrap;}
   .lw-amt-total{background:var(--slate-soft);color:var(--slate);}
   .lw-amt-collected{background:#d1fae5;color:#065f46;}
@@ -3852,7 +3858,18 @@ function renderLwActionsBox(){
     const hasCollected = item.row ? (getFinancialForRow(item.row).total > 0) : false;
     let applicableStepIds = getApplicableSteps(item.sector);
     if(hasCollected) applicableStepIds = applicableStepIds.filter(id => id !== "step_hasmRatib" && id !== "step_kitabHasm");
-    const sectorBadge = item.sector ? `<button class="lw-sector-badge" data-key="${escapeAttr(item.key)}" data-resector="1" title="اضغط لتغيير نوع العمل">${escapeAttr(item.sector)} ✎</button>` : "";
+    // قلم تعديل نوع العمل متاح فقط خلال أول ساعة من إضافة القضية للمتابعة —
+    // بعدها يُقفَل نهائياً (يظهر الاسم كنص ثابت بلا قلم)، ولا يعود إلا بحذف
+    // القضية من المتابعات وإعادة إضافتها من جديد (يُسجَّل تاريخ جديد فيبدأ
+    // العدّاد من الصفر مجدداً).
+    const actionDate = item.info && item.info.date ? new Date(item.info.date) : null;
+    const hoursSinceAdded = actionDate ? (getAccurateNow() - actionDate) / (1000*60*60) : Infinity;
+    const canEditSector = hoursSinceAdded < 1;
+    const sectorBadge = item.sector
+      ? (canEditSector
+          ? `<button class="lw-sector-badge" data-key="${escapeAttr(item.key)}" data-resector="1" title="اضغط لتغيير نوع العمل (متاح لمدة ساعة من الإضافة)">${escapeAttr(item.sector)} ✎</button>`
+          : `<span class="lw-sector-badge lw-sector-badge-locked" title="انتهت مهلة التعديل (ساعة واحدة من الإضافة)">${escapeAttr(item.sector)}</span>`)
+      : "";
     const stepsHtml = LW_STEPS.map(s=>{
       const done = item.steps[s.id] && item.steps[s.id].done;
       const stepDate = done ? new Date(item.steps[s.id].date) : null;
@@ -3897,7 +3914,11 @@ function renderLwActionsBox(){
 
     // زر الترحيل الصريح إلى صفحة المتابعات — بعد الضغط، القضية تختفي فوراً
     // من هذا الصندوق ولا تعود إلا عبر "إزالتها" من صفحة المتابعات نفسها.
-    const transferHtml = `<button class="lw-transfer-btn" data-key="${escapeAttr(item.key)}" title="ترحيل هذه القضية إلى صفحة المتابعات">🚚 ترحيل</button>`;
+    // لا يُسمح بالترحيل إلا بعد إنجاز خطوتين على الأقل — ترحيل قضية بالكاد
+    // بدأت متابعتها لا يخدم الهدف من صفحة المتابعات المنفصلة.
+    const completedStepsCount = Object.values(item.steps || {}).filter(s => s && s.done).length;
+    const canTransfer = completedStepsCount >= 2;
+    const transferHtml = `<button class="lw-transfer-btn" data-key="${escapeAttr(item.key)}" data-can-transfer="${canTransfer?'1':'0'}" title="${canTransfer ? 'ترحيل هذه القضية إلى صفحة المتابعات' : 'يلزم إنجاز خطوتين على الأقل قبل الترحيل (حالياً: '+completedStepsCount+')'}" ${canTransfer ? '' : 'disabled'}>🚚 ترحيل</button>`;
 
     // طرف ثانٍ (مشتكى عليه إضافي بنفس القضية) — يُضاف يدوياً، وله خطوتا
     // متابعة خاصتان به فقط (كتاب حسم لاحق + حجز مكافأة)، منفصلتان عن خطوات
@@ -4026,6 +4047,13 @@ function renderLwActionsBox(){
     const transferBtn = e.target.closest(".lw-transfer-btn");
     if(transferBtn){
       const key = transferBtn.getAttribute("data-key");
+      const rec = masterCache[key];
+      const stepsObj = (rec && rec["محامي_خطوات"]) || {};
+      const doneCount = Object.values(stepsObj).filter(s => s && s.done).length;
+      if(doneCount < 2){
+        showToast(`⚠️ لا يمكن الترحيل قبل إتمام خطوتين على الأقل (المُنجَز حالياً: ${doneCount})`, "warn");
+        return;
+      }
       await setCaseTransferredToFollowups(key, true);
       renderLwActionsBox();
       renderLwStatsBox();
