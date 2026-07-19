@@ -484,6 +484,20 @@
     0%,100%{ margin-top:0; }
     50%{ margin-top:-6px; }
   }
+  /* حركة "الطيران بعيداً" لنافذة المعاملات الجديدة عند الضغط على "تم" */
+  @keyframes flyAway{
+    0%{ transform:translate(0,0) rotate(0deg) scale(1); opacity:1; }
+    100%{ transform:translate(70vw,-60vh) rotate(25deg) scale(.3); opacity:0; }
+  }
+  #newTxnModalBox.flying{ animation:flyAway .7s ease-in forwards; }
+  .new-txn-item{
+    background:var(--paper-raised,#fafafa);border:1px solid var(--line,#eee);border-radius:10px;
+    padding:9px 12px;font-size:12.5px;
+  }
+  .new-txn-item .ntx-case{font-weight:700;color:var(--ink,#222);}
+  .new-txn-item .ntx-def{color:var(--ink-soft,#777);margin-inline-start:6px;}
+  .new-txn-item .ntx-amt{float:left;font-weight:700;color:#15803d;}
+  .new-txn-item .ntx-date{display:block;font-size:11px;color:var(--ink-soft,#999);margin-top:2px;}
   .dove-svg{width:64px;height:56px;flex:none;filter:drop-shadow(0 3px 8px rgba(0,0,0,.15));}
   .dove-bubble{
     background:#fff;border:1.5px solid #fde68a;border-radius:14px;
@@ -1299,6 +1313,17 @@
       </div>
       <div id="lwActionsBox" class="fu-tracked-list"></div>
     </div>
+  </div>
+</div>
+
+<!-- نافذة "معاملات مالية جديدة" — تظهر مرة واحدة بعد كل استيراد يحتوي رديات
+     جديدة، وتطير كحمامة 🕊️ عند الضغط على "تم" -->
+<div id="newTxnModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;">
+  <div id="newTxnModalBox" style="background:var(--paper,#fff);border-radius:16px;padding:22px 20px;min-width:280px;max-width:420px;max-height:75vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25);direction:rtl;font-family:'Tajawal',sans-serif;">
+    <div style="font-weight:700;font-size:16px;margin-bottom:4px;color:var(--ink,#222);">💰 معاملات مالية جديدة</div>
+    <div id="newTxnModalCount" style="font-size:12.5px;color:var(--ink-soft,#777);margin-bottom:14px;"></div>
+    <div id="newTxnModalList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px;margin-bottom:16px;"></div>
+    <button id="newTxnModalOk" class="btn" style="align-self:center;padding:9px 28px;">🕊️ تم</button>
   </div>
 </div>
 
@@ -4816,12 +4841,13 @@ function restoreFinancialFromMaster(){
       synthetic.push(baseInfo);
     }
   });
-  if(!synthetic.length) return {added:0, updated:0, skippedDuplicateTxn:0, addedTxn:0};
+  if(!synthetic.length) return {added:0, updated:0, skippedDuplicateTxn:0, addedTxn:0, newTxnDetails:[]};
   return mergeRowsIntoRawData(synthetic);
 }
 
 function mergeRowsIntoRawData(newRows){
   let added = 0, updated = 0, skippedDuplicateTxn = 0, addedTxn = 0;
+  const newTxnDetails = []; // تفاصيل كل معاملة مالية جديدة — لعرضها لاحقاً في نافذة تنبيه
   const sigIndex = getTxnSigIndex(); // فهرس بصمات المعاملات — يُبنى مرة واحدة فقط لكل هذا الاستدعاء
 
   newRows.forEach(nr=>{
@@ -4843,6 +4869,12 @@ function mergeRowsIntoRawData(newRows){
       }
       RAW_DATA.push(nr);
       addedTxn++;
+      newTxnDetails.push({
+        caseNo: shortCaseNo(nr["رقم الدعوى"]),
+        defendant: getDefendantForRow(nr),
+        amount: parseNum(nr["المبلغ المحول"]),
+        date: nr["تاريخ الشيك/الحوالة"] || ""
+      });
       // تحديث الفهرس مباشرة بدل إبطاله بالكامل — أسرع بكثير
       if(!sigIndex.has(key)) sigIndex.set(key, new Set());
       sigIndex.get(key).add(sig);
@@ -4868,7 +4900,7 @@ function mergeRowsIntoRawData(newRows){
 
   invalidateRowIndex(); // البيانات تغيّرت — أعد بناء الفهرس عند الطلب التالي
   markRenderCacheDirty(); // البيانات تغيّرت — أعد حساب الـ overview والـ defendant index
-  return {added, updated, skippedDuplicateTxn, addedTxn};
+  return {added, updated, skippedDuplicateTxn, addedTxn, newTxnDetails};
 }
 
 function render(){
@@ -5165,7 +5197,7 @@ document.getElementById("updateBtn").onclick = async ()=>{
 
   importStatusEl.className = "result-count";
   const totalFiles = pendingFiles.length;
-  const combined = {added:0, updated:0, addedTxn:0, skippedDuplicateTxn:0};
+  const combined = {added:0, updated:0, addedTxn:0, skippedDuplicateTxn:0, newTxnDetails:[]};
   const succeeded = [];
   const failed = [];
 
@@ -5181,6 +5213,7 @@ document.getElementById("updateBtn").onclick = async ()=>{
       combined.added += mergeStats.added;
       combined.updated += mergeStats.updated;
       combined.addedTxn += mergeStats.addedTxn;
+      combined.newTxnDetails.push(...mergeStats.newTxnDetails);
       combined.skippedDuplicateTxn += mergeStats.skippedDuplicateTxn;
       succeeded.push(file.name);
       addImportedFileFingerprint(fileFingerprint(file));
@@ -5224,6 +5257,12 @@ document.getElementById("updateBtn").onclick = async ()=>{
 
   pendingFiles = [];
   document.getElementById("importFile").value = "";
+
+  // إظهار نافذة تعرض تفاصيل كل معاملة مالية جديدة اكتُشفت في هذا الاستيراد،
+  // مرة واحدة فقط لكل استيراد — وتطير كحمامة عند الضغط على "تم"
+  if(combined.newTxnDetails.length){
+    showNewTxnModal(combined.newTxnDetails);
+  }
 };
 
 buildChips();
@@ -5239,6 +5278,38 @@ function saveCurrentSection(section){
 }
 
 // ===== نافذة كلمة السر المخصصة (تستبدل prompt) =====
+// عرض نافذة تلخّص كل معاملة مالية جديدة اكتُشفت في آخر استيراد، مرة واحدة
+// فقط — تُغلَق وتطير كحمامة 🕊️ عند الضغط على "تم".
+function showNewTxnModal(details){
+  const modal = document.getElementById("newTxnModal");
+  const box = document.getElementById("newTxnModalBox");
+  const countEl = document.getElementById("newTxnModalCount");
+  const listEl = document.getElementById("newTxnModalList");
+  const okBtn = document.getElementById("newTxnModalOk");
+
+  countEl.textContent = `${details.length} عملية جديدة اكتُشفت في هذا الاستيراد`;
+  listEl.innerHTML = details.map(d => `
+    <div class="new-txn-item">
+      <span class="ntx-amt">${d.amount !== null ? d.amount.toLocaleString('ar',{minimumFractionDigits:2,maximumFractionDigits:2}) + ' دينار' : ''}</span>
+      <span class="ntx-case">${escapeAttr(d.caseNo)}</span>
+      <span class="ntx-def">${escapeAttr(d.defendant)}</span>
+      ${d.date ? `<span class="ntx-date">📅 ${escapeAttr(d.date)}</span>` : ""}
+    </div>
+  `).join("");
+
+  box.classList.remove("flying");
+  modal.style.display = "flex";
+
+  okBtn.onclick = () => {
+    box.classList.add("flying");
+    setTimeout(()=>{
+      modal.style.display = "none";
+      box.classList.remove("flying");
+    }, 700);
+  };
+}
+
+
 function askInput(title, opts){
   opts = opts || {};
   // كلمة السر تستخدم نافذتها المخصَّصة، وأي نص عادي يستخدم نافذة مستقلة تماماً
