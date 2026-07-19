@@ -640,15 +640,16 @@
   .lw-card-row{display:flex;flex-direction:row;align-items:center;gap:10px;direction:rtl;}
   .lw-card-name{flex:1;font-weight:700;font-size:13px;color:var(--ink);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .lw-action-meta{display:none;}
-  .lw-steps-grid{display:flex;flex-direction:row;flex-wrap:wrap;gap:6px;align-items:center;flex:0 0 auto;}
+  .lw-steps-grid{
+    display:grid;grid-template-columns:repeat(7, 66px);gap:5px;align-items:center;flex:none;
+  }
   .lw-step-btn{
     display:flex;align-items:center;justify-content:center;gap:3px;
-    font-family:'Tajawal',sans-serif;font-size:10.5px;font-weight:700;
+    font-family:'Tajawal',sans-serif;font-size:10px;font-weight:700;
     background:var(--paper);color:var(--slate);border:1.5px solid var(--line);
-    border-radius:999px;padding:6px 12px;cursor:pointer;text-align:center;
-    line-height:1;white-space:nowrap;
+    border-radius:999px;padding:6px 6px;cursor:pointer;text-align:center;
+    line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;
     transition:background .15s ease, color .15s ease, border-color .15s ease, transform .1s ease;
-    flex:none;
   }
   .lw-step-btn:hover{border-color:var(--slate);background:var(--slate-soft);transform:translateY(-1px);}
   .lw-step-btn.lw-step-done{
@@ -657,6 +658,11 @@
   }
   .lw-step-btn.lw-step-done::before{content:"✓";font-weight:900;}
   .lw-step-btn.lw-step-done:hover{filter:brightness(1.08);transform:translateY(-1px);}
+  .lw-step-btn.lw-step-disabled{
+    background:transparent;color:var(--line);border-color:var(--line);
+    cursor:not-allowed;opacity:0.45;box-shadow:none;
+  }
+  .lw-step-btn.lw-step-disabled:hover{background:transparent;border-color:var(--line);transform:none;}
   .lw-step-date{display:none;}
 
   /* نسخة غير تفاعلية من أزرار الخطوات لصفحة المتابعات (قراءة فقط) */
@@ -1250,6 +1256,9 @@
         </select>
         <select id="lwFilterYear" class="cases-select">
           <option value="">كل السنوات</option>
+        </select>
+        <select id="lwFilterSector" class="cases-select">
+          <option value="">كل أنواع المالية</option>
         </select>
       </div>
       <div id="lwActionsBox" class="fu-tracked-list"></div>
@@ -3799,12 +3808,21 @@ function renderLwActionsBox(){
   yearSelect.innerHTML = `<option value="">كل السنوات</option>` + years.map(y=>`<option value="${y}">${y}</option>`).join("");
   yearSelect.value = years.includes(parseInt(currentYearVal,10)) ? currentYearVal : "";
 
-  // تطبيق الفلترة (وكيل + سنة معاً) قبل أي ترتيب أو عرض
+  // تعبئة قائمة أنواع المالية (نوع العمل) ديناميكياً من القيم الموجودة فعلياً
+  const sectorSelect = document.getElementById("lwFilterSector");
+  const currentSectorVal = sectorSelect.value;
+  const sectors = [...new Set(items.map(i=>i.sector).filter(s=>s))].sort((a,b)=>a.localeCompare(b,'ar'));
+  sectorSelect.innerHTML = `<option value="">كل أنواع المالية</option>` + sectors.map(s=>`<option value="${escapeAttr(s)}">${escapeAttr(s)}</option>`).join("");
+  sectorSelect.value = sectors.includes(currentSectorVal) ? currentSectorVal : "";
+
+  // تطبيق الفلترة (وكيل + سنة + نوع المالية معاً) قبل أي ترتيب أو عرض
   const clientFilter = document.getElementById("lwFilterClient").value;
   const yearFilter = yearSelect.value;
+  const sectorFilter = sectorSelect.value;
   const filteredItems = items.filter(i=>{
     if(clientFilter && i.clientCode !== clientFilter) return false;
     if(yearFilter && String(i.year) !== yearFilter) return false;
+    if(sectorFilter && i.sector !== sectorFilter) return false;
     return true;
   });
 
@@ -3839,19 +3857,24 @@ function renderLwActionsBox(){
     let applicableStepIds = getApplicableSteps(item.sector);
     if(hasCollected) applicableStepIds = applicableStepIds.filter(id => id !== "step_hasmRatib" && id !== "step_kitabHasm");
     const sectorBadge = item.sector ? `<button class="lw-sector-badge" data-key="${escapeAttr(item.key)}" data-resector="1" title="اضغط لتغيير نوع العمل">${escapeAttr(item.sector)} ✎</button>` : "";
-    const stepsHtml = LW_STEPS.filter(s => applicableStepIds.includes(s.id)).map(s=>{
+    const stepsHtml = LW_STEPS.map(s=>{
       const done = item.steps[s.id] && item.steps[s.id].done;
       const stepDate = done ? new Date(item.steps[s.id].date) : null;
       const stepDateStr = stepDate
         ? `${WEEKDAY_NAMES_AR[stepDate.getDay()]} ${stepDate.toLocaleDateString('ar-EG')} ${stepDate.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})}`
         : "";
       const shortLabel = s.shortLabel;
+      // غير متاحة إما لأن القطاع لا يشملها، أو لأنها استُثنيت شرطياً (حسم
+      // راتب/لاحق عند وجود تحصيل) — تبقى ظاهرة في مكانها الثابت لكن باهتة
+      // وغير فعّالة، بدل الاختفاء الذي يكسر محاذاة الأعمدة بين البطاقات.
+      const isApplicable = applicableStepIds.includes(s.id);
       return `<button
-          class="lw-step-btn ${done ? 'lw-step-done' : ''}"
+          class="lw-step-btn ${done ? 'lw-step-done' : ''} ${isApplicable ? '' : 'lw-step-disabled'}"
           data-key="${escapeAttr(item.key)}"
           data-step="${escapeAttr(s.id)}"
           data-done="${done ? '1' : '0'}"
-          title="${s.label}${done ? '\n✓ ' + stepDateStr : ''}"
+          ${isApplicable ? '' : 'disabled'}
+          title="${isApplicable ? s.label + (done ? '\n✓ ' + stepDateStr : '') : 'غير متاح لهذه القضية'}"
         >${shortLabel}</button>`;
     }).join("");
     // حساب المبالغ — المصدر الأساسي هو masterCache لأن RAW_DATA لا يحتوي على هذه الحقول
@@ -6845,6 +6868,7 @@ document.getElementById("lwSearchInput").addEventListener("input", (e)=>{
 
 document.getElementById("lwFilterClient").addEventListener("change", renderLwActionsBox);
 document.getElementById("lwFilterYear").addEventListener("change", renderLwActionsBox);
+document.getElementById("lwFilterSector").addEventListener("change", renderLwActionsBox);
 document.getElementById("lwPrintBtn").onclick = ()=>{
   const items = [];
   Object.entries(masterCache).forEach(([key, rec])=>{
