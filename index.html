@@ -549,6 +549,15 @@
   .cases-row{cursor:pointer;transition:background .1s;}
   .cases-row:hover td{background:#f0f4ff !important;}
   .cases-row-selected td{background:#e0e7ff !important;border-right:3px solid #6b3fa0;}
+  .cases-row-client-j td{background:#eff6ff;}
+  .cases-row-client-j:hover td{background:#dbeafe !important;}
+  .cases-row-client-h td{background:#f5f3ff;}
+  .cases-row-client-h:hover td{background:#ede9fe !important;}
+  /* نفس التلوين لعناصر div (نتائج البحث وبطاقات المتابعة في صفحة المحامي) */
+  .fu-result-row.cases-row-client-j, .lw-action-card.cases-row-client-j{background:#eff6ff;}
+  .fu-result-row.cases-row-client-h, .lw-action-card.cases-row-client-h{background:#f5f3ff;}
+  .fu-result-row.cases-row-client-j:hover{background:#dbeafe;}
+  .fu-result-row.cases-row-client-h:hover{background:#ede9fe;}
   .cases-action-col{text-align:center;width:40px;}
   .cases-remove-btn{
     background:none;border:1px solid #fca5a5;color:#dc2626;border-radius:6px;
@@ -3616,9 +3625,12 @@ function renderLwSearchPage(){
     const tracked = getLawyerAction(key);
     const caseNoArea = tracked
       ? `<span class="lw-tracked-only-text">✓ متابَعة بالفعل</span>`
-      : `<button class="lw-case-number" data-key="${escapeAttr(key)}" data-tracked="0">${caseNoLabel}${getClientBadgeHtml(r)}</button>`;
+      : `<button class="lw-case-number" data-key="${escapeAttr(key)}" data-tracked="0">${caseNoLabel}</button>`;
+    const clientName = getPlaintiffForRow(r);
+    const clientRowClass = clientName.includes("جابر") ? " cases-row-client-j"
+                           : clientName.includes("حنين") ? " cases-row-client-h" : "";
     return `
-      <div class="fu-result-row" data-key="${escapeAttr(key)}">
+      <div class="fu-result-row${clientRowClass}" data-key="${escapeAttr(key)}">
         <div class="fu-result-info">
           <div class="fu-result-case">
           ${caseNoArea}
@@ -3889,7 +3901,10 @@ function renderLwActionsBox(){
     return;
   }
   listEl.innerHTML = items.map(item=>{
-    const label = item.row ? `${escapeAttr(shortCaseNo(item.row["رقم الدعوى"]))}${getClientBadgeHtml(item.row)} · ${escapeAttr(getDefendantForRow(item.row))}` : item.key;
+    const label = item.row ? `${escapeAttr(shortCaseNo(item.row["رقم الدعوى"]))} · ${escapeAttr(getDefendantForRow(item.row))}` : item.key;
+    const clientNameLw = item.row ? getPlaintiffForRow(item.row) : "";
+    const clientRowClassLw = clientNameLw.includes("جابر") ? " cases-row-client-j"
+                             : clientNameLw.includes("حنين") ? " cases-row-client-h" : "";
     // إذا كان يوجد مبلغ محصّل فعلاً لهذه القضية، "حسم راتب" لم يعد خطوة
     // منطقية للعرض (الكتاب أُرسل فعلاً وأثمر تحصيلاً) — يُستبعَد هنا أيضاً،
     // تماماً كما يُستبعَد عند اختيار الإجراء أول مرة.
@@ -3997,7 +4012,7 @@ function renderLwActionsBox(){
     }
 
     return `
-      <div class="fu-tracked-card lw-action-card" data-key="${escapeAttr(item.key)}">
+      <div class="fu-tracked-card lw-action-card${clientRowClassLw}" data-key="${escapeAttr(item.key)}">
         <div class="lw-card-row">
           <div class="lw-card-name">${label}${sectorBadge}${amtsHtml}</div>
           <div class="lw-steps-grid">${stepsHtml}</div>
@@ -5950,7 +5965,11 @@ function renderCasesPage(){
     // قضية منتهية مالياً: المطلوب = المحصّل (فالمتبقي صفر) والمتاح صفر أيضاً —
     // لا يوجد أي مبلغ معلّق أو متاح لهذه القضية بعد الآن.
     const isFinished = req !== null && rem === 0 && (avail === null || avail === 0);
-    const rowBgClass = "";
+    // تمييز الموكل بتلوين خلفية الصف كاملاً بدل شارة J/H النصية — جابر أزرق
+    // فاتح جداً، حنين بنفسجي فاتح جداً، بلا موكل معروف = بلا تلوين إطلاقاً.
+    const clientName = getPlaintiffForRow(r);
+    const rowBgClass = clientName.includes("جابر") ? " cases-row-client-j"
+                       : clientName.includes("حنين") ? " cases-row-client-h" : "";
     const finishedBadge = isFinished ? `<span class="cases-finished-badge" title="المطلوب = المحصّل، ولا يوجد متبقٍ أو متاح">✅ القضية انتهت</span>` : "";
 
     // السماح بتعديل المتبقي يدوياً فقط عندما يكون المتبقي الطبيعي المحسوب (قبل أي
@@ -5985,7 +6004,7 @@ function renderCasesPage(){
     const dblClickClass = isDblClickEligible ? " cases-row-dblclick" : "";
 
     return `<tr class="cases-row${selected?' cases-row-selected':''}${rowBgClass}${dblClickClass}" data-key="${escapeAttr(key)}">
-      <td class="cases-cell-no" data-col="رقم القضية">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${getClientBadgeHtml(r)}${finishedBadge}</td>
+      <td class="cases-cell-no" data-col="رقم القضية">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${finishedBadge}</td>
       <td data-col="الطرف">${escapeAttr(def)}</td>
       <td data-col="المحكمة">${escapeAttr(displayCourtName(r["المحكمة"]))}</td>
       <td data-col="الحالة"><span class="cases-badge ${statusClass}">${escapeAttr(status)}</span></td>
