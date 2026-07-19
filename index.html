@@ -84,6 +84,40 @@
     font-family:'Amiri',serif;font-weight:700;font-size:28px;margin:0;line-height:1.15;
   }
   .subtitle{color:var(--ink-soft);font-size:13px;margin-top:4px;}
+  /* ===== هوية لونية حديثة محصورة بصفحة الرديات فقط — نيلي عصري بدل
+     الذهبي/الورقي الرسمي، دون التأثير على أي صفحة أخرى في النظام ===== */
+  #mainWrap{
+    --paper:#f6f6fb;
+    --paper-raised:#ffffff;
+    --ink:#1c1f2e;
+    --ink-soft:#6b7280;
+    --line:#e5e6f0;
+    --brass:#4338ca;
+    --brass-soft:#e5e3fc;
+    --green:#15803d;
+    --green-soft:#dcfce7;
+    --rust:#dc2626;
+    --rust-soft:#fee2e2;
+    --slate:#64748b;
+    --slate-soft:#f1f2f7;
+    --shadow: 0 1px 3px rgba(28,31,46,.06), 0 10px 28px rgba(28,31,46,.08);
+    background:var(--paper);
+    border-radius:20px;
+    padding:24px 20px 40px;
+  }
+  /* أشكال أكثر حداثة (زوايا أوسع، ظلال أنعم) — محصورة بنفس الصفحة */
+  #mainWrap .seal{border-style:solid;border-width:2.5px;box-shadow:0 2px 8px rgba(67,56,202,.18);}
+  #mainWrap .chip{border-radius:16px;transition:transform .15s ease, box-shadow .15s ease;}
+  #mainWrap .chip:hover{box-shadow:0 6px 18px rgba(28,31,46,.1);}
+  #mainWrap .chip.active{box-shadow:0 0 0 2px var(--brass) inset, 0 6px 18px rgba(67,56,202,.15);}
+  #mainWrap .btn{border-radius:12px;font-weight:600;}
+  #mainWrap .btn:not(.secondary){background:var(--brass);box-shadow:0 4px 12px rgba(67,56,202,.25);}
+  #mainWrap .table-card{border-radius:20px;box-shadow:var(--shadow);}
+  #mainWrap thead th{background:var(--ink);}
+  #mainWrap tbody tr:hover{background:var(--brass-soft);}
+  #mainWrap .status-badge{border-radius:999px;font-weight:600;}
+  #mainWrap input[type=text], #mainWrap select{border-radius:12px !important;}
+
   .file-badge{
     font-size:12px;color:var(--ink-soft);background:var(--paper-raised);
     border:1px solid var(--line);border-radius:20px;padding:6px 14px;
@@ -380,8 +414,6 @@
     transition:transform .12s ease, box-shadow .12s ease;
   }
   .analysis-card:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.08);}
-  .analysis-card-finished{opacity:0.55;}
-  .analysis-card-finished:hover{opacity:0.85;}
   .analysis-card-main{display:flex;flex-direction:column;gap:3px;min-width:0;}
   .analysis-card-party{font-weight:700;font-size:14px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .analysis-card-meta{display:flex;gap:8px;align-items:center;font-size:11.5px;color:var(--ink-soft);flex-wrap:wrap;}
@@ -920,6 +952,10 @@
     display:flex;align-items:center;gap:6px;
   }
   .btn.secondary{background:var(--paper-raised);color:var(--ink);border:1px solid var(--line);}
+  .btn:disabled{
+    background:#f1f0ec !important;color:#a8a49a !important;border-color:#ddd9cd !important;
+    cursor:not-allowed;opacity:0.85;
+  }
   .btn:hover{opacity:.9;}
   .result-count{font-size:12.5px;color:var(--ink-soft);margin:0 0 10px 2px;}
   .import-error{color:var(--rust);font-weight:700;background:var(--rust-soft);padding:8px 12px;border-radius:8px;}
@@ -1435,10 +1471,6 @@
         <input type="text" id="analysisSearch" class="fu-search-input" placeholder="ابحث باسم الطرف، رقم القضية، أو اسم المحكمة...">
         <span id="analysisCount" class="cases-count">0 قضية</span>
       </div>
-      <label class="closure-checkbox-label" style="margin-top:8px;">
-        <input type="checkbox" id="analysisHideFinished">
-        🚫 إخفاء القضايا المنتهية مالياً (<span id="analysisFinishedCount">0</span>)
-      </label>
       <div class="analysis-hint">💡 يُتاح إنشاء شهر تحليل جديد فقط من يوم 25 من كل شهر فصاعداً، حتى تصل كل المبالغ من جميع الجهات أولاً. يمكنك تحديث الشهر الأخير في أي وقت عبر 🔄.</div>
       <div class="analysis-months-bar" id="analysisMonthsBar"></div>
       <div class="analysis-cards" id="analysisCards"></div>
@@ -3912,11 +3944,14 @@ function renderLwActionsBox(){
 
     // زر الترحيل الصريح إلى صفحة المتابعات — بعد الضغط، القضية تختفي فوراً
     // من هذا الصندوق ولا تعود إلا عبر "إزالتها" من صفحة المتابعات نفسها.
-    // لا يُسمح بالترحيل إلا بعد إنجاز خطوتين على الأقل — ترحيل قضية بالكاد
-    // بدأت متابعتها لا يخدم الهدف من صفحة المتابعات المنفصلة.
+    // لا يُسمح بالترحيل إلا بعد إنجاز خطوتين على الأقل، **و** وجود مبلغ
+    // محصّل فعلاً — الهدف إبقاء أي قضية بلا تحصيل ظاهرة دائماً أمام العين
+    // في هذا الصندوق، بلا إمكانية ترحيلها أو التخلّص منها قبل أن تُثمر.
     const completedStepsCount = Object.values(item.steps || {}).filter(s => s && s.done).length;
-    const canTransfer = completedStepsCount >= 2;
-    const transferHtml = `<button class="lw-transfer-btn" data-key="${escapeAttr(item.key)}" data-can-transfer="${canTransfer?'1':'0'}" title="${canTransfer ? 'ترحيل هذه القضية إلى صفحة المتابعات' : 'يلزم إنجاز خطوتين على الأقل قبل الترحيل (حالياً: '+completedStepsCount+')'}" ${canTransfer ? '' : 'disabled'}>🚚 ترحيل</button>`;
+    const canTransfer = completedStepsCount >= 2 && hasCollected;
+    const transferBlockReason = !hasCollected ? 'لا يمكن الترحيل قبل وجود مبلغ محصّل فعلاً لهذه القضية'
+      : 'يلزم إنجاز خطوتين على الأقل قبل الترحيل (حالياً: '+completedStepsCount+')';
+    const transferHtml = `<button class="lw-transfer-btn" data-key="${escapeAttr(item.key)}" data-can-transfer="${canTransfer?'1':'0'}" title="${canTransfer ? 'ترحيل هذه القضية إلى صفحة المتابعات' : transferBlockReason}" ${canTransfer ? '' : 'disabled'}>🚚 ترحيل</button>`;
 
     // طرف ثانٍ (مشتكى عليه إضافي بنفس القضية) — يُضاف يدوياً، وله خطوتا
     // متابعة خاصتان به فقط (كتاب حسم لاحق + حجز مكافأة)، منفصلتان عن خطوات
@@ -6210,17 +6245,6 @@ async function freezeNewMonth(monthId){
   }
 }
 
-// قضية "منتهية مالياً": المطلوب = المحصّل (فالمتبقي صفر) والمتاح صفر أيضاً —
-// لا يوجد أي مبلغ معلّق أو متاح لهذه القضية بعد الآن، فلن تصلها أي رديّة
-// مستقبلية. نفس التعريف المستخدَم بالضبط في صفحة القضايا (لا نكرّر منطقاً مختلفاً).
-function isCaseFinishedFinancially(r){
-  const fin = getFinancialForRow(r);
-  const req = fin.requested;
-  const rem = fin.remaining;
-  const avail = getRowAvail(r);
-  return req !== null && rem === 0 && (avail === null || avail === 0);
-}
-
 // إنشاء الشهر الأول تلقائياً عند أول فتح للصفحة — لا يتكرر بعد ذلك أبداً
 // لا يُسمح بإنشاء شهر تحليل جديد إلا من يوم 25 من الشهر فصاعداً — لأن مبالغ
 // الأشهر السابقة (رواتب جهات مختلفة) تصل بأوقات متفرّقة، والإنشاء المبكر
@@ -6274,20 +6298,20 @@ async function openAnalysisPage(){
   await ensureFirstMonth();
   analysisAllRows = getDedupedRAW();
   document.getElementById("analysisSearch").value = "";
-  document.getElementById("analysisHideFinished").checked = localStorage.getItem('analysis_hide_finished') === '1';
   analysisCurrentPage = 0;
   applyAnalysisFilter();
 }
 
 function applyAnalysisFilter(){
   const q = document.getElementById("analysisSearch").value.trim();
-  const hideFinished = document.getElementById("analysisHideFinished").checked;
-
-  const finishedCount = analysisAllRows.filter(isCaseFinishedFinancially).length;
-  document.getElementById("analysisFinishedCount").textContent = finishedCount;
 
   analysisFilteredRows = analysisAllRows.filter(r=>{
-    if(hideFinished && isCaseFinishedFinancially(r)) return false;
+    const key = caseKey(r);
+    // استبعاد دائم وتلقائي (بلا أي زر أو خيار) — تسوية خارج المحكمة أو
+    // بحاجة إلى فصل، بنفس آلية صفحة "متابعة مع المحامي" تماماً. هذه القضايا
+    // لن تصلها أي رديّة جديدة مستقبلاً، فلا داعي لظهورها في هذا التحليل إطلاقاً.
+    if(isCaseRemoved(key)) return false;
+    if(isCaseNeedsClosure(key)) return false;
     if(q.length >= 2){
       return (r["رقم الدعوى"]||"").includes(q) ||
              (r["المحكمة"]||"").includes(q) ||
@@ -6375,7 +6399,6 @@ function renderAnalysisPage(){
 
   cardsEl.innerHTML = pageRows.map(r=>{
     const def = getDefendantForRow(r);
-    const finished = isCaseFinishedFinancially(r);
     const monthsHtml = months.map((m,i)=>{
       const val = getMonthColumnValue(r, i, months);
       const cls = val > 0 ? "positive" : "zero";
@@ -6384,10 +6407,9 @@ function renderAnalysisPage(){
         <span class="analysis-card-month-name">${escapeAttr(m.label)}</span>
       </div>`;
     }).join("");
-    const finishedBadge = finished ? `<span class="cases-finished-badge" title="المطلوب = المحصّل، ولا يوجد متبقٍ أو متاح">✅ منتهية</span>` : "";
-    return `<div class="analysis-card${finished ? " analysis-card-finished" : ""}" style="grid-template-columns:${gridCols};">
+    return `<div class="analysis-card" style="grid-template-columns:${gridCols};">
       <div class="analysis-card-main">
-        <div class="analysis-card-party">${escapeAttr(def)} ${finishedBadge}</div>
+        <div class="analysis-card-party">${escapeAttr(def)}</div>
         <div class="analysis-card-meta">
           <span class="analysis-card-caseno">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}</span>
           <span>${escapeAttr(displayCourtName(r["المحكمة"]))}</span>
@@ -6490,10 +6512,6 @@ document.getElementById("analysisPrintBtn").onclick = ()=>{ printAnalysis(); };
 document.getElementById("analysisSearch").addEventListener("input", ()=>{
   clearTimeout(analysisSearchTimer);
   analysisSearchTimer = setTimeout(()=> applyAnalysisFilter(), 250);
-});
-document.getElementById("analysisHideFinished").addEventListener("change", (e)=>{
-  localStorage.setItem('analysis_hide_finished', e.target.checked ? '1' : '0');
-  applyAnalysisFilter();
 });
 
 document.getElementById("casesPageClose").onclick = ()=>{ goHome(); };
