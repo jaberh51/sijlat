@@ -3117,8 +3117,8 @@ function renderYearList(rows){
     const note = getNote(r);
     row.innerHTML = `
       <div class="year-list-head">
-        <span class="year-list-num">${finPreviewHtml(fin)}${followupPillHtml(r)}${note ? '<span class="note-flag" title="توجد ملاحظة">📝</span>' : ''}${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${getClientBadgeHtml(r)}</span>
-        <span class="year-list-def">${defendantNameHtml(r)}</span>
+        <span class="year-list-num">${finPreviewHtml(fin)}${followupPillHtml(r)}${note ? '<span class="note-flag" title="توجد ملاحظة">📝</span>' : ''}${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}</span>
+        <span class="year-list-def">${defendantNameHtml(r)}${getClientBadgeHtml(r)}</span>
       </div>
       <div class="year-list-details">
         <div><strong>المحكمة:</strong> ${escapeAttr(r["المحكمة"] || (masterCache[caseKey(r)]||{})["المحكمة"] || "—")}</div>
@@ -3604,14 +3604,14 @@ function renderLwSearchPage(){
     const tracked = getLawyerAction(key);
     const caseNoArea = tracked
       ? `<span class="lw-tracked-only-text">✓ متابَعة بالفعل</span>`
-      : `<button class="lw-case-number" data-key="${escapeAttr(key)}" data-tracked="0">${caseNoLabel}${getClientBadgeHtml(r)}</button>`;
+      : `<button class="lw-case-number" data-key="${escapeAttr(key)}" data-tracked="0">${caseNoLabel}</button>`;
     return `
       <div class="fu-result-row" data-key="${escapeAttr(key)}">
         <div class="fu-result-info">
           <div class="fu-result-case">
           ${caseNoArea}
           </div>
-          <div class="fu-result-meta">${escapeAttr(def)}</div>
+          <div class="fu-result-meta">${escapeAttr(def)}${getClientBadgeHtml(r)}</div>
           <div class="lw-action-picker" style="display:none;"></div>
         </div>
       </div>
@@ -3877,7 +3877,7 @@ function renderLwActionsBox(){
     return;
   }
   listEl.innerHTML = items.map(item=>{
-    const label = item.row ? `${escapeAttr(shortCaseNo(item.row["رقم الدعوى"]))}${getClientBadgeHtml(item.row)} · ${escapeAttr(getDefendantForRow(item.row))}` : item.key;
+    const label = item.row ? `${escapeAttr(shortCaseNo(item.row["رقم الدعوى"]))} · ${escapeAttr(getDefendantForRow(item.row))}${getClientBadgeHtml(item.row)}` : item.key;
     // إذا كان يوجد مبلغ محصّل فعلاً لهذه القضية، "حسم راتب" لم يعد خطوة
     // منطقية للعرض (الكتاب أُرسل فعلاً وأثمر تحصيلاً) — يُستبعَد هنا أيضاً،
     // تماماً كما يُستبعَد عند اختيار الإجراء أول مرة.
@@ -4251,7 +4251,7 @@ function renderFollowupList(){
       <div class="fu-tracked-card lw-action-card" data-key="${escapeAttr(key)}">
         <div class="lw-card-row">
           <span class="fu-dot ${dotClass}" title="${dotTitle}"></span>
-          <div class="lw-card-name">${escapeAttr(shortCaseNo(row["رقم الدعوى"]))}${getClientBadgeHtml(row)} · ${escapeAttr(def)}${sectorBadge}</div>
+          <div class="lw-card-name">${escapeAttr(shortCaseNo(row["رقم الدعوى"]))} · ${escapeAttr(def)}${getClientBadgeHtml(row)}${sectorBadge}</div>
         </div>
         <div class="fu-steps-chips-row">${stepsHtml}</div>
       </div>
@@ -4415,8 +4415,8 @@ function renderFinSummary(){
       return `
         <div class="fin-detail-row">
           <div class="fin-detail-main">
-            <span class="case-no">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${getClientBadgeHtml(r)}</span>
-            <span class="fin-detail-def">${escapeAttr(getDefendantForRow(r))}</span>
+            <span class="case-no">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}</span>
+            <span class="fin-detail-def">${escapeAttr(getDefendantForRow(r))}${getClientBadgeHtml(r)}</span>
             <span class="fin-detail-amt">${rowAmt.toLocaleString('ar',{minimumFractionDigits:2, maximumFractionDigits:2})} دينار</span>
           </div>
           ${subParts.length ? `<div class="fin-detail-sub">${subParts.join(" — ")}</div>` : ""}
@@ -5670,7 +5670,7 @@ function renderClosureNeededBox(){
     return `
       <div class="closure-card" data-key="${escapeAttr(key)}">
         <div>
-          <div class="closure-card-info">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${getClientBadgeHtml(r)} · ${escapeAttr(def)} ${removeBtnHtml}</div>
+          <div class="closure-card-info">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))} · ${escapeAttr(def)}${getClientBadgeHtml(r)} ${removeBtnHtml}</div>
           <div class="closure-card-sub">${escapeAttr(displayCourtName(r["المحكمة"]))} — ${subText}</div>
         </div>
         <label class="closure-checkbox-label">
@@ -5973,8 +5973,8 @@ function renderCasesPage(){
     const dblClickClass = isDblClickEligible ? " cases-row-dblclick" : "";
 
     return `<tr class="cases-row${selected?' cases-row-selected':''}${rowBgClass}${dblClickClass}" data-key="${escapeAttr(key)}">
-      <td class="cases-cell-no" data-col="رقم القضية">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${getClientBadgeHtml(r)}${finishedBadge}</td>
-      <td data-col="الطرف">${escapeAttr(def)}</td>
+      <td class="cases-cell-no" data-col="رقم القضية">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${finishedBadge}</td>
+      <td data-col="الطرف">${escapeAttr(def)}${getClientBadgeHtml(r)}</td>
       <td data-col="المحكمة">${escapeAttr(displayCourtName(r["المحكمة"]))}</td>
       <td data-col="الحالة"><span class="cases-badge ${statusClass}">${escapeAttr(status)}</span></td>
       <td class="amt-col amt-req" data-col="📋 المطلوب">${fmt(req)}</td>
