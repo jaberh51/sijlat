@@ -175,7 +175,11 @@
   }
   .fu-result-row:hover{background:#faf9f5;}
   .fu-result-info{flex:1;min-width:200px;}
-  .fu-result-case{font-weight:700;color:var(--ink);}
+  .fu-result-case{font-weight:700;color:var(--ink);display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .lw-tracked-badge{
+    display:inline-flex;align-items:center;font-size:10.5px;font-weight:700;
+    background:var(--green-soft);color:var(--green);border-radius:6px;padding:2px 8px;
+  }
   .fu-result-meta{font-size:12px;color:var(--ink-soft);margin-top:2px;}
   .fu-result-row .btn{padding:7px 14px;font-size:12.5px;flex:none;}
   .fu-result-added{color:var(--green);font-weight:700;font-size:12.5px;}
@@ -3521,8 +3525,10 @@ function runLwSearch(q){
     // لقائمة "بحاجة إلى فصل" — هذه لا يجب أن تظهر في أي بحث أو متابعة بعد الآن.
     if(isCaseRemoved(key)) return false;
     if(isCaseNeedsClosure(key)) return false;
-    return r["حالة الدعوى"] !== "فصل" &&
-      !getLawyerAction(key) && (
+    // ملاحظة: لا نستبعد القضايا المتابَعة بالفعل (لها إجراء محامي مسجَّل) —
+    // بل نُظهرها في النتائج مع شارة "✓ متابَعة بالفعل" بدل اختفائها بصمت،
+    // حتى لا يظن المستخدم أن البحث لم يجد شيئاً رغم وجود القضية فعلياً.
+    return r["حالة الدعوى"] !== "فصل" && (
         caseNoMatches(r) ||
         (r["المحكمة"]||"").includes(q) ||
         (r["وصف الدعوى"]||"").includes(q) ||
@@ -3555,11 +3561,14 @@ function renderLwSearchPage(){
     const key = caseKey(r);
     const def = getDefendantForRow(r);
     const caseNoLabel = shortCaseNo(r["رقم الدعوى"]);
+    const tracked = getLawyerAction(key);
+    const trackedBadge = tracked ? `<span class="lw-tracked-badge" title="هذه القضية متابَعة بالفعل في صندوق المتابعات">✓ متابَعة بالفعل</span>` : "";
     return `
       <div class="fu-result-row" data-key="${escapeAttr(key)}">
         <div class="fu-result-info">
           <div class="fu-result-case">
-          <button class="lw-case-number" data-key="${escapeAttr(key)}">${caseNoLabel}${getClientBadgeHtml(r)}</button>
+          <button class="lw-case-number" data-key="${escapeAttr(key)}" data-tracked="${tracked ? '1':'0'}">${caseNoLabel}${getClientBadgeHtml(r)}</button>
+          ${trackedBadge}
           </div>
           <div class="fu-result-meta">${escapeAttr(def)}</div>
           <div class="lw-action-picker" style="display:none;"></div>
@@ -3583,6 +3592,10 @@ function renderLwSearchPage(){
     const numBtn = rowEl.querySelector("button.lw-case-number");
     if(numBtn){
       numBtn.onclick = ()=>{
+        if(numBtn.getAttribute("data-tracked") === "1"){
+          showToast("ℹ️ هذه القضية متابَعة بالفعل — ستجدها في صندوق المتابعات بالأسفل", "ok");
+          return;
+        }
         const picker = rowEl.querySelector(".lw-action-picker");
         const isOpen = picker.style.display !== "none";
         // إغلاق كل القوائم المفتوحة الأخرى
@@ -3708,7 +3721,7 @@ function getApplicableSteps(sector){
 function getApplicableActions(sector, hasCollected){
   const steps = getApplicableSteps(sector);
   let actions = LAWYER_ACTIONS.filter(a => steps.includes(LW_ACTION_STEP_MAP[a]));
-  if(hasCollected) actions = actions.filter(a => a !== "حسم راتب");
+  if(hasCollected) actions = actions.filter(a => a !== "حسم راتب" && a !== "كتاب حسم لاحق");
   return actions;
 }
 // ===== تشفير كلمات المرور (Web Crypto API) =====
@@ -3828,7 +3841,7 @@ function renderLwActionsBox(){
     // تماماً كما يُستبعَد عند اختيار الإجراء أول مرة.
     const hasCollected = item.row ? (getFinancialForRow(item.row).total > 0) : false;
     let applicableStepIds = getApplicableSteps(item.sector);
-    if(hasCollected) applicableStepIds = applicableStepIds.filter(id => id !== "step_hasmRatib");
+    if(hasCollected) applicableStepIds = applicableStepIds.filter(id => id !== "step_hasmRatib" && id !== "step_kitabHasm");
     const sectorBadge = item.sector ? `<button class="lw-sector-badge" data-key="${escapeAttr(item.key)}" data-resector="1" title="اضغط لتغيير نوع العمل">${escapeAttr(item.sector)} ✎</button>` : "";
     const stepsHtml = LW_STEPS.filter(s => applicableStepIds.includes(s.id)).map(s=>{
       const done = item.steps[s.id] && item.steps[s.id].done;
@@ -3881,10 +3894,12 @@ function renderLwActionsBox(){
     if(p2 && p2.name){
       const s1 = p2.steps && p2.steps.step_kitabHasm && p2.steps.step_kitabHasm.done;
       const s2 = p2.steps && p2.steps.step_hajzMukafa && p2.steps.step_hajzMukafa.done;
+      const p2KitabHasmBtn = hasCollected ? "" :
+        `<button class="lw-step-btn ${s1?'lw-step-done':''}" data-key="${escapeAttr(item.key)}" data-p2step="step_kitabHasm" data-done="${s1?'1':'0'}" title="كتاب حسم لاحق">${LW_STEP_SHORT.step_kitabHasm}</button>`;
       party2ExtraRow = `
         <div class="lw-party2-row" data-key="${escapeAttr(item.key)}">
           <span class="lw-party2-name">👤 ${escapeAttr(p2.name)}</span>
-          <button class="lw-step-btn ${s1?'lw-step-done':''}" data-key="${escapeAttr(item.key)}" data-p2step="step_kitabHasm" data-done="${s1?'1':'0'}" title="كتاب حسم لاحق">${LW_STEP_SHORT.step_kitabHasm}</button>
+          ${p2KitabHasmBtn}
           <button class="lw-step-btn ${s2?'lw-step-done':''}" data-key="${escapeAttr(item.key)}" data-p2step="step_hajzMukafa" data-done="${s2?'1':'0'}" title="حجز مكافأة">${LW_STEP_SHORT.step_hajzMukafa}</button>
           <button class="lw-party2-remove" data-key="${escapeAttr(item.key)}" title="حذف الطرف الثاني">✕</button>
         </div>`;
