@@ -739,6 +739,19 @@
     transition:background .15s;
   }
   .lw-transfer-btn:hover{background:#dbeafe;}
+  .lw-fold-btn{
+    background:none;border:1px solid var(--line);color:var(--ink-soft);border-radius:8px;
+    padding:6px 10px;font-size:13px;cursor:pointer;flex:none;
+  }
+  .lw-fold-btn:hover{background:var(--slate-soft);}
+  .lw-folded-card{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    background:var(--slate-soft);border:1px dashed var(--slate);border-radius:10px;
+    padding:8px 14px;cursor:pointer;font-size:12.5px;font-weight:700;color:var(--ink-soft);
+    transition:background .15s ease;
+  }
+  .lw-folded-card:hover{background:#e2e4ea;}
+  .lw-folded-hint{font-size:10.5px;font-weight:400;color:var(--slate);}
   .lw-transfer-btn:disabled{
     background:#f1f0ec;color:#a8a49a;border-color:#ddd9cd;cursor:not-allowed;opacity:0.8;
   }
@@ -1310,6 +1323,10 @@
         <select id="lwFilterSector" class="cases-select">
           <option value="">كل أنواع المالية</option>
         </select>
+        <label class="closure-checkbox-label">
+          <input type="checkbox" id="lwHideThirdSegment">
+          🙈 إخفاء المقطع الثالث من الأسماء
+        </label>
       </div>
       <div id="lwActionsBox" class="fu-tracked-list"></div>
     </div>
@@ -3834,9 +3851,36 @@ async function toggleLwStep(key, stepId, currentlyDone){
   return true;
 }
 
+// ===== نظام طي/إخفاء مؤقت لبطاقات صندوق المتابعات (بلا حذف أي بيانات) =====
+// يُحفَظ في هذا المتصفح تحديداً، ويبقى قائماً حتى يُفتَح يدوياً — مجرد تفضيل
+// عرض شخصي، لا علاقة له بالبيانات الفعلية المحفوظة في Firebase.
+// إخفاء المقطع الثالث من اسم مكوَّن من 4 مقاطع فأكثر — بصرياً فقط عند
+// العرض هنا، البيانات الأصلية لا تتغيّر إطلاقاً في أي مكان آخر بالنظام.
+function maskThirdNameSegment(name){
+  const parts = String(name || "").trim().split(/\s+/);
+  if(parts.length < 4) return name;
+  parts.splice(2, 1);
+  return parts.join(" ");
+}
+
+function getFoldedCasesSet(){
+  try{ return new Set(JSON.parse(localStorage.getItem('lw_folded_cases') || '[]')); }
+  catch(e){ return new Set(); }
+}
+function saveFoldedCasesSet(set){
+  try{ localStorage.setItem('lw_folded_cases', JSON.stringify([...set])); }catch(e){}
+}
+function toggleCaseFolded(key){
+  const set = getFoldedCasesSet();
+  if(set.has(key)) set.delete(key); else set.add(key);
+  saveFoldedCasesSet(set);
+}
+
 function renderLwActionsBox(){
   const listEl = document.getElementById("lwActionsBox");
   const countEl = document.getElementById("lwActionsCount");
+  const foldedSet = getFoldedCasesSet();
+  const hideThird = document.getElementById("lwHideThirdSegment").checked;
   let items = [];
   Object.entries(masterCache).forEach(([key, rec])=>{
     // استبعاد القضايا "الميتة": المُزالة نهائياً أو المنقولة لقائمة "بحاجة إلى فصل"
@@ -3902,7 +3946,20 @@ function renderLwActionsBox(){
     return;
   }
   listEl.innerHTML = items.map(item=>{
-    const label = item.row ? `${escapeAttr(shortCaseNo(item.row["رقم الدعوى"]))} · ${escapeAttr(getDefendantForRow(item.row))}${getClientBadgeHtml(item.row)}` : item.key;
+    // إذا كانت هذه القضية "مطوية" — نعرض شريطاً مضغوطاً فقط (اسم الطرف ورقم
+    // القضية)، بلا أي تفاصيل أو أزرار، والضغط عليه يُعيدها كاملة فوراً.
+    if(foldedSet.has(item.key)){
+      const foldedDefName = item.row ? (hideThird ? maskThirdNameSegment(getDefendantForRow(item.row)) : getDefendantForRow(item.row)) : "";
+      const foldedLabel = item.row ? `${escapeAttr(shortCaseNo(item.row["رقم الدعوى"]))} · ${escapeAttr(foldedDefName)}` : item.key;
+      return `
+        <div class="lw-folded-card" data-key="${escapeAttr(item.key)}" title="اضغط لإعادة إظهار هذه القضية">
+          <span>📁 ${foldedLabel}</span>
+          <span class="lw-folded-hint">اضغط للإظهار</span>
+        </div>
+      `;
+    }
+    const defNameForLabel = item.row ? (hideThird ? maskThirdNameSegment(getDefendantForRow(item.row)) : getDefendantForRow(item.row)) : "";
+    const label = item.row ? `${escapeAttr(shortCaseNo(item.row["رقم الدعوى"]))} · ${escapeAttr(defNameForLabel)}${getClientBadgeHtml(item.row)}` : item.key;
     // إذا كان يوجد مبلغ محصّل فعلاً لهذه القضية، "حسم راتب" لم يعد خطوة
     // منطقية للعرض (الكتاب أُرسل فعلاً وأثمر تحصيلاً) — يُستبعَد هنا أيضاً،
     // تماماً كما يُستبعَد عند اختيار الإجراء أول مرة.
@@ -4016,6 +4073,7 @@ function renderLwActionsBox(){
           <div class="lw-steps-grid">${stepsHtml}</div>
           ${transferHtml}
           ${addP2InlineBtn}
+          <button class="lw-fold-btn" data-key="${escapeAttr(item.key)}" title="طي هذه القضية مؤقتاً">📁</button>
           <button class="btn secondary lw-action-remove" data-key="${escapeAttr(item.key)}">✕</button>
         </div>
         ${party2ExtraRow}
@@ -4069,6 +4127,18 @@ function renderLwActionsBox(){
       }
       if(masterCache[key]) delete masterCache[key]["محامي_طرف2"];
       await saveMaster([key]);
+      renderLwActionsBox();
+      return;
+    }
+    const foldBtn = e.target.closest(".lw-fold-btn");
+    if(foldBtn){
+      toggleCaseFolded(foldBtn.getAttribute("data-key"));
+      renderLwActionsBox();
+      return;
+    }
+    const foldedCard = e.target.closest(".lw-folded-card");
+    if(foldedCard){
+      toggleCaseFolded(foldedCard.getAttribute("data-key"));
       renderLwActionsBox();
       return;
     }
@@ -7056,6 +7126,11 @@ document.getElementById("lwSearchInput").addEventListener("input", (e)=>{
 document.getElementById("lwFilterClient").addEventListener("change", renderLwActionsBox);
 document.getElementById("lwFilterYear").addEventListener("change", renderLwActionsBox);
 document.getElementById("lwFilterSector").addEventListener("change", renderLwActionsBox);
+document.getElementById("lwHideThirdSegment").checked = localStorage.getItem('lw_hide_third_segment') === '1';
+document.getElementById("lwHideThirdSegment").addEventListener("change", (e)=>{
+  localStorage.setItem('lw_hide_third_segment', e.target.checked ? '1' : '0');
+  renderLwActionsBox();
+});
 document.getElementById("lwPrintBtn").onclick = ()=>{
   const items = [];
   Object.entries(masterCache).forEach(([key, rec])=>{
