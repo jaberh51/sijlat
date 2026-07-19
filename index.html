@@ -153,6 +153,7 @@
     overflow-y:auto;padding:24px 18px 60px;
   }
   .fu-page-inner{max-width:900px;margin:0 auto;}
+  .lawyer-page-inner{max-width:1180px;}
   .fu-page-header{
     display:flex;align-items:center;justify-content:space-between;gap:12px;
     border-bottom:2px solid var(--ink);padding-bottom:14px;margin-bottom:20px;flex-wrap:wrap;
@@ -558,11 +559,12 @@
   }
   .lw-resector-menu button:hover{background:#ede9fe;color:#6d28d9;}
   .lw-party2-add{
-    margin-top:8px;font-family:'Tajawal',sans-serif;font-size:11.5px;font-weight:700;
-    background:none;border:1px dashed var(--slate);color:var(--slate);border-radius:8px;
-    padding:5px 12px;cursor:pointer;
+    font-family:'Tajawal',sans-serif;font-size:15px;font-weight:900;
+    background:none;border:1.5px dashed var(--slate);color:var(--slate);border-radius:50%;
+    width:24px;height:24px;line-height:1;cursor:pointer;flex:none;
+    display:flex;align-items:center;justify-content:center;padding:0;
   }
-  .lw-party2-add:hover{background:var(--slate-soft);}
+  .lw-party2-add:hover{background:var(--slate-soft);border-style:solid;}
   .lw-party2-row{
     margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
     background:var(--paper);border:1px dashed var(--line);border-radius:8px;padding:6px 10px;
@@ -1209,7 +1211,7 @@
 </div>
 
 <div id="lawyerPage" class="fu-page" style="display:none;">
-  <div class="fu-page-inner">
+  <div class="fu-page-inner lawyer-page-inner">
     <div class="fu-page-header">
       <div class="fu-page-title">⚖️ متابعة مع المحامي</div>
       <button class="btn secondary" id="lwPageClose">✕ إغلاق والعودة</button>
@@ -3862,13 +3864,15 @@ function renderLwActionsBox(){
 
     // طرف ثانٍ (مشتكى عليه إضافي بنفس القضية) — يُضاف يدوياً، وله خطوتا
     // متابعة خاصتان به فقط (كتاب حسم لاحق + حجز مكافأة)، منفصلتان عن خطوات
-    // الطرف الأول تماماً.
+    // الطرف الأول تماماً. قبل الإضافة: رمز "+" صغير فقط داخل الصف نفسه —
+    // بلا نص أو صندوق منفصل يأخذ مساحة إضافية.
     const p2 = rec ? rec["محامي_طرف2"] : null;
-    let party2Html;
+    let party2ExtraRow = "";
+    let addP2InlineBtn = "";
     if(p2 && p2.name){
       const s1 = p2.steps && p2.steps.step_kitabHasm && p2.steps.step_kitabHasm.done;
       const s2 = p2.steps && p2.steps.step_hajzMukafa && p2.steps.step_hajzMukafa.done;
-      party2Html = `
+      party2ExtraRow = `
         <div class="lw-party2-row" data-key="${escapeAttr(item.key)}">
           <span class="lw-party2-name">👤 ${escapeAttr(p2.name)}</span>
           <button class="lw-step-btn ${s1?'lw-step-done':''}" data-key="${escapeAttr(item.key)}" data-p2step="step_kitabHasm" data-done="${s1?'1':'0'}" title="كتاب حسم لاحق">ح.حسم</button>
@@ -3876,7 +3880,7 @@ function renderLwActionsBox(){
           <button class="lw-party2-remove" data-key="${escapeAttr(item.key)}" title="حذف الطرف الثاني">✕</button>
         </div>`;
     } else {
-      party2Html = `<button class="lw-party2-add" data-key="${escapeAttr(item.key)}" title="إضافة مشتكى عليه ثانٍ لهذه القضية">+ طرف ثانٍ</button>`;
+      addP2InlineBtn = `<button class="lw-party2-add" data-key="${escapeAttr(item.key)}" title="إضافة مشتكى عليه ثانٍ لهذه القضية">+</button>`;
     }
 
     return `
@@ -3885,9 +3889,10 @@ function renderLwActionsBox(){
           <div class="lw-card-name">${label}${sectorBadge}${amtsHtml}</div>
           <div class="lw-steps-grid">${stepsHtml}</div>
           ${transferHtml}
+          ${addP2InlineBtn}
           <button class="btn secondary lw-action-remove" data-key="${escapeAttr(item.key)}">✕</button>
         </div>
-        ${party2Html}
+        ${party2ExtraRow}
       </div>
     `;
   }).join("");
