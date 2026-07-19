@@ -1819,7 +1819,10 @@ const BACKUP_MAX_COUNT = 10;
 function getBackupTimestampKey(){
   const d = new Date();
   const pad = (n,len=2) => String(n).padStart(len,'0');
-  const rand = Math.floor(Math.random()*900+100); // رقم عشوائي 3 أرقام لضمان عدم التصادم المطلق
+  // رقم عشوائي بمساحة كبيرة جداً (6 أرقام: 100000-999999) بدل 3 أرقام فقط —
+  // اختبار آلي كشف احتمال تصادم 2% مع الرقم القديم عند توليد مفاتيح متعددة
+  // بنفس المللي ثانية بالضبط؛ هذه المساحة الأكبر تجعل الاحتمال شبه معدوم.
+  const rand = Math.floor(Math.random()*900000+100000);
   return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}${pad(d.getMilliseconds(),3)}_${rand}`;
 }
 // تحويل المفتاح لصيغة قابلة للقراءة: "18/07/2026 — 14:23:45"
@@ -1938,6 +1941,11 @@ async function restoreBackup(key){
   try{
     const snap = await fb.get(fb.ref(fbDb, 'backups/' + key));
     if(!snap.exists()) return false;
+    // نسخة أمان تلقائية للحالة الحالية قبل أي استرجاع — بلا هذا، لو أخطأ
+    // اختيار النسخة، لا توجد طريقة للتراجع إطلاقاً (هذا بالضبط ما حدث سابقاً).
+    // نُنفِّذها هنا صامتة تماماً، فلا تُزعج المستخدم ولا تمنع الاسترجاع إن فشلت.
+    try{ await saveBackupNow(false); }catch(e){ console.error("فشلت نسخة الأمان التلقائية قبل الاسترجاع:", e); }
+
     masterCache = restoreFromFirebase(snap.val());
     invalidateMasterCaseNoIndex();
     invalidateRowIndex();
@@ -1977,7 +1985,7 @@ async function renderBackupsList(){
     btn.onclick = async ()=>{
       const key = btn.getAttribute("data-key");
       const label = formatBackupKey(key);
-      const pwd = await askPassword(`⚠️ استرجاع نسخة ${label} سيستبدل كل بياناتك الحالية بالكامل. أي تعديل حدث بعد هذا التاريخ ولم يُؤخَذ له نسخة احتياطية سيُفقَد نهائياً. أدخل كلمة السر للتأكيد:`);
+      const pwd = await askPassword(`⚠️ استرجاع نسخة ${label} سيستبدل كل بياناتك الحالية. سيُؤخَذ نسخة أمان تلقائية لوضعك الحالي أولاً (يمكنك التراجع لاحقاً منها إن أخطأت). أدخل كلمة السر للتأكيد:`);
       if(!(await verifyPassword(pwd, LW_STEP_PASS_HASH))){
         showToast("⚠️ كلمة السر غير صحيحة", "warn");
         return;
@@ -2616,6 +2624,7 @@ async function cleanupMaster(){
   try{
     const master = await getMaster();
     let changed = false;
+    const touchedKeys = new Set(); // القضايا المتأثرة فعلياً فقط — لحفظ مستهدَف بدل حفظ كامل
 
     // Index legacy-key records (no "||") whose transactions were migrated to composite keys
     const compositeByCaseNo = {};
@@ -2640,6 +2649,7 @@ async function cleanupMaster(){
               if(hasLegacyVal && compEmpty){
                 compRec[field] = legacyVal;
                 changed = true;
+                touchedKeys.add(k2);
               }
             });
           }
@@ -2666,13 +2676,16 @@ async function cleanupMaster(){
             return sum + (isNaN(amt) ? 0 : amt);
           }, 0);
           changed = true;
+          touchedKeys.add(k);
         }
       }
     });
 
     if(changed){
       masterCache = master;
-      await saveMaster();
+      // حفظ القضايا المتأثرة فعلياً فقط — إن وُجدت، وإلا حفظ كامل احتياطي
+      // (مثلاً إن كان التغيير الوحيد حذف مفاتيح قديمة بلا مقابل مُحدَّث معروف)
+      await saveMaster(touchedKeys.size ? [...touchedKeys] : undefined);
     }
     return changed;
   }catch(e){ return false; }
@@ -2795,7 +2808,12 @@ async function bootstrapMasterCache(){
       RAW_DATA_UNIQUE_COUNT = dedupeByCase(RAW_DATA).length;
       if(window._appFullyLoaded) render();
     }
-    fbLoadCasesProgressive((batch, allSoFar)=>{
+    // نُعرِّض وعداً منفصلاً يكتمل فقط عند اكتمال التحميل الكامل الفعلي من
+    // Firebase (وليس فقط التحميل المحلي السريع أعلاه) — أي عملية قد تكتب
+    // فوق بيانات Firebase (تنظيف، مزامنة بيانات أساسية) يجب أن تنتظر هذا
+    // الوعد أولاً، لتفادي الكتابة فوق بيانات لم تصل بعد محلياً (هذا بالضبط
+    // نوع الخطأ الذي تسبَّب سابقاً بفقدان بيانات متابعة المحامي).
+    window._masterCacheFullSyncPromise = fbLoadCasesProgressive((batch, allSoFar)=>{
       // دمج كل دفعة فور وصولها في الذاكرة (رخيص) — لكن المعالجة الثقيلة مؤجَّلة
       Object.assign(masterCache, batch);
       invalidateMasterCaseNoIndex();
@@ -2809,14 +2827,18 @@ async function bootstrapMasterCache(){
         try{ await idbSet('master_cases', JSON.stringify(masterCache)); }catch(e){}
       }
     });
+  } else {
+    window._masterCacheFullSyncPromise = Promise.resolve();
   }
 }
 
 async function saveMasterFromRows(rows){
   const master = await getMaster();
+  const touchedKeys = [];
   rows.forEach(r=>{
     const key = caseKey(r);
     if(!key) return;
+    touchedKeys.push(key);
     const existing = master[key] || {};
     const desc = r["وصف الدعوى"];
     let plaintiffs = existing["المدعون"] || [];
@@ -2906,7 +2928,9 @@ async function saveMasterFromRows(rows){
   });
   masterCache = master; // نفس المرجع أصلاً بعد التعديل الجديد على getMaster، لكن نُصرِّح صراحةً لمزيد من الوضوح
   try{
-    await saveMaster();
+    // حفظ القضايا التي وردت فعلاً في هذا الاستيراد فقط — وليس كل القضايا.
+    // يحمي من الكتابة فوق قضايا أخرى لم تصل بعد من التحميل التدريجي.
+    await saveMaster(touchedKeys);
   }catch(e){
     return null;
   }
@@ -6436,6 +6460,7 @@ function getMonthColumnValue(r, monthIndex, months){
 async function freezeNewMonth(monthId){
   const rows = getDedupedRAW();
   let decreasedCount = 0;
+  const touchedKeys = [];
   rows.forEach(r=>{
     const key = caseKey(r);
     const avail = getRowAvail(r);
@@ -6453,8 +6478,12 @@ async function freezeNewMonth(monthId){
     } else {
       masterCache[key]["تحليل_اشهر"][monthId] = newVal;
     }
+    touchedKeys.push(key);
   });
-  await saveMaster();
+  // حفظ القضايا التي لمسناها فقط — وليس كل الـ819 قضية دفعة واحدة. هذا يُزيل
+  // خطر الكتابة فوق بيانات قضايا أخرى (مثل متابعة المحامي) قد لا تكون قد
+  // وصلت بعد من التحميل التدريجي لحظة الضغط على الزر.
+  await saveMaster(touchedKeys);
   // تسجيل تاريخ آخر تحديث لهذا الشهر تحديداً (يظهر تحت اسم الشهر في الجدول)
   const months = getAnalysisMonths();
   const idx = months.findIndex(m => m.id === monthId);
@@ -6984,15 +7013,24 @@ async function initApp(){
 
   // 2) تنظيف الماستر القديم — مرة واحدة فقط (نتحقق من علامة في localStorage)
   const cleanupDone = localStorage.getItem('_cleanupDone');
+  // 3) saveMasterFromRows(SEED_DATA) — تُشغَّل فقط عند أول تشغيل أو تغيّر البيانات
+  const savedSeedCount = parseInt(localStorage.getItem('_seedCount') || '0', 10);
+  const needsSync = savedSeedCount !== SEED_DATA.length || Object.keys(masterCache).length === 0;
+
+  // أي من العمليتين أعلاه تكتب فوق بيانات Firebase — إن كانت إحداهما ستُنفَّذ
+  // فعلياً الآن، ننتظر أولاً اكتمال التحميل الكامل الحقيقي من Firebase (وليس
+  // فقط المحلي السريع)، لضمان عدم الكتابة فوق قضايا لم تصل بعد. هذا الانتظار
+  // لا يحدث إطلاقاً في الاستخدام اليومي العادي (فقط أول تشغيل، أو عند تغيّر
+  // بيانات data.js الأساسية).
+  if((!cleanupDone || needsSync) && window._masterCacheFullSyncPromise){
+    try{ await window._masterCacheFullSyncPromise; }catch(e){}
+  }
+
   if(!cleanupDone){
     await cleanupMaster();
     localStorage.setItem('_cleanupDone', '1');
   }
 
-  // 3) saveMasterFromRows(SEED_DATA) — تُشغَّل فقط عند أول تشغيل أو تغيّر البيانات
-  //    نتحقق بمقارنة عدد السجلات المحفوظة مع حجم SEED_DATA الحالي
-  const savedSeedCount = parseInt(localStorage.getItem('_seedCount') || '0', 10);
-  const needsSync = savedSeedCount !== SEED_DATA.length || Object.keys(masterCache).length === 0;
   if(needsSync){
     await saveMasterFromRows(SEED_DATA);
     localStorage.setItem('_seedCount', String(SEED_DATA.length));
