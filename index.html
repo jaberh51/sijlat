@@ -3660,14 +3660,18 @@ function renderActionPickerForSector(picker, key, rowEl, sector){
 }
 
 const LW_STEPS = [
-  {id:"step_hasmRatib",    label:"حسم راتب"},
-  {id:"step_kitabHasm",    label:"كتاب حسم لاحق"},
-  {id:"step_hajzMukafa",   label:"حجز مكافأة"},
-  {id:"step_hajzMukafaKhidma", label:"حجز مكافأة نهاية الخدمة"},
-  {id:"step_hajzHawafiz",  label:"حجز حوافز"},
-  {id:"step_istSayara",    label:"استعلام سيارة"},
-  {id:"step_istAradhi",    label:"استعلام اراضي"}
+  {id:"step_hasmRatib",    label:"حسم راتب",              shortLabel:"حسم راتب"},
+  {id:"step_kitabHasm",    label:"كتاب حسم لاحق",         shortLabel:"لاحق"},
+  {id:"step_hajzMukafa",   label:"حجز مكافأة",             shortLabel:"ح.مكافأة"},
+  {id:"step_hajzMukafaKhidma", label:"حجز مكافأة نهاية الخدمة", shortLabel:"ح.مكافأة نهائية"},
+  {id:"step_hajzHawafiz",  label:"حجز حوافز",              shortLabel:"ح.حوافز"},
+  {id:"step_istSayara",    label:"استعلام سيارة",          shortLabel:"سيارة"},
+  {id:"step_istAradhi",    label:"استعلام اراضي",          shortLabel:"اراضي"}
 ];
+
+// نفس التسميات المختصرة، متاحة لأي مكان في الكود يحتاجها خارج نطاق LW_STEPS
+// (مثل شارات الطرف الثاني الثابتة)
+const LW_STEP_SHORT = Object.fromEntries(LW_STEPS.map(s=>[s.id, s.shortLabel]));
 
 // خريطة الربط: اسم الإجراء المختار → id الزر الذي يضيء تلقائياً
 const LW_ACTION_STEP_MAP = {
@@ -3819,7 +3823,12 @@ function renderLwActionsBox(){
   }
   listEl.innerHTML = items.map(item=>{
     const label = item.row ? `${escapeAttr(shortCaseNo(item.row["رقم الدعوى"]))}${getClientBadgeHtml(item.row)} · ${escapeAttr(getDefendantForRow(item.row))}` : item.key;
-    const applicableStepIds = getApplicableSteps(item.sector);
+    // إذا كان يوجد مبلغ محصّل فعلاً لهذه القضية، "حسم راتب" لم يعد خطوة
+    // منطقية للعرض (الكتاب أُرسل فعلاً وأثمر تحصيلاً) — يُستبعَد هنا أيضاً،
+    // تماماً كما يُستبعَد عند اختيار الإجراء أول مرة.
+    const hasCollected = item.row ? (getFinancialForRow(item.row).total > 0) : false;
+    let applicableStepIds = getApplicableSteps(item.sector);
+    if(hasCollected) applicableStepIds = applicableStepIds.filter(id => id !== "step_hasmRatib");
     const sectorBadge = item.sector ? `<button class="lw-sector-badge" data-key="${escapeAttr(item.key)}" data-resector="1" title="اضغط لتغيير نوع العمل">${escapeAttr(item.sector)} ✎</button>` : "";
     const stepsHtml = LW_STEPS.filter(s => applicableStepIds.includes(s.id)).map(s=>{
       const done = item.steps[s.id] && item.steps[s.id].done;
@@ -3827,7 +3836,7 @@ function renderLwActionsBox(){
       const stepDateStr = stepDate
         ? `${WEEKDAY_NAMES_AR[stepDate.getDay()]} ${stepDate.toLocaleDateString('ar-EG')} ${stepDate.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'})}`
         : "";
-      const shortLabel = s.label.replace("استعلام ","").replace("كتاب حسم ","ح.حسم").replace("نهاية الخدمة","نهائية").replace("حجز ","ح.");
+      const shortLabel = s.shortLabel;
       return `<button
           class="lw-step-btn ${done ? 'lw-step-done' : ''}"
           data-key="${escapeAttr(item.key)}"
@@ -3875,8 +3884,8 @@ function renderLwActionsBox(){
       party2ExtraRow = `
         <div class="lw-party2-row" data-key="${escapeAttr(item.key)}">
           <span class="lw-party2-name">👤 ${escapeAttr(p2.name)}</span>
-          <button class="lw-step-btn ${s1?'lw-step-done':''}" data-key="${escapeAttr(item.key)}" data-p2step="step_kitabHasm" data-done="${s1?'1':'0'}" title="كتاب حسم لاحق">ح.حسم</button>
-          <button class="lw-step-btn ${s2?'lw-step-done':''}" data-key="${escapeAttr(item.key)}" data-p2step="step_hajzMukafa" data-done="${s2?'1':'0'}" title="حجز مكافأة">ح.مكافأة</button>
+          <button class="lw-step-btn ${s1?'lw-step-done':''}" data-key="${escapeAttr(item.key)}" data-p2step="step_kitabHasm" data-done="${s1?'1':'0'}" title="كتاب حسم لاحق">${LW_STEP_SHORT.step_kitabHasm}</button>
+          <button class="lw-step-btn ${s2?'lw-step-done':''}" data-key="${escapeAttr(item.key)}" data-p2step="step_hajzMukafa" data-done="${s2?'1':'0'}" title="حجز مكافأة">${LW_STEP_SHORT.step_hajzMukafa}</button>
           <button class="lw-party2-remove" data-key="${escapeAttr(item.key)}" title="حذف الطرف الثاني">✕</button>
         </div>`;
     } else {
