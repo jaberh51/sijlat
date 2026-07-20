@@ -7364,6 +7364,14 @@ document.getElementById("lwSearchInput").addEventListener("input", (e)=>{
   lwPageSearchTimer = setTimeout(()=> runLwSearch(v), 200);
 });
 
+// إغلاق أي قائمة خطوة منبثقة (حسم راتب/لاحق/إلخ) عند الضغط في أي مكان خارجها
+// — معالج عام واحد يُسجَّل مرة واحدة فقط هنا (وليس داخل renderLwActionsBox،
+// لتفادي تسجيل معالج جديد مكرَّر عند كل إعادة رسم للصندوق).
+document.addEventListener("click", (e)=>{
+  if(e.target.closest(".lw-step-menu") || e.target.closest(".lw-step-btn") || e.target.closest("[data-p2step]")) return;
+  document.querySelectorAll(".lw-step-menu").forEach(m=> m.remove());
+});
+
 document.getElementById("lwFilterClient").addEventListener("change", renderLwActionsBox);
 document.getElementById("lwFilterYear").addEventListener("change", renderLwActionsBox);
 document.getElementById("lwFilterSector").addEventListener("change", renderLwActionsBox);
