@@ -6865,11 +6865,15 @@ function renderCasesPage(){
     //
     // القاعدة الوحيدة والبسيطة: وجود أي مبلغ متاح (لم يُسحب بعد) يحمي القضية
     // من الحذف دائماً، بغضّ النظر عن حالتها — تنطبق على الجميع بلا استثناء.
+    // استثناء إضافي: إذا كان المتبقي أكبر من صفر، لا يظهر ✕ ولا 🔒 إطلاقاً —
+    // طالما لا يزال هناك مبلغ متبقٍ حقيقي (لم يصل بعد للمحكمة أصلاً)، فلا
+    // داعي لأي أيقونة (لا حذف، ولا حماية بسبب متاح).
+    const hasRemaining = rem !== null && rem > 0;
     const hasAvailAmount = avail !== null && avail > 0;
-    const isProtectedFromDelete = hasAvailAmount;
+    const isProtectedFromDelete = !hasRemaining && hasAvailAmount;
     const isDblClickEligible = status === "فصل";
 
-    const showRemoveBtn = !isProtectedFromDelete && (status !== "قيد التنفيذ" || rem === 0);
+    const showRemoveBtn = !hasRemaining && !isProtectedFromDelete && (status !== "قيد التنفيذ" || rem === 0);
     const removeBtnHtml = showRemoveBtn
       ? `<button class="cases-remove-btn" data-key="${escapeAttr(key)}" title="إزالة (تسوية خارجية)">✕</button>`
       : (isProtectedFromDelete ? `<span class="cases-protected-badge" title="محمية من الحذف — لها مبلغ متاح. دبل كليك على الصف للخيارات">🔒</span>` : "");
