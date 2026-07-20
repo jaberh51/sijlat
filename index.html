@@ -6863,18 +6863,13 @@ function renderCasesPage(){
     // قاعدة ثابتة إضافية: أي قضية حالتها فصل/متروكة/إسقاط ولها مبلغ متاح (avail > 0)
     // يُمنع حذفها نهائياً عبر ✕ العادي — لأن هذا المبلغ لا يزال قابلاً للتحصيل.
     //
-    // كل قضية حالتها "فصل" (بلا شرط وجود متاح) تحصل على تفاعل الضغط المزدوج
-    // للتعديل اليدوي الكامل (المطلوب / المحصّل / المتبقي / المتاح) أو الحذف.
-    const PROTECTED_STATUSES = ["فصل", "متروكة", "إسقاط", "قيد التنفيذ"];
+    // القاعدة الوحيدة والبسيطة: وجود أي مبلغ متاح (لم يُسحب بعد) يحمي القضية
+    // من الحذف دائماً، بغضّ النظر عن حالتها — تنطبق على الجميع بلا استثناء.
     const hasAvailAmount = avail !== null && avail > 0;
-    const isProtectedFromDelete = PROTECTED_STATUSES.includes(status) && hasAvailAmount;
+    const isProtectedFromDelete = hasAvailAmount;
     const isDblClickEligible = status === "فصل";
 
-    // القاعدة المُحدَّثة: قضية "قيد التنفيذ" لا تصبح مؤهَّلة للإزالة إلا إذا
-    // كان المطلوب = المحصّل **و** لا يوجد مبلغ متاح معلّق لم يُسحب بعد —
-    // سابقاً كان يُكتفى بـ"المتبقي = صفر" فقط، متجاهلاً وجود مبلغ متاح فعلي.
-    const showRemoveBtn = isProtectedFromDelete ? false
-      : (status !== "قيد التنفيذ" || (rem === 0 && !hasAvailAmount));
+    const showRemoveBtn = !isProtectedFromDelete && (status !== "قيد التنفيذ" || rem === 0);
     const removeBtnHtml = showRemoveBtn
       ? `<button class="cases-remove-btn" data-key="${escapeAttr(key)}" title="إزالة (تسوية خارجية)">✕</button>`
       : (isProtectedFromDelete ? `<span class="cases-protected-badge" title="محمية من الحذف — لها مبلغ متاح. دبل كليك على الصف للخيارات">🔒</span>` : "");
