@@ -2556,16 +2556,23 @@ function getFinancialForRow(r){
   const manualRemaining = rec ? parseNum(rec["متبقي_يدوي"]) : null;
   const manualCollected = rec ? parseNum(rec["محصل_يدوي"]) : null;
 
+  // "المتاح" (وصل للمحكمة، لم يُسحب بعد كمعاملة رسمية) يُخصَم إضافياً من
+  // "المتبقي" فقط — بلا أي تغيير على "المحصل" نفسه، الذي يبقى معبِّراً حصرياً
+  // عن المعاملات المسحوبة فعلياً. عندما يتحوّل هذا المبلغ لاحقاً لمعاملة
+  // حقيقية (عبر استيراد ملف الرديات)، "المتاح" ينخفض تلقائياً بنفس القدر
+  // الذي يرتفع فيه "المحصل" — فلا يحدث خصم مضاعف من "المتبقي" أبداً.
+  const availForRemaining = getRowAvail(r) || 0;
+
   let remaining, effectiveTotal;
   if(manualRemaining !== null && requested !== null){
     remaining = manualRemaining;
     effectiveTotal = requested - manualRemaining;
   } else if(manualCollected !== null){
     effectiveTotal = manualCollected;
-    remaining = requested !== null ? (requested - manualCollected) : null;
+    remaining = requested !== null ? (requested - manualCollected - availForRemaining) : null;
   } else {
     effectiveTotal = total;
-    remaining = requested !== null ? (requested - total) : null;
+    remaining = requested !== null ? (requested - total - availForRemaining) : null;
   }
 
   return {__hasAny: transactions.length > 0, total: effectiveTotal, transactions, requested, remaining, rawCalculatedRemaining};
