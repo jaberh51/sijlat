@@ -775,6 +775,17 @@
     display:flex;align-items:center;justify-content:center;line-height:1;
   }
   .lw-fold-btn:hover{background:var(--slate-soft);}
+  .lw-quick-delete-btn{
+    background:#fee2e2;border:1px solid #fca5a5;color:#dc2626;border-radius:50%;
+    width:26px;height:26px;padding:0;font-size:13px;font-weight:900;cursor:pointer;flex:none;
+    display:flex;align-items:center;justify-content:center;line-height:1;
+    animation:lwDeleteBtnPulse 1.4s ease-in-out infinite;
+  }
+  .lw-quick-delete-btn:hover{background:#fca5a5;}
+  @keyframes lwDeleteBtnPulse{
+    0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.4);}
+    50%{box-shadow:0 0 0 5px rgba(220,38,38,0);}
+  }
   .lw-folded-card{
     display:flex;align-items:center;justify-content:space-between;gap:10px;
     background:var(--slate-soft);border:1px dashed var(--slate);border-radius:10px;
@@ -783,14 +794,6 @@
   }
   .lw-folded-card:hover{background:#e2e4ea;}
   .lw-folded-hint{font-size:10.5px;font-weight:400;color:var(--slate);}
-  .lw-swipe-wrap{position:relative;overflow:hidden;border-radius:12px;}
-  .lw-swipe-bg{
-    position:absolute;inset:0;background:#fee2e2;color:#dc2626;font-weight:700;font-size:13px;
-    display:flex;align-items:center;justify-content:flex-start;padding-inline-start:16px;
-    transition:background .15s ease;direction:ltr;
-  }
-  .lw-swipe-bg-active{background:#fca5a5;color:#991b1b;}
-  .lw-swipe-wrap .fu-tracked-card{position:relative;z-index:1;}
   .lw-day-group-header{
     display:flex;align-items:center;justify-content:space-between;gap:10px;
     background:linear-gradient(135deg,var(--brass-soft),#f5ebd3);border:1px solid var(--brass);
@@ -1407,7 +1410,10 @@
     <div class="fu-page-section">
       <div class="lw-box-header">
         <div class="fu-page-subtitle">📋 صندوق المتابعات (<span id="lwActionsCount">0</span>)</div>
-        <button class="btn secondary" id="lwPrintBtn">🖨️ طباعة</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn secondary" id="lwPrintBtn">🖨️ طباعة</button>
+          <button class="btn secondary" id="lwDeleteModeBtn" title="يُظهر زر ✕ بجانب كل قضية لمدة دقيقة واحدة">🗑️ حذف</button>
+        </div>
       </div>
       <div class="lw-filters-row">
         <select id="lwFilterClient" class="cases-select">
@@ -4391,49 +4397,26 @@ function toggleDayGroupFolded(dayKey){
   try{ localStorage.setItem('lw_folded_day_groups', JSON.stringify([...set])); }catch(e){}
 }
 
-// ===== إيماءة "اسحب لليمين للحذف" — بديل زر ✕ لتوفير المساحة =====
-// معالجات عامة تُسجَّل مرة واحدة فقط (خارج renderLwActionsBox) لتفادي تكرار
-// التسجيل عند كل إعادة رسم. الدرس المستفاد من إيماءة الضغط المطوّل السابقة:
-// لا نُعيد الرسم الكامل أثناء استمرار اللمس على الشاشة — فقط بعد رفع الإصبع.
-let _swipeCard = null;
-let _swipeStartX = 0;
-let _swipeThresholdMet = false;
-const LW_SWIPE_THRESHOLD = 90;
+// ===== "وضع الحذف المؤقت" — بديل موثوق تماماً عن إيماءات اللمس (الضغط
+// المطوّل والسحب فشلا كلاهما على الهاتف). زر واحد أعلى الصندوق يُفعِّل زر ✕
+// بجانب كل قضية لمدة دقيقة واحدة بالضبط، ثم يختفي تلقائياً بلا أي تفاعل. =====
+let _lwDeleteModeUntil = 0;
+let _lwDeleteModeTimer = null;
+const LW_DELETE_MODE_DURATION_MS = 60 * 1000; // دقيقة واحدة بالضبط
 
-function lwSwipeStart(e){
-  const card = e.target.closest(".fu-tracked-card");
-  if(!card) return;
-  // تجاهل اللمس الذي يبدأ على زر/حقل/قائمة — حتى لا يتعارض السحب مع الضغط العادي
-  if(e.target.closest("button, input, select, .lw-step-menu, .lw-resector-menu")) return;
-  _swipeCard = card;
-  _swipeStartX = (e.touches ? e.touches[0].clientX : e.clientX);
-  _swipeThresholdMet = false;
-  card.style.transition = "none";
-}
-function lwSwipeMove(e){
-  if(!_swipeCard) return;
-  const x = (e.touches ? e.touches[0].clientX : e.clientX);
-  const delta = x - _swipeStartX;
-  if(delta <= 0){ _swipeCard.style.transform = "translateX(0)"; _swipeThresholdMet = false; return; }
-  if(e.cancelable) e.preventDefault(); // منع تمرير الصفحة العمودي أثناء السحب الأفقي الفعلي
-  const clamped = Math.min(delta, 130);
-  _swipeCard.style.transform = `translateX(${clamped}px)`;
-  _swipeThresholdMet = clamped >= LW_SWIPE_THRESHOLD;
-  const wrap = _swipeCard.closest(".lw-swipe-wrap");
-  if(wrap) wrap.querySelector(".lw-swipe-bg")?.classList.toggle("lw-swipe-bg-active", _swipeThresholdMet);
-}
-async function lwSwipeEnd(){
-  if(!_swipeCard) return;
-  const card = _swipeCard;
-  const key = card.getAttribute("data-key");
-  const wasThresholdMet = _swipeThresholdMet;
-  card.style.transition = "transform .2s ease";
-  card.style.transform = "translateX(0)";
-  _swipeCard = null;
-  _swipeThresholdMet = false;
-  if(wasThresholdMet && key){
-    await confirmAndRemoveLawyerCase(key);
-  }
+function activateLwDeleteMode(){
+  _lwDeleteModeUntil = getAccurateNow().getTime() + LW_DELETE_MODE_DURATION_MS;
+  renderLwActionsBox();
+  showToast("🗑️ وضع الحذف مُفعَّل لمدة دقيقة — اضغط ✕ بجانب أي قضية لحذفها", "ok");
+  // إعادة رسم دورية كل 3 ثوانٍ طوال مدة التفعيل، لضمان اختفاء الأزرار تلقائياً
+  // بعد الدقيقة بدقة حتى بلا أي تفاعل إضافي من المستخدم
+  clearInterval(_lwDeleteModeTimer);
+  _lwDeleteModeTimer = setInterval(()=>{
+    if(getAccurateNow().getTime() >= _lwDeleteModeUntil){
+      clearInterval(_lwDeleteModeTimer);
+      renderLwActionsBox();
+    }
+  }, 3000);
 }
 
 function renderLwActionsBox(){
@@ -4640,19 +4623,24 @@ function renderLwActionsBox(){
       addP2InlineBtn = `<button class="lw-party2-add" data-key="${escapeAttr(item.key)}" title="إضافة مشتكى عليه ثانٍ لهذه القضية">+</button>`;
     }
 
+    // زر الحذف "✕" يظهر فقط أثناء تفعيل "وضع الحذف" (دقيقة واحدة من ضغط
+    // الزر المخصَّص أعلى الصندوق)، بدل زر ثابت دائم الظهور أو إيماءة لمس.
+    const deleteModeActive = getAccurateNow().getTime() < _lwDeleteModeUntil;
+    const deleteBtnHtml = deleteModeActive
+      ? `<button class="lw-quick-delete-btn" data-key="${escapeAttr(item.key)}" title="حذف هذه القضية من المتابعات">✕</button>`
+      : "";
+
     return `
-      <div class="lw-swipe-wrap">
-        <div class="lw-swipe-bg">🗑️ اسحب للحذف</div>
-        <div class="fu-tracked-card lw-action-card" data-key="${escapeAttr(item.key)}">
-          <div class="lw-card-row">
-            <div class="lw-card-name">${label}${sectorBadge}${amtsHtml}</div>
-            <div class="lw-steps-grid">${stepsHtml}</div>
-            ${transferHtml}
-            ${addP2InlineBtn}
-            <button class="lw-fold-btn" data-key="${escapeAttr(item.key)}" title="طي هذه القضية مؤقتاً">▾</button>
-          </div>
-          ${party2ExtraRow}
+      <div class="fu-tracked-card lw-action-card" data-key="${escapeAttr(item.key)}">
+        <div class="lw-card-row">
+          <div class="lw-card-name">${label}${sectorBadge}${amtsHtml}</div>
+          <div class="lw-steps-grid">${stepsHtml}</div>
+          ${transferHtml}
+          ${addP2InlineBtn}
+          <button class="lw-fold-btn" data-key="${escapeAttr(item.key)}" title="طي هذه القضية مؤقتاً">▾</button>
+          ${deleteBtnHtml}
         </div>
+        ${party2ExtraRow}
       </div>
     `;
   }
@@ -4692,16 +4680,12 @@ function renderLwActionsBox(){
   // المتابعة" تُحوِّله مباشرة إلى "منجز" — بلا أي توقيت لمس مطوّل هش، فقط
   // حدث "الضغط" العادي الموثوق بنفس القدر على كل الأجهزة والمتصفحات.
 
-  listEl.onmousedown = lwSwipeStart;
-  listEl.ontouchstart = lwSwipeStart;
-  listEl.onmousemove = lwSwipeMove;
-  listEl.ontouchmove = lwSwipeMove;
-  listEl.onmouseup = lwSwipeEnd;
-  listEl.ontouchend = lwSwipeEnd;
-  listEl.onmouseleave = lwSwipeEnd;
-  listEl.ontouchcancel = lwSwipeEnd;
-
   listEl.onclick = async (e)=>{
+    const quickDeleteBtn = e.target.closest(".lw-quick-delete-btn");
+    if(quickDeleteBtn){
+      await confirmAndRemoveLawyerCase(quickDeleteBtn.getAttribute("data-key"));
+      return;
+    }
     const dayGroupLabel = e.target.closest(".lw-day-group-label");
     if(dayGroupLabel){
       const dayKey = dayGroupLabel.getAttribute("data-daykey");
@@ -7879,6 +7863,7 @@ document.addEventListener("click", (e)=>{
   document.querySelectorAll(".lw-step-menu").forEach(m=> m.remove());
 });
 
+document.getElementById("lwDeleteModeBtn").onclick = activateLwDeleteMode;
 document.getElementById("lwFilterClient").addEventListener("change", renderLwActionsBox);
 document.getElementById("lwFilterYear").addEventListener("change", renderLwActionsBox);
 document.getElementById("lwFilterSector").addEventListener("change", renderLwActionsBox);
