@@ -791,6 +791,15 @@
   }
   .lw-folded-card:hover{background:#e2e4ea;}
   .lw-folded-hint{font-size:10.5px;font-weight:400;color:var(--slate);}
+  .lw-day-group-header{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    background:linear-gradient(135deg,var(--brass-soft),#f5ebd3);border:1px solid var(--brass);
+    border-radius:10px;padding:10px 16px;margin:16px 0 8px;cursor:pointer;
+    font-weight:700;font-size:13px;color:#7a5a1f;
+  }
+  .lw-day-group-header:hover{filter:brightness(1.03);}
+  .lw-day-group-toggle{font-size:11px;font-weight:700;color:var(--brass);}
+  .lw-day-group-body{display:flex;flex-direction:column;gap:8px;}
   .lw-transfer-btn:disabled{
     background:#f1f0ec;color:#a8a49a;border-color:#ddd9cd;cursor:not-allowed;opacity:0.8;
   }
@@ -1339,6 +1348,10 @@
 
     <div class="fu-page-section">
       <div class="fu-page-subtitle">🔎 ابحث عن قضية لتسجيل مراسلة معها</div>
+      <label class="closure-checkbox-label" style="margin-bottom:10px;">
+        <input type="checkbox" id="lwDayModeToggle">
+        📅 متابعة على مستوى اليوم (القضايا المُضافة الآن تُجمَّع تحت تاريخ اليوم)
+      </label>
       <input type="text" id="lwSearchInput" class="fu-search-input" placeholder="ابحث باسم الطرف، رقم القضية، أو اسم المحكمة...">
       <div id="lwSearchResults" class="fu-search-results">
         <div class="fu-search-hint">اكتب حرفين على الأقل للبحث في كل القضايا...</div>
@@ -3540,13 +3553,33 @@ function getLawyerAction(key){
   return (rec && rec["محامي_اجراء"]) ? rec["محامي_اجراء"] : null;
 }
 
-async function setLawyerAction(key, actionText, sector){
+// مفتاح تاريخ اليوم بصيغة موحَّدة (YYYY-MM-DD) لتجميع "متابعة على مستوى
+// اليوم" — بالوقت الدقيق من خوادم Firebase، وليس ساعة الجهاز المحلية.
+function getTodayDayGroupKey(){
+  const d = getAccurateNow();
+  const pad = n => String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+function formatDayGroupLabel(dayGroupKey){
+  const [y,m,d] = dayGroupKey.split("-").map(Number);
+  const date = new Date(y, m-1, d);
+  const months = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
+  return `${d} ${months[m-1]} ${y}`;
+}
+
+async function setLawyerAction(key, actionText, sector, dayGroup){
   const master = masterCache;
   if(!master[key]) master[key] = {"رقم القضية": key.split("||")[0]};
   if(master[key]["محامي_اجراء"]){
     return false; // إجراء واحد فقط لكل قضية
   }
   master[key]["محامي_اجراء"] = {action: actionText, date: new Date().toISOString()};
+  // إن كانت "متابعة على مستوى اليوم" مُفعَّلة عند الإضافة، نُسجِّل تاريخ ذلك
+  // اليوم كوسم تجميع (YYYY-MM-DD) — تُجمَّع القضية تلقائياً تحت عنوان ذلك
+  // اليوم في صندوق المتابعات بدل الظهور في القائمة العامة.
+  if(dayGroup){
+    master[key]["محامي_اجراء"].dayGroup = dayGroup;
+  }
   // قطاع العمل يُحفظ مرة واحدة فقط عند أول إجراء ويبقى ثابتاً بعدها
   if(sector && !master[key]["نوع_العمل"]){
     master[key]["نوع_العمل"] = sector;
@@ -3556,7 +3589,7 @@ async function setLawyerAction(key, actionText, sector){
   const autoStepId = LW_ACTION_STEP_MAP[actionText];
   if(autoStepId){
     if(!master[key]["محامي_خطوات"]) master[key]["محامي_خطوات"] = {};
-    master[key]["محامي_خطوات"][autoStepId] = {done: true, date: new Date().toISOString()};
+    master[key]["محامي_خطوات"][autoStepId] = {status: "done", date: new Date().toISOString()};
   }
 
   await saveMaster([key]);
@@ -3825,7 +3858,9 @@ function renderActionPickerForSector(picker, key, rowEl, sector){
   picker.querySelectorAll(".lw-action-opt").forEach(optBtn=>{
     optBtn.onclick = async ()=>{
       const action = optBtn.getAttribute("data-action");
-      const ok = await setLawyerAction(key, action, sector);
+      const dayModeOn = document.getElementById("lwDayModeToggle").checked;
+      const dayGroup = dayModeOn ? getTodayDayGroupKey() : null;
+      const ok = await setLawyerAction(key, action, sector, dayGroup);
       if(ok){
         showToast(`✓ تم تسجيل "${action}" (${sector}) ونسخها إلى المتابعات`, "ok");
         renderLwActionsBox();
@@ -3969,6 +4004,18 @@ function toggleCaseFolded(key){
   saveFoldedCasesSet(set);
 }
 
+// نفس نمط طي القضايا الفردية أعلاه، لكن لمجموعات "متابعة على مستوى اليوم"
+// كاملة — محفوظ دائماً في هذا المتصفح حتى يُفتَح يدوياً.
+function getFoldedDayGroupsSet(){
+  try{ return new Set(JSON.parse(localStorage.getItem('lw_folded_day_groups') || '[]')); }
+  catch(e){ return new Set(); }
+}
+function toggleDayGroupFolded(dayKey){
+  const set = getFoldedDayGroupsSet();
+  if(set.has(dayKey)) set.delete(dayKey); else set.add(dayKey);
+  try{ localStorage.setItem('lw_folded_day_groups', JSON.stringify([...set])); }catch(e){}
+}
+
 function renderLwActionsBox(){
   const listEl = document.getElementById("lwActionsBox");
   const countEl = document.getElementById("lwActionsCount");
@@ -3987,7 +4034,8 @@ function renderLwActionsBox(){
       const client = row ? getPlaintiffForRow(row) : "";
       const clientCode = client.includes("جابر") ? "J" : client.includes("حنين") ? "H" : "";
       const year = row ? getCaseYearNum(row).year : null;
-      items.push({key, row, info: rec["محامي_اجراء"], steps: rec["محامي_خطوات"] || {}, sector: rec["نوع_العمل"] || "", clientCode, year});
+      const dayGroup = rec["محامي_اجراء"].dayGroup || null;
+      items.push({key, row, info: rec["محامي_اجراء"], steps: rec["محامي_خطوات"] || {}, sector: rec["نوع_العمل"] || "", clientCode, year, dayGroup});
     }
   });
 
@@ -4038,7 +4086,7 @@ function renderLwActionsBox(){
     listEl.innerHTML = `<div class="fu-tracked-empty">${totalBeforeFilter ? 'لا توجد نتائج مطابقة لهذه الفلترة.' : 'لا توجد إجراءات مسجّلة بعد. اختر قضية من البحث بالأعلى.'}</div>`;
     return;
   }
-  listEl.innerHTML = items.map(item=>{
+  function buildLwCard(item){
     // إذا كانت هذه القضية "مطوية" — نعرض شريطاً مضغوطاً فقط (اسم الطرف ورقم
     // القضية)، بلا أي تفاصيل أو أزرار، والضغط عليه يُعيدها كاملة فوراً.
     if(foldedSet.has(item.key)){
@@ -4129,7 +4177,7 @@ function renderLwActionsBox(){
     // لا يُسمح بالترحيل إلا بعد إنجاز خطوتين على الأقل، **و** وجود مبلغ
     // محصّل فعلاً — الهدف إبقاء أي قضية بلا تحصيل ظاهرة دائماً أمام العين
     // في هذا الصندوق، بلا إمكانية ترحيلها أو التخلّص منها قبل أن تُثمر.
-    const completedStepsCount = Object.values(item.steps || {}).filter(s => s && s.done).length;
+    const completedStepsCount = Object.values(item.steps || {}).filter(s => s && (s.status === 'done' || s.done)).length;
     const canTransfer = completedStepsCount >= 2 && hasCollected;
     const transferBlockReason = !hasCollected ? 'لا يمكن الترحيل قبل وجود مبلغ محصّل فعلاً لهذه القضية'
       : 'يلزم إنجاز خطوتين على الأقل قبل الترحيل (حالياً: '+completedStepsCount+')';
@@ -4185,7 +4233,36 @@ function renderLwActionsBox(){
         ${party2ExtraRow}
       </div>
     `;
-  }).join("");
+  }
+
+  // ===== تجميع "متابعة على مستوى اليوم" — القضايا المُضافة بوضع اليوم
+  // مُفعَّلاً تُعرَض مُجمَّعة تحت عنوان قابل للطي بتاريخ إضافتها، بدل الظهور
+  // في القائمة العامة المسطَّحة. القضايا العادية (بلا وسم يوم) لا تتأثر إطلاقاً.
+  const ungroupedItems = items.filter(i => !i.dayGroup);
+  const dayGroupsMap = {};
+  items.filter(i => i.dayGroup).forEach(i=>{
+    if(!dayGroupsMap[i.dayGroup]) dayGroupsMap[i.dayGroup] = [];
+    dayGroupsMap[i.dayGroup].push(i);
+  });
+  const dayGroupKeys = Object.keys(dayGroupsMap).sort((a,b)=> b.localeCompare(a)); // الأحدث أولاً
+  const foldedDayGroups = getFoldedDayGroupsSet();
+
+  let html = ungroupedItems.map(buildLwCard).join("");
+  dayGroupKeys.forEach(dayKey=>{
+    const groupItems = dayGroupsMap[dayKey];
+    const isGroupFolded = foldedDayGroups.has(dayKey);
+    const label = formatDayGroupLabel(dayKey);
+    html += `
+      <div class="lw-day-group-header" data-daykey="${escapeAttr(dayKey)}">
+        <span>📅 ${escapeAttr(label)} (${groupItems.length} قضية)</span>
+        <span class="lw-day-group-toggle">${isGroupFolded ? '▸ إظهار' : '▾ طي'}</span>
+      </div>
+    `;
+    if(!isGroupFolded){
+      html += `<div class="lw-day-group-body">${groupItems.map(buildLwCard).join("")}</div>`;
+    }
+  });
+  listEl.innerHTML = html;
 
   // Event delegation — مستمع واحد على الحاوية بدل مستمع لكل زر خطوة ولكل زر حذف.
   // مهم خاصة هنا لأن هذه القائمة قد تحتوي عشرات القضايا × 7 أزرار خطوات لكل واحدة.
@@ -4194,6 +4271,12 @@ function renderLwActionsBox(){
   // حدث "الضغط" العادي الموثوق بنفس القدر على كل الأجهزة والمتصفحات.
 
   listEl.onclick = async (e)=>{
+    const dayGroupHeader = e.target.closest(".lw-day-group-header");
+    if(dayGroupHeader){
+      toggleDayGroupFolded(dayGroupHeader.getAttribute("data-daykey"));
+      renderLwActionsBox();
+      return;
+    }
     const addP2Btn = e.target.closest(".lw-party2-add");
     if(addP2Btn){
       const key = addP2Btn.getAttribute("data-key");
@@ -4329,7 +4412,7 @@ function renderLwActionsBox(){
       const key = transferBtn.getAttribute("data-key");
       const rec = masterCache[key];
       const stepsObj = (rec && rec["محامي_خطوات"]) || {};
-      const doneCount = Object.values(stepsObj).filter(s => s && s.done).length;
+      const doneCount = Object.values(stepsObj).filter(s => s && (s.status === 'done' || s.done)).length;
       if(doneCount < 2){
         showToast(`⚠️ لا يمكن الترحيل قبل إتمام خطوتين على الأقل (المُنجَز حالياً: ${doneCount})`, "warn");
         return;
