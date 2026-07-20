@@ -1425,7 +1425,7 @@
         <div class="fu-page-subtitle">📋 صندوق المتابعات (<span id="lwActionsCount">0</span>)</div>
         <div style="display:flex;gap:8px;">
           <button class="btn secondary" id="lwPrintBtn">🖨️ طباعة</button>
-          <button class="btn secondary" id="lwTransferModeBtn" title="يُفعِّل ترحيل كل القضايا لمدة 10 ثوانٍ، بغضّ النظر عن الشروط المعتادة">🚚 تفعيل الترحيل</button>
+          <button class="btn secondary" id="lwTransferModeBtn" title="يُفعِّل ترحيل كل القضايا لمدة دقيقة واحدة، بغضّ النظر عن الشروط المعتادة">🚚 تفعيل الترحيل</button>
           <button class="btn secondary" id="lwDeleteModeBtn" title="يُظهر زر ✕ بجانب كل قضية لمدة دقيقة واحدة">🗑️ حذف</button>
         </div>
       </div>
@@ -4439,12 +4439,12 @@ function activateLwDeleteMode(){
 // بغضّ النظر عن الشرطين المعتادين (خطوتان + تحصيل)، لحالات استثنائية. =====
 let _lwTransferModeUntil = 0;
 let _lwTransferModeTimer = null;
-const LW_TRANSFER_MODE_DURATION_MS = 10 * 1000; // 10 ثوانٍ فقط
+const LW_TRANSFER_MODE_DURATION_MS = 60 * 1000; // دقيقة واحدة
 
 function activateLwTransferMode(){
   _lwTransferModeUntil = getAccurateNow().getTime() + LW_TRANSFER_MODE_DURATION_MS;
   renderLwActionsBox();
-  showToast("🚚 وضع الترحيل مُفعَّل لمدة 10 ثوانٍ لكل القضايا", "ok");
+  showToast("🚚 وضع الترحيل مُفعَّل لمدة دقيقة لكل القضايا", "ok");
   clearInterval(_lwTransferModeTimer);
   _lwTransferModeTimer = setInterval(()=>{
     if(getAccurateNow().getTime() >= _lwTransferModeUntil){
