@@ -799,7 +799,14 @@
   }
   .lw-day-group-header:hover{filter:brightness(1.03);}
   .lw-day-group-toggle{font-size:11px;font-weight:700;color:var(--brass);}
-  .lw-day-group-body{display:flex;flex-direction:column;gap:8px;}
+  .lw-day-group-label{
+    text-decoration:underline dotted;text-decoration-color:#a5793a;cursor:pointer;
+  }
+  .lw-day-group-label:hover{color:#5a3d10;}
+  .lw-day-group-body{
+    display:flex;flex-direction:column;gap:8px;
+    background:#fbf5e9;border:1px dashed var(--brass);border-radius:12px;padding:10px;
+  }
   .lw-transfer-btn:disabled{
     background:#f1f0ec;color:#a8a49a;border-color:#ddd9cd;cursor:not-allowed;opacity:0.8;
   }
@@ -3562,10 +3569,27 @@ function getTodayDayGroupKey(){
 }
 function formatDayGroupLabel(dayGroupKey){
   const [y,m,d] = dayGroupKey.split("-").map(Number);
-  const date = new Date(y, m-1, d);
-  const months = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
-  return `${d} ${months[m-1]} ${y}`;
+  const pad = n => String(n).padStart(2,'0');
+  return `${pad(d)}/${pad(m)}/${y}`;
 }
+
+// تسمية مخصَّصة لعنوان مجموعة اليوم — يبدأ بالتاريخ الرقمي تلقائياً، لكن
+// قابل للتحرير يدوياً وتُحفَظ التسمية المخصَّصة دائماً في هذا المتصفح.
+function getDayGroupCustomLabels(){
+  try{ return JSON.parse(localStorage.getItem('lw_day_group_labels') || '{}'); }
+  catch(e){ return {}; }
+}
+function getDayGroupDisplayLabel(dayGroupKey){
+  const labels = getDayGroupCustomLabels();
+  return labels[dayGroupKey] || formatDayGroupLabel(dayGroupKey);
+}
+function setDayGroupCustomLabel(dayGroupKey, text){
+  const labels = getDayGroupCustomLabels();
+  if(text && text.trim()) labels[dayGroupKey] = text.trim();
+  else delete labels[dayGroupKey]; // نص فارغ = رجوع للتاريخ التلقائي
+  try{ localStorage.setItem('lw_day_group_labels', JSON.stringify(labels)); }catch(e){}
+}
+
 
 async function setLawyerAction(key, actionText, sector, dayGroup){
   const master = masterCache;
@@ -3585,11 +3609,13 @@ async function setLawyerAction(key, actionText, sector, dayGroup){
     master[key]["نوع_العمل"] = sector;
   }
 
-  // إضاءة الزر المقابل للإجراء تلقائياً
+  // إضاءة الزر المقابل للإجراء تلقائياً — "قيد المتابعة" فقط عند الاختيار
+  // الأولي (بدأت العملية للتو)، وليس "منجز" مباشرة. يُحدَّد "منجز" لاحقاً
+  // يدوياً من صاحب النظام عبر القائمة المنبثقة عند اكتمال العملية فعلياً.
   const autoStepId = LW_ACTION_STEP_MAP[actionText];
   if(autoStepId){
     if(!master[key]["محامي_خطوات"]) master[key]["محامي_خطوات"] = {};
-    master[key]["محامي_خطوات"][autoStepId] = {status: "done", date: new Date().toISOString()};
+    master[key]["محامي_خطوات"][autoStepId] = {status: "progress", date: new Date().toISOString()};
   }
 
   await saveMaster([key]);
@@ -4251,11 +4277,11 @@ function renderLwActionsBox(){
   dayGroupKeys.forEach(dayKey=>{
     const groupItems = dayGroupsMap[dayKey];
     const isGroupFolded = foldedDayGroups.has(dayKey);
-    const label = formatDayGroupLabel(dayKey);
+    const label = getDayGroupDisplayLabel(dayKey);
     html += `
       <div class="lw-day-group-header" data-daykey="${escapeAttr(dayKey)}">
-        <span>📅 ${escapeAttr(label)} (${groupItems.length} قضية)</span>
-        <span class="lw-day-group-toggle">${isGroupFolded ? '▸ إظهار' : '▾ طي'}</span>
+        <span>📅 <span class="lw-day-group-label" data-daykey="${escapeAttr(dayKey)}" title="اضغط لتعديل التسمية">${escapeAttr(label)}</span> (${groupItems.length} قضية)</span>
+        <span class="lw-day-group-toggle" data-daykey="${escapeAttr(dayKey)}">${isGroupFolded ? '▸ إظهار' : '▾ طي'}</span>
       </div>
     `;
     if(!isGroupFolded){
@@ -4271,6 +4297,16 @@ function renderLwActionsBox(){
   // حدث "الضغط" العادي الموثوق بنفس القدر على كل الأجهزة والمتصفحات.
 
   listEl.onclick = async (e)=>{
+    const dayGroupLabel = e.target.closest(".lw-day-group-label");
+    if(dayGroupLabel){
+      const dayKey = dayGroupLabel.getAttribute("data-daykey");
+      const currentText = dayGroupLabel.textContent;
+      const newText = await askInput("اكتب تسمية جديدة لهذه المجموعة (اتركه فارغاً للرجوع للتاريخ التلقائي):", {type:"text", defaultValue: currentText});
+      if(newText === null) return; // إلغاء
+      setDayGroupCustomLabel(dayKey, newText);
+      renderLwActionsBox();
+      return;
+    }
     const dayGroupHeader = e.target.closest(".lw-day-group-header");
     if(dayGroupHeader){
       toggleDayGroupFolded(dayGroupHeader.getAttribute("data-daykey"));
