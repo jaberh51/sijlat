@@ -4887,12 +4887,17 @@ function renderLwActionsBox(){
     const transferBtn = e.target.closest(".lw-transfer-btn");
     if(transferBtn){
       const key = transferBtn.getAttribute("data-key");
-      const rec = masterCache[key];
-      const stepsObj = (rec && rec["محامي_خطوات"]) || {};
-      const doneCount = Object.values(stepsObj).filter(s => s && (s.status === 'done' || s.done)).length;
-      if(doneCount < 2){
-        showToast(`⚠️ لا يمكن الترحيل قبل إتمام خطوتين على الأقل (المُنجَز حالياً: ${doneCount})`, "warn");
-        return;
+      // "وضع تفعيل الترحيل المؤقت" يتجاوز شرط الخطوتين تماماً — نفس الفحص
+      // الذي يُحدِّد ظهور/تفعيل الزر نفسه، لتفادي أي تعارض بينهما مجدداً
+      const transferModeActive = getAccurateNow().getTime() < _lwTransferModeUntil;
+      if(!transferModeActive){
+        const rec = masterCache[key];
+        const stepsObj = (rec && rec["محامي_خطوات"]) || {};
+        const doneCount = Object.values(stepsObj).filter(s => s && (s.status === 'done' || s.done)).length;
+        if(doneCount < 2){
+          showToast(`⚠️ لا يمكن الترحيل قبل إتمام خطوتين على الأقل (المُنجَز حالياً: ${doneCount})`, "warn");
+          return;
+        }
       }
       await setCaseTransferredToFollowups(key, true);
       renderLwActionsBox();
