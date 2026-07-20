@@ -617,6 +617,20 @@
     text-align:right;color:var(--ink,#222);white-space:nowrap;
   }
   .lw-resector-menu button:hover{background:#ede9fe;color:#6d28d9;}
+  .lw-step-menu{
+    position:relative;z-index:60;margin-top:6px;
+    background:var(--paper-raised,#fff);border:1px solid var(--line,#ddd);border-radius:10px;
+    box-shadow:0 6px 20px rgba(0,0,0,.15);padding:6px;display:flex;flex-direction:column;gap:3px;
+    min-width:150px;width:fit-content;
+  }
+  .lw-step-menu button{
+    font-family:'Tajawal',sans-serif;font-size:12.5px;font-weight:700;
+    background:none;border:none;padding:8px 12px;border-radius:6px;cursor:pointer;
+    text-align:right;color:var(--ink,#222);white-space:nowrap;
+  }
+  .lw-step-menu button[data-v="progress"]:hover{background:#fdf3e7;color:#78350f;}
+  .lw-step-menu button[data-v="done"]:hover{background:#f8f0e0;color:var(--brass);}
+  .lw-step-menu button[data-v=""]:hover{background:#fee2e2;color:#dc2626;}
   .lw-party2-add{
     font-family:'Tajawal',sans-serif;font-size:15px;font-weight:900;
     background:none;border:1.5px dashed var(--slate);color:var(--slate);border-radius:50%;
@@ -3900,7 +3914,7 @@ function getLwSteps(key){
 // الإلغاء الوحيد الذي يحتاج كلمة سر هو الخروج من حالة "منجز" تحديداً (يرجع
 // للصفر مباشرة، وليس إلى "قيد المتابعة").
 async function toggleLwStep(key, stepId, currentStatus, newStatus){
-  if(currentStatus === "done" && !newStatus){
+  if(currentStatus === "done" && newStatus !== "done"){
     const pwd = await askPassword("أدخل كلمة السر لإلغاء هذه الخطوة المُنجَزة:");
     if(!(await verifyPassword(pwd, LW_STEP_PASS_HASH))){
       showToast("⚠️ كلمة السر غير صحيحة", "warn");
@@ -3947,12 +3961,6 @@ function toggleCaseFolded(key){
   if(set.has(key)) set.delete(key); else set.add(key);
   saveFoldedCasesSet(set);
 }
-
-// متغيّرات عامة لكشف "النقر المزدوج" على أزرار خطوات المتابعة (تُعرَّف هنا
-// لتبقى قيمها محفوظة عبر كل إعادة رسم للصندوق، وليس متغيّرات محلية تُصفَّر)
-let _lastStepClickTimeGlobal = 0;
-let _lastStepClickIdGlobal = "";
-let _lastStepKnownStatusGlobal = ""; // الحالة "المعروفة فوراً" — تُحدَّث قبل انتظار الحفظ، بلا اعتماد على قراءة الزر المتأخرة بعد إعادة الرسم
 
 function renderLwActionsBox(){
   const listEl = document.getElementById("lwActionsBox");
@@ -4074,9 +4082,9 @@ function renderLwActionsBox(){
       if(!isApplicable){
         titleText = "غير متاح لهذه القضية";
       } else if(status){
-        titleText = s.label + " — " + statusLabel + " — " + stepDateStr + " (نقرتان سريعتان متتاليتان من (قيد المتابعة) = منجز)";
+        titleText = s.label + " — " + statusLabel + " — " + stepDateStr + " (اضغط لاختيار الحالة من القائمة)";
       } else {
-        titleText = s.label + " (نقرتان سريعتان متتاليتان من (قيد المتابعة) = منجز)";
+        titleText = s.label + " (اضغط لاختيار الحالة من القائمة)";
       }
       return `<button
           class="lw-step-btn ${statusClass} ${isApplicable ? '' : 'lw-step-disabled'}"
@@ -4144,7 +4152,7 @@ function renderLwActionsBox(){
             data-p2step="${escapeAttr(s.id)}"
             data-status="${status}"
             ${active ? '' : 'disabled'}
-            title="${active ? s.label + '\n(نقرتان سريعتان متتاليتان من (قيد المتابعة) = منجز)' : 'غير متاح للطرف الثاني'}"
+            title="${active ? s.label + '\n(اضغط لاختيار الحالة من القائمة)' : 'غير متاح للطرف الثاني'}"
           >${s.shortLabel}</button>`;
       }).join("");
       party2ExtraRow = `
@@ -4177,9 +4185,6 @@ function renderLwActionsBox(){
   // ===== النقر المزدوج: نقرتان سريعتان (أقل من نصف ثانية) على زر "قيد
   // المتابعة" تُحوِّله مباشرة إلى "منجز" — بلا أي توقيت لمس مطوّل هش، فقط
   // حدث "الضغط" العادي الموثوق بنفس القدر على كل الأجهزة والمتصفحات.
-  // (المتغيّران _lastStepClickTimeGlobal/_lastStepClickIdGlobal مُعرَّفان
-  // خارج هذه الدالة عمداً، ليبقيا محفوظين بين الضغطتين رغم إعادة الرسم
-  // الكاملة للصندوق التي تحدث بعد كل ضغطة منهما.)
 
   listEl.onclick = async (e)=>{
     const addP2Btn = e.target.closest(".lw-party2-add");
@@ -4195,39 +4200,41 @@ function renderLwActionsBox(){
     }
     const p2StepBtn = e.target.closest("[data-p2step]");
     if(p2StepBtn){
+      listEl.querySelectorAll(".lw-step-menu").forEach(m=> m.remove());
       const key = p2StepBtn.getAttribute("data-key");
       const stepId = p2StepBtn.getAttribute("data-p2step");
-      const uid = key + "|p2|" + stepId;
-      const now = Date.now();
-      const isSameButtonRecently = uid === _lastStepClickIdGlobal && (now - _lastStepClickTimeGlobal) < 500;
-      const currentStatus = isSameButtonRecently ? _lastStepKnownStatusGlobal : (p2StepBtn.getAttribute("data-status") || "");
-      const isDoubleTap = isSameButtonRecently && currentStatus === "progress";
-      let newStatus;
-      if(isDoubleTap){
-        newStatus = "done";
-      } else if(!currentStatus){
-        newStatus = "progress";
-      } else if(currentStatus === "progress"){
-        newStatus = "";
-      } else { // "done"
-        const pwd = await askPassword("أدخل كلمة السر لإلغاء هذه الخطوة المُنجَزة:");
-        if(!(await verifyPassword(pwd, LW_STEP_PASS_HASH))){
-          showToast("⚠️ كلمة السر غير صحيحة", "warn");
-          return;
-        }
-        newStatus = "";
-      }
-      _lastStepClickTimeGlobal = isDoubleTap ? 0 : now;
-      _lastStepClickIdGlobal = isDoubleTap ? "" : uid;
-      _lastStepKnownStatusGlobal = newStatus;
-      const rec = masterCache[key];
-      if(rec && rec["محامي_طرف2"]){
-        if(!rec["محامي_طرف2"].steps) rec["محامي_طرف2"].steps = {};
-        if(!newStatus) delete rec["محامي_طرف2"].steps[stepId];
-        else rec["محامي_طرف2"].steps[stepId] = {status:newStatus, date:new Date().toISOString()};
-        await saveMaster([key]);
-        renderLwActionsBox();
-      }
+      const currentStatus = p2StepBtn.getAttribute("data-status") || "";
+      const menu = document.createElement("div");
+      menu.className = "lw-step-menu";
+      menu.innerHTML = `
+        <button data-v="progress">⏳ قيد المتابعة</button>
+        <button data-v="done">✓ منجز</button>
+        <button data-v="">↺ إعادة تعيين</button>
+      `;
+      p2StepBtn.after(menu);
+      menu.querySelectorAll("button").forEach(optBtn=>{
+        optBtn.onclick = async (ev)=>{
+          ev.stopPropagation();
+          const newStatus = optBtn.getAttribute("data-v");
+          if(newStatus === currentStatus){ menu.remove(); return; }
+          if(currentStatus === "done" && newStatus !== "done"){
+            const pwd = await askPassword("أدخل كلمة السر لإلغاء هذه الخطوة المُنجَزة:");
+            if(!(await verifyPassword(pwd, LW_STEP_PASS_HASH))){
+              showToast("⚠️ كلمة السر غير صحيحة", "warn");
+              menu.remove();
+              return;
+            }
+          }
+          const rec = masterCache[key];
+          if(rec && rec["محامي_طرف2"]){
+            if(!rec["محامي_طرف2"].steps) rec["محامي_طرف2"].steps = {};
+            if(!newStatus) delete rec["محامي_طرف2"].steps[stepId];
+            else rec["محامي_طرف2"].steps[stepId] = {status:newStatus, date:new Date().toISOString()};
+            await saveMaster([key]);
+            renderLwActionsBox();
+          }
+        };
+      });
       return;
     }
     const removeP2Btn = e.target.closest(".lw-party2-remove");
@@ -4286,31 +4293,28 @@ function renderLwActionsBox(){
     }
     const stepBtn = e.target.closest(".lw-step-btn");
     if(stepBtn){
+      // إغلاق أي قائمة خطوة أخرى مفتوحة حالياً
+      listEl.querySelectorAll(".lw-step-menu").forEach(m=> m.remove());
       const key = stepBtn.getAttribute("data-key");
       const stepId = stepBtn.getAttribute("data-step");
-      const uid = key + "|" + stepId;
-      const now = Date.now();
-      // نعتمد على "آخر حالة نعرف أننا وصلنا إليها فوراً" بدل قراءة data-status
-      // من الزر مباشرة — إعادة الرسم بعد كل نقرة تتأخر بضع مللي ثوانٍ بسبب
-      // انتظار الحفظ في Firebase، فقد تُقرأ قيمة قديمة خطأً عند نقرة ثانية سريعة جداً.
-      const isSameButtonRecently = uid === _lastStepClickIdGlobal && (now - _lastStepClickTimeGlobal) < 500;
-      const currentStatus = isSameButtonRecently ? _lastStepKnownStatusGlobal : (stepBtn.getAttribute("data-status") || "");
-      const isDoubleTap = isSameButtonRecently && currentStatus === "progress";
-      let newStatus;
-      if(isDoubleTap){
-        newStatus = "done"; // نقرتان سريعتان من "قيد المتابعة" → منجز مباشرة
-      } else if(!currentStatus){
-        newStatus = "progress";
-      } else if(currentStatus === "progress"){
-        newStatus = ""; // ضغطة عادية ثانية (غير سريعة) على "قيد المتابعة" ترجعها للصفر
-      } else {
-        newStatus = ""; // من "منجز" — ستُطلَب كلمة السر داخل toggleLwStep
-      }
-      _lastStepClickTimeGlobal = isDoubleTap ? 0 : now; // تصفير بعد نجاح الزوج لمنع تسلسل ثلاثي عرضي
-      _lastStepClickIdGlobal = isDoubleTap ? "" : uid;
-      _lastStepKnownStatusGlobal = newStatus;
-      const ok = await toggleLwStep(key, stepId, currentStatus, newStatus);
-      if(ok) renderLwActionsBox();
+      const currentStatus = stepBtn.getAttribute("data-status") || "";
+      const menu = document.createElement("div");
+      menu.className = "lw-step-menu";
+      menu.innerHTML = `
+        <button data-v="progress">⏳ قيد المتابعة</button>
+        <button data-v="done">✓ منجز</button>
+        <button data-v="">↺ إعادة تعيين</button>
+      `;
+      stepBtn.after(menu);
+      menu.querySelectorAll("button").forEach(optBtn=>{
+        optBtn.onclick = async (ev)=>{
+          ev.stopPropagation();
+          const newStatus = optBtn.getAttribute("data-v");
+          if(newStatus === currentStatus){ menu.remove(); return; }
+          const ok = await toggleLwStep(key, stepId, currentStatus, newStatus);
+          if(ok) renderLwActionsBox();
+        };
+      });
       return;
     }
     const transferBtn = e.target.closest(".lw-transfer-btn");
