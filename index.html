@@ -2814,7 +2814,26 @@ async function bootstrapMasterCache(){
       markRenderCacheDirty();
       restoreFinancialFromMaster();
       RAW_DATA_UNIQUE_COUNT = dedupeByCase(RAW_DATA).length;
-      if(window._appFullyLoaded) render();
+      if(!window._appFullyLoaded) return;
+      // تحديث الصفحة الحالية تحديداً (أياً كانت مفتوحة فعلياً الآن)، وليس
+      // الجدول الرئيسي فقط — بدون هذا، أي صفحة أخرى (متابعة المحامي، القضايا،
+      // المتابعات، التحليل) تبقى عالقة على اللقطة المحلية القديمة حتى تُغادَر
+      // ويُعاد فتحها يدوياً، رغم وصول البيانات الحقيقية الأحدث بالفعل في الخلفية.
+      if(currentSection === "lawyer" && document.getElementById("lawyerPage").style.display !== "none"){
+        renderLwActionsBox();
+        renderLwStatsBox();
+      } else if(currentSection === "cases" && document.getElementById("casesPage").style.display !== "none"){
+        casesAllRows = getCasesRows();
+        applyCasesFilter(true);
+        renderClosureNeededBox();
+      } else if(currentSection === "followups" && document.getElementById("followupPage").style.display !== "none"){
+        renderFollowupList();
+        renderFuStatsBox();
+      } else if(currentSection === "analysis" && document.getElementById("analysisPage").style.display !== "none"){
+        renderAnalysisPage();
+      } else {
+        render(); // الصفحة الرئيسية (الرديات) أو الشاشة الرئيسية
+      }
     }
     // نُعرِّض وعداً منفصلاً يكتمل فقط عند اكتمال التحميل الكامل الفعلي من
     // Firebase (وليس فقط التحميل المحلي السريع أعلاه) — أي عملية قد تكتب
@@ -3933,6 +3952,7 @@ function toggleCaseFolded(key){
 // لتبقى قيمها محفوظة عبر كل إعادة رسم للصندوق، وليس متغيّرات محلية تُصفَّر)
 let _lastStepClickTimeGlobal = 0;
 let _lastStepClickIdGlobal = "";
+let _lastStepKnownStatusGlobal = ""; // الحالة "المعروفة فوراً" — تُحدَّث قبل انتظار الحفظ، بلا اعتماد على قراءة الزر المتأخرة بعد إعادة الرسم
 
 function renderLwActionsBox(){
   const listEl = document.getElementById("lwActionsBox");
@@ -4177,16 +4197,14 @@ function renderLwActionsBox(){
     if(p2StepBtn){
       const key = p2StepBtn.getAttribute("data-key");
       const stepId = p2StepBtn.getAttribute("data-p2step");
-      const currentStatus = p2StepBtn.getAttribute("data-status") || "";
       const uid = key + "|p2|" + stepId;
       const now = Date.now();
-      const isDoubleTap = currentStatus === "progress" && uid === _lastStepClickIdGlobal && (now - _lastStepClickTimeGlobal) < 500;
-      _lastStepClickTimeGlobal = now;
-      _lastStepClickIdGlobal = uid;
+      const isSameButtonRecently = uid === _lastStepClickIdGlobal && (now - _lastStepClickTimeGlobal) < 500;
+      const currentStatus = isSameButtonRecently ? _lastStepKnownStatusGlobal : (p2StepBtn.getAttribute("data-status") || "");
+      const isDoubleTap = isSameButtonRecently && currentStatus === "progress";
       let newStatus;
       if(isDoubleTap){
         newStatus = "done";
-        _lastStepClickTimeGlobal = 0; _lastStepClickIdGlobal = "";
       } else if(!currentStatus){
         newStatus = "progress";
       } else if(currentStatus === "progress"){
@@ -4199,6 +4217,9 @@ function renderLwActionsBox(){
         }
         newStatus = "";
       }
+      _lastStepClickTimeGlobal = isDoubleTap ? 0 : now;
+      _lastStepClickIdGlobal = isDoubleTap ? "" : uid;
+      _lastStepKnownStatusGlobal = newStatus;
       const rec = masterCache[key];
       if(rec && rec["محامي_طرف2"]){
         if(!rec["محامي_طرف2"].steps) rec["محامي_طرف2"].steps = {};
@@ -4267,16 +4288,17 @@ function renderLwActionsBox(){
     if(stepBtn){
       const key = stepBtn.getAttribute("data-key");
       const stepId = stepBtn.getAttribute("data-step");
-      const currentStatus = stepBtn.getAttribute("data-status") || "";
       const uid = key + "|" + stepId;
       const now = Date.now();
-      const isDoubleTap = currentStatus === "progress" && uid === _lastStepClickIdGlobal && (now - _lastStepClickTimeGlobal) < 500;
-      _lastStepClickTimeGlobal = now;
-      _lastStepClickIdGlobal = uid;
+      // نعتمد على "آخر حالة نعرف أننا وصلنا إليها فوراً" بدل قراءة data-status
+      // من الزر مباشرة — إعادة الرسم بعد كل نقرة تتأخر بضع مللي ثوانٍ بسبب
+      // انتظار الحفظ في Firebase، فقد تُقرأ قيمة قديمة خطأً عند نقرة ثانية سريعة جداً.
+      const isSameButtonRecently = uid === _lastStepClickIdGlobal && (now - _lastStepClickTimeGlobal) < 500;
+      const currentStatus = isSameButtonRecently ? _lastStepKnownStatusGlobal : (stepBtn.getAttribute("data-status") || "");
+      const isDoubleTap = isSameButtonRecently && currentStatus === "progress";
       let newStatus;
       if(isDoubleTap){
         newStatus = "done"; // نقرتان سريعتان من "قيد المتابعة" → منجز مباشرة
-        _lastStepClickTimeGlobal = 0; _lastStepClickIdGlobal = ""; // تصفير لمنع تسلسل نقرات إضافي عرضي
       } else if(!currentStatus){
         newStatus = "progress";
       } else if(currentStatus === "progress"){
@@ -4284,6 +4306,9 @@ function renderLwActionsBox(){
       } else {
         newStatus = ""; // من "منجز" — ستُطلَب كلمة السر داخل toggleLwStep
       }
+      _lastStepClickTimeGlobal = isDoubleTap ? 0 : now; // تصفير بعد نجاح الزوج لمنع تسلسل ثلاثي عرضي
+      _lastStepClickIdGlobal = isDoubleTap ? "" : uid;
+      _lastStepKnownStatusGlobal = newStatus;
       const ok = await toggleLwStep(key, stepId, currentStatus, newStatus);
       if(ok) renderLwActionsBox();
       return;
