@@ -693,24 +693,16 @@
   .lw-action-card{padding:10px 14px;}
   .lw-box-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
   .lw-filters-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
-  .lw-card-row{display:flex;flex-direction:row;align-items:center;gap:10px;direction:rtl;}
-  .lw-card-name{flex:1;font-weight:700;font-size:13px;color:var(--ink);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-  /* ===== تصميم متجاوب لبطاقات صندوق المتابعات: الشاشات الضيّقة (الهواتف)
-     تحديداً تحصل على تكديس عمودي (الاسم بسطر كامل العرض بلا قص، ثم الأزرار
-     أسفله)، بينما الشاشات الواسعة (الحاسوب) تبقى بتصميمها الأفقي الحالي دون
-     أي تغيير — الحدّ الفاصل 640px هو المعيار القياسي لتمييز الهاتف عن الحاسوب. */
+  .lw-card-row{display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px;direction:rtl;}
+  .lw-card-name{flex:1 1 auto;min-width:160px;font-weight:700;font-size:13px;color:var(--ink);text-align:right;white-space:normal;line-height:1.4;}
+  /* تخصيص إضافي للهواتف الضيقة جداً فقط — الأساس أعلاه يتكيَّف تلقائياً مع
+     أي عرض شاشة (تابلت، هاتف، حاسوب) بفضل flex-wrap، لكن الشاشات الضيقة
+     جداً (أقل من 640px) تستفيد من تكديس عمودي كامل وشبكة أزرار مرنة العرض. */
   @media (max-width: 640px){
     .lw-card-row{flex-direction:column;align-items:stretch;gap:8px;}
-    .lw-card-name{
-      white-space:normal;overflow:visible;text-overflow:clip;
-      width:100%;font-size:14px;line-height:1.4;
-    }
-    .lw-steps-grid{
-      grid-template-columns:repeat(5, minmax(0,1fr));width:100%;
-    }
-    .lw-transfer-btn, .lw-fold-btn, .lw-action-remove, .lw-party2-add{
-      align-self:flex-start;
-    }
+    .lw-card-name{width:100%;font-size:14px;}
+    .lw-steps-grid{grid-template-columns:repeat(5, minmax(0,1fr));width:100%;}
+    .lw-transfer-btn, .lw-fold-btn, .lw-action-remove, .lw-party2-add{align-self:flex-start;}
   }
   .lw-action-meta{display:none;}
   .lw-steps-grid{
