@@ -575,6 +575,12 @@
     padding:2px 8px;font-size:12px;cursor:pointer;
   }
   .cases-remove-btn:hover{background:#fee2e2;}
+  .cases-force-remove-btn{
+    background:#dc2626;border:1px solid #991b1b;color:#fff;border-radius:6px;
+    padding:2px 8px;font-size:12px;font-weight:900;cursor:pointer;
+    animation:lwDeleteBtnPulse 1.2s ease-in-out infinite;
+  }
+  .cases-force-remove-btn:hover{background:#991b1b;}
   .cases-cell-no{font-weight:700;white-space:nowrap;}
 
   .home-back-btn{padding:6px 12px;font-size:12.5px;margin-left:8px;flex:none;}
@@ -1505,6 +1511,7 @@
         <div style="display:flex;gap:8px;align-items:center;">
           <button class="btn secondary" id="casesAnalysisBtn">📊 تحليل الرديات</button>
           <button class="btn secondary" id="casesPrintBtn">🖨️ طباعة الكل</button>
+          <button class="btn secondary" id="casesForceDeleteModeBtn" title="يُظهر زر ✕ قسري بجانب كل قضية لمدة 10 ثوانٍ، بغضّ النظر عن حالتها المالية">🗑️ حذف قسري</button>
           <button class="btn secondary" id="casesPageClose">✕ إغلاق والعودة</button>
         </div>
       </div>
@@ -6395,6 +6402,40 @@ async function restoreCaseFromClosure(key){
   masterCache = master; invalidateMasterCaseNoIndex();
 }
 
+// ===== "وضع الحذف القسري المؤقت" لصفحة القضايا — نفس نمط الأوضاع المؤقتة
+// الناجحة في صفحات أخرى، لكن بمدة 10 ثوانٍ فقط. يتجاوز كل شروط الأهلية
+// المالية العادية (متبقٍ/متاح) عمداً — نقل قسري لأي قضية بأي حال كانت عليه
+// إلى "بحاجة إلى فصل"، بلا حذف نهائي (تبقى القضية وبياناتها كاملة، فقط تُنقَل). =====
+let _casesForceDeleteModeUntil = 0;
+let _casesForceDeleteModeTimer = null;
+const CASES_FORCE_DELETE_MODE_DURATION_MS = 10 * 1000; // 10 ثوانٍ فقط — مدة قصيرة عمداً لخطورة تجاوز الشروط
+
+function activateCasesForceDeleteMode(){
+  _casesForceDeleteModeUntil = getAccurateNow().getTime() + CASES_FORCE_DELETE_MODE_DURATION_MS;
+  applyCasesFilter(true);
+  showToast("🗑️ وضع الحذف القسري مُفعَّل لمدة 10 ثوانٍ فقط — اضغط ✕ بجانب أي قضية لنقلها قسراً لبحاجة إلى فصل", "warn");
+  clearInterval(_casesForceDeleteModeTimer);
+  _casesForceDeleteModeTimer = setInterval(()=>{
+    if(getAccurateNow().getTime() >= _casesForceDeleteModeUntil){
+      clearInterval(_casesForceDeleteModeTimer);
+      applyCasesFilter(true);
+    }
+  }, 1500);
+}
+
+async function forceMoveCaseToClosure(key){
+  const pwd = await askPassword("⚠️ حذف قسري بغضّ النظر عن الحالة المالية — سيُنقَل لقائمة بحاجة إلى فصل. أدخل كلمة السر للتأكيد:");
+  if(!(await verifyPassword(pwd, CASES_REMOVE_PASS_HASH))){
+    showToast("⚠️ كلمة السر غير صحيحة", "warn");
+    return;
+  }
+  await markCaseNeedsClosure(key);
+  casesAllRows = getCasesRows();
+  applyCasesFilter(true);
+  renderClosureNeededBox();
+  showToast("✓ نُقلت القضية قسراً إلى قائمة \"بحاجة إلى فصل\"", "ok");
+}
+
 function isCaseNeedsClosure(key){
   const rec = masterCache[key];
   return !!(rec && rec["بحاجة_فصل"]);
@@ -6874,9 +6915,12 @@ function renderCasesPage(){
     const isDblClickEligible = status === "فصل";
 
     const showRemoveBtn = !hasRemaining && !isProtectedFromDelete && (status !== "قيد التنفيذ" || rem === 0);
-    const removeBtnHtml = showRemoveBtn
-      ? `<button class="cases-remove-btn" data-key="${escapeAttr(key)}" title="إزالة (تسوية خارجية)">✕</button>`
-      : (isProtectedFromDelete ? `<span class="cases-protected-badge" title="محمية من الحذف — لها مبلغ متاح. دبل كليك على الصف للخيارات">🔒</span>` : "");
+    const forceDeleteModeActive = getAccurateNow().getTime() < _casesForceDeleteModeUntil;
+    const removeBtnHtml = forceDeleteModeActive
+      ? `<button class="cases-force-remove-btn" data-key="${escapeAttr(key)}" title="حذف قسري — بغضّ النظر عن الحالة المالية">✕</button>`
+      : (showRemoveBtn
+        ? `<button class="cases-remove-btn" data-key="${escapeAttr(key)}" title="إزالة (تسوية خارجية)">✕</button>`
+        : (isProtectedFromDelete ? `<span class="cases-protected-badge" title="محمية من الحذف — لها مبلغ متاح. دبل كليك على الصف للخيارات">🔒</span>` : ""));
     const dblClickClass = isDblClickEligible ? " cases-row-dblclick" : "";
 
     return `<tr class="cases-row${selected?' cases-row-selected':''}${rowBgClass}${dblClickClass}" data-key="${escapeAttr(key)}">
@@ -6896,6 +6940,11 @@ function renderCasesPage(){
 
   // Event delegation على tbody بدل listener لكل صف (أسرع وبدون memory leak)
   tbody.onclick = (e)=>{
+    const forceRemoveBtn = e.target.closest(".cases-force-remove-btn");
+    if(forceRemoveBtn){
+      forceMoveCaseToClosure(forceRemoveBtn.getAttribute("data-key"));
+      return;
+    }
     const removeBtn = e.target.closest(".cases-remove-btn");
     const remEditBtn = e.target.closest(".cases-rem-edit-btn");
     const row = e.target.closest(".cases-row");
@@ -7501,6 +7550,7 @@ document.getElementById("analysisSearch").addEventListener("input", ()=>{
 
 document.getElementById("casesPageClose").onclick = ()=>{ goHome(); };
 document.getElementById("casesPrintBtn").onclick = ()=>{ printCases(); };
+document.getElementById("casesForceDeleteModeBtn").onclick = activateCasesForceDeleteMode;
 
 // ===== قائمة الضغط المزدوج للقضايا المفصولة ذات المتاح =====
 // (حذف نهائي / تعديل المتاح / تعديل المتبقي) — تظهر بجانب موضع الضغط
