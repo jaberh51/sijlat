@@ -830,6 +830,7 @@
   .lw-amt-total{background:var(--slate-soft);color:var(--slate);}
   .lw-amt-collected{background:#d1fae5;color:#065f46;}
   .lw-amt-remaining{background:#fee2e2;color:#991b1b;}
+  .lw-amt-avail-waiting{background:#dbeafe;color:#1d4ed8;}
   .lw-pager{display:flex;align-items:center;justify-content:center;gap:14px;padding:12px 4px 4px;}
   .lw-pager .btn{padding:6px 14px;font-size:12.5px;}
   .lw-pager-info{font-size:13px;color:var(--ink-soft);font-weight:700;}
@@ -1424,6 +1425,7 @@
         <div class="fu-page-subtitle">📋 صندوق المتابعات (<span id="lwActionsCount">0</span>)</div>
         <div style="display:flex;gap:8px;">
           <button class="btn secondary" id="lwPrintBtn">🖨️ طباعة</button>
+          <button class="btn secondary" id="lwTransferModeBtn" title="يُفعِّل ترحيل كل القضايا لمدة 10 ثوانٍ، بغضّ النظر عن الشروط المعتادة">🚚 تفعيل الترحيل</button>
           <button class="btn secondary" id="lwDeleteModeBtn" title="يُظهر زر ✕ بجانب كل قضية لمدة دقيقة واحدة">🗑️ حذف</button>
         </div>
       </div>
@@ -4433,6 +4435,25 @@ function activateLwDeleteMode(){
   }, 3000);
 }
 
+// ===== "وضع تفعيل الترحيل المؤقت" — يُتيح ترحيل أي قضية لمدة 10 ثوانٍ
+// بغضّ النظر عن الشرطين المعتادين (خطوتان + تحصيل)، لحالات استثنائية. =====
+let _lwTransferModeUntil = 0;
+let _lwTransferModeTimer = null;
+const LW_TRANSFER_MODE_DURATION_MS = 10 * 1000; // 10 ثوانٍ فقط
+
+function activateLwTransferMode(){
+  _lwTransferModeUntil = getAccurateNow().getTime() + LW_TRANSFER_MODE_DURATION_MS;
+  renderLwActionsBox();
+  showToast("🚚 وضع الترحيل مُفعَّل لمدة 10 ثوانٍ لكل القضايا", "ok");
+  clearInterval(_lwTransferModeTimer);
+  _lwTransferModeTimer = setInterval(()=>{
+    if(getAccurateNow().getTime() >= _lwTransferModeUntil){
+      clearInterval(_lwTransferModeTimer);
+      renderLwActionsBox();
+    }
+  }, 1500);
+}
+
 function renderLwActionsBox(){
   const listEl = document.getElementById("lwActionsBox");
   const countEl = document.getElementById("lwActionsCount");
@@ -4568,7 +4589,7 @@ function renderLwActionsBox(){
         >${shortLabel}</button>`;
     }).join("");
     // حساب المبالغ — المصدر الأساسي هو masterCache لأن RAW_DATA لا يحتوي على هذه الحقول
-    let amtRequested = null, amtCollected = null, amtRemaining = null;
+    let amtRequested = null, amtCollected = null, amtRemaining = null, amtAvailWaiting = null;
     const rec = masterCache[item.key];
     if(rec){
       amtRequested = parseNum(rec["مجموع المبالغ المطلوبة"]);
@@ -4576,17 +4597,25 @@ function renderLwActionsBox(){
     if(item.row){
       const fin = getFinancialForRow(item.row);
       amtCollected = fin.total > 0 ? fin.total : null;
+      // إظهار "المتاح" فقط عندما يكون المحصّل صفراً (لم يصل شيء بعد) وكان
+      // يوجد مبلغ ينتظر فعلاً في المحكمة — تنبيه إضافي، بلا أي تغيير آخر
+      // بمجرد أن يصبح المحصّل غير صفر، يختفي هذا الرقم تلقائياً (لا داعي له بعدها).
+      if(!amtCollected){
+        const avail = getRowAvail(item.row);
+        if(avail !== null && avail > 0) amtAvailWaiting = avail;
+      }
     }
     // المتبقي دائماً = المطلوب ناقص المحصّل
     if(amtRequested !== null){
       amtRemaining = amtRequested - (amtCollected || 0);
     }
     const fmt = (n)=> n !== null ? n.toLocaleString('ar',{minimumFractionDigits:2,maximumFractionDigits:2}) : null;
-    const amtsHtml = (amtRequested !== null || amtCollected !== null || amtRemaining !== null) ? `
+    const amtsHtml = (amtRequested !== null || amtCollected !== null || amtRemaining !== null || amtAvailWaiting !== null) ? `
       <div class="lw-amt-row">
         ${amtRequested !== null ? `<span class="lw-amt lw-amt-total">📋 ${fmt(amtRequested)}</span>` : ""}
         ${amtCollected !== null ? `<span class="lw-amt lw-amt-collected">✓ ${fmt(amtCollected)}</span>` : ""}
         ${amtRemaining !== null ? `<span class="lw-amt lw-amt-remaining">⏳ ${fmt(amtRemaining)}</span>` : ""}
+        ${amtAvailWaiting !== null ? `<span class="lw-amt lw-amt-avail-waiting" title="مبلغ متاح بالمحكمة لم يُسحب بعد">🕒 ${fmt(amtAvailWaiting)}</span>` : ""}
       </div>` : "";
 
     // زر الترحيل الصريح إلى صفحة المتابعات — بعد الضغط، القضية تختفي فوراً
@@ -4594,8 +4623,10 @@ function renderLwActionsBox(){
     // لا يُسمح بالترحيل إلا بعد إنجاز خطوتين على الأقل، **و** وجود مبلغ
     // محصّل فعلاً — الهدف إبقاء أي قضية بلا تحصيل ظاهرة دائماً أمام العين
     // في هذا الصندوق، بلا إمكانية ترحيلها أو التخلّص منها قبل أن تُثمر.
+    // استثناء: "وضع تفعيل الترحيل المؤقت" (10 ثوانٍ) يتجاوز هذين الشرطين عمداً.
     const completedStepsCount = Object.values(item.steps || {}).filter(s => s && (s.status === 'done' || s.done)).length;
-    const canTransfer = completedStepsCount >= 2 && hasCollected;
+    const transferModeActive = getAccurateNow().getTime() < _lwTransferModeUntil;
+    const canTransfer = transferModeActive || (completedStepsCount >= 2 && hasCollected);
     const transferBlockReason = !hasCollected ? 'لا يمكن الترحيل قبل وجود مبلغ محصّل فعلاً لهذه القضية'
       : 'يلزم إنجاز خطوتين على الأقل قبل الترحيل (حالياً: '+completedStepsCount+')';
     const transferHtml = `<button class="lw-transfer-btn" data-key="${escapeAttr(item.key)}" data-can-transfer="${canTransfer?'1':'0'}" title="${canTransfer ? 'ترحيل هذه القضية إلى صفحة المتابعات' : transferBlockReason}" ${canTransfer ? '' : 'disabled'}>🚚 ترحيل</button>`;
@@ -7975,6 +8006,7 @@ document.addEventListener("click", (e)=>{
   document.querySelectorAll(".lw-step-menu").forEach(m=> m.remove());
 });
 
+document.getElementById("lwTransferModeBtn").onclick = activateLwTransferMode;
 document.getElementById("lwDeleteModeBtn").onclick = activateLwDeleteMode;
 document.getElementById("lwFilterClient").addEventListener("change", renderLwActionsBox);
 document.getElementById("lwFilterYear").addEventListener("change", renderLwActionsBox);
