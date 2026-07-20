@@ -709,6 +709,8 @@
     border-radius:999px;padding:6px 6px;cursor:pointer;text-align:center;
     line-height:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%;
     transition:background .15s ease, color .15s ease, border-color .15s ease, transform .1s ease;
+    -webkit-touch-callout:none;-webkit-user-select:none;user-select:none;
+    -webkit-tap-highlight-color:transparent;touch-action:manipulation;
   }
   .lw-step-btn:hover{border-color:var(--slate);background:var(--slate-soft);transform:translateY(-1px);}
   .lw-step-btn.lw-step-progress{
@@ -4186,6 +4188,9 @@ function renderLwActionsBox(){
   listEl.onmouseleave = cancelLongPress;
   listEl.ontouchend = cancelLongPress;
   listEl.ontouchcancel = cancelLongPress;
+  listEl.oncontextmenu = (e)=>{
+    if(e.target.closest(".lw-step-btn")) e.preventDefault();
+  };
 
   listEl.onclick = async (e)=>{
     const addP2Btn = e.target.closest(".lw-party2-add");
