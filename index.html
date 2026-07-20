@@ -467,6 +467,12 @@
     padding:2px 8px;font-size:11px;cursor:pointer;margin-inline-start:8px;
   }
   .closure-remove-btn:hover{background:#fee2e2;}
+  .closure-restore-btn{
+    background:none;border:1px solid var(--green);color:var(--green);border-radius:6px;
+    padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer;margin-inline-start:8px;
+    animation:lwDeleteBtnPulse 1.4s ease-in-out infinite;
+  }
+  .closure-restore-btn:hover{background:var(--green-soft);}
 
   .dove-notification{
     position:fixed;top:24px;left:50%;
@@ -1519,6 +1525,7 @@
           <span>⚖️ قضايا بحاجة إلى فصل (<span id="closureCount">0</span>)</span>
           <span class="closure-arrow" id="closureArrow">▾</span>
         </div>
+        <button class="btn secondary" id="closureRestoreModeBtn" style="font-size:11px;padding:5px 12px;margin:8px 0 0;" title="يُظهر زر استرجاع بجانب كل قضية لمدة 30 ثانية">↩️ تفعيل الاسترجاع (30 ثانية)</button>
         <div id="closureList" class="closure-list" style="display:none;"></div>
       </div>
 
@@ -6380,9 +6387,36 @@ async function markCaseNeedsClosure(key){
   masterCache = master; invalidateMasterCaseNoIndex();
 }
 
+// عكس markCaseNeedsClosure — إرجاع القضية لمتابعتها النشطة العادية
+async function restoreCaseFromClosure(key){
+  const master = masterCache;
+  if(master[key]) delete master[key]["بحاجة_فصل"];
+  await saveMaster([key]);
+  masterCache = master; invalidateMasterCaseNoIndex();
+}
+
 function isCaseNeedsClosure(key){
   const rec = masterCache[key];
   return !!(rec && rec["بحاجة_فصل"]);
+}
+
+// ===== "وضع الاسترجاع المؤقت" لقائمة بحاجة إلى فصل — نفس نمط "وضع الحذف
+// المؤقت" الناجح في صفحة المحامي، لكن بمدة 30 ثانية فقط (فعل أسرع وأقل حساسية). =====
+let _closureRestoreModeUntil = 0;
+let _closureRestoreModeTimer = null;
+const CLOSURE_RESTORE_MODE_DURATION_MS = 30 * 1000;
+
+function activateClosureRestoreMode(){
+  _closureRestoreModeUntil = getAccurateNow().getTime() + CLOSURE_RESTORE_MODE_DURATION_MS;
+  renderClosureNeededBox();
+  showToast("↩️ وضع الاسترجاع مُفعَّل لمدة 30 ثانية — اضغط الزر بجانب أي قضية لإرجاعها", "ok");
+  clearInterval(_closureRestoreModeTimer);
+  _closureRestoreModeTimer = setInterval(()=>{
+    if(getAccurateNow().getTime() >= _closureRestoreModeUntil){
+      clearInterval(_closureRestoreModeTimer);
+      renderClosureNeededBox();
+    }
+  }, 2000);
 }
 
 // علامة توثيقية: تم محاسبة المحامي على أتعابه لهذه القضية (لا تُخفي القضية، فقط تُسجَّل)
@@ -6517,10 +6551,16 @@ function renderClosureNeededBox(){
     const removeBtnHtml = isNowClosed
       ? `<button class="closure-remove-btn" data-key="${escapeAttr(key)}" title="إزالة نهائية (تسوية خارجية)">✕</button>`
       : "";
+    // زر الاسترجاع يظهر فقط أثناء تفعيل "وضع الاسترجاع" (30 ثانية من ضغط
+    // الزر المخصَّص أعلى الصندوق) — يُرجع القضية لمتابعتها النشطة العادية
+    const restoreModeActive = getAccurateNow().getTime() < _closureRestoreModeUntil;
+    const restoreBtnHtml = restoreModeActive
+      ? `<button class="closure-restore-btn" data-key="${escapeAttr(key)}" title="إرجاع هذه القضية لمتابعتها النشطة العادية">↩️ استرجاع</button>`
+      : "";
     return `
       <div class="closure-card" data-key="${escapeAttr(key)}">
         <div>
-          <div class="closure-card-info">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))} · ${escapeAttr(def)}${getClientBadgeHtml(r)} ${removeBtnHtml}</div>
+          <div class="closure-card-info">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))} · ${escapeAttr(def)}${getClientBadgeHtml(r)} ${removeBtnHtml}${restoreBtnHtml}</div>
           <div class="closure-card-sub">${escapeAttr(displayCourtName(r["المحكمة"]))} — ${subText}</div>
         </div>
         <label class="closure-checkbox-label">
@@ -6585,6 +6625,16 @@ document.getElementById("closureList").onchange = async (e)=>{
 };
 
 document.getElementById("closureList").onclick = async (e)=>{
+  const restoreBtn = e.target.closest(".closure-restore-btn");
+  if(restoreBtn){
+    const key = restoreBtn.getAttribute("data-key");
+    await restoreCaseFromClosure(key);
+    casesAllRows = getCasesRows();
+    applyCasesFilter(true);
+    renderClosureNeededBox();
+    showToast("✓ أُرجعت القضية لمتابعتها النشطة العادية", "ok");
+    return;
+  }
   const btn = e.target.closest(".closure-remove-btn");
   if(!btn) return;
   const key = btn.getAttribute("data-key");
@@ -6596,6 +6646,10 @@ document.getElementById("closureList").onclick = async (e)=>{
   await markCaseRemoved(key);
   renderClosureNeededBox();
   showToast("✓ تمت إزالة القضية نهائياً من النظام", "ok");
+};
+document.getElementById("closureRestoreModeBtn").onclick = (e)=>{
+  e.stopPropagation(); // منع فتح/طي الصندوق عند الضغط على هذا الزر
+  activateClosureRestoreMode();
 };
 
 function updateCasesSortUI(){
@@ -6811,12 +6865,16 @@ function renderCasesPage(){
     //
     // كل قضية حالتها "فصل" (بلا شرط وجود متاح) تحصل على تفاعل الضغط المزدوج
     // للتعديل اليدوي الكامل (المطلوب / المحصّل / المتبقي / المتاح) أو الحذف.
-    const PROTECTED_STATUSES = ["فصل", "متروكة", "إسقاط"];
+    const PROTECTED_STATUSES = ["فصل", "متروكة", "إسقاط", "قيد التنفيذ"];
     const hasAvailAmount = avail !== null && avail > 0;
     const isProtectedFromDelete = PROTECTED_STATUSES.includes(status) && hasAvailAmount;
     const isDblClickEligible = status === "فصل";
 
-    const showRemoveBtn = isProtectedFromDelete ? false : (status !== "قيد التنفيذ" || rem === 0);
+    // القاعدة المُحدَّثة: قضية "قيد التنفيذ" لا تصبح مؤهَّلة للإزالة إلا إذا
+    // كان المطلوب = المحصّل **و** لا يوجد مبلغ متاح معلّق لم يُسحب بعد —
+    // سابقاً كان يُكتفى بـ"المتبقي = صفر" فقط، متجاهلاً وجود مبلغ متاح فعلي.
+    const showRemoveBtn = isProtectedFromDelete ? false
+      : (status !== "قيد التنفيذ" || (rem === 0 && !hasAvailAmount));
     const removeBtnHtml = showRemoveBtn
       ? `<button class="cases-remove-btn" data-key="${escapeAttr(key)}" title="إزالة (تسوية خارجية)">✕</button>`
       : (isProtectedFromDelete ? `<span class="cases-protected-badge" title="محمية من الحذف — لها مبلغ متاح. دبل كليك على الصف للخيارات">🔒</span>` : "");
@@ -6868,7 +6926,12 @@ function renderCasesPage(){
         const row = getDedupedRAW().find(r => caseKey(r) === key);
         const status = row ? (row["حالة الدعوى"]||"").trim() : "";
         const fin = row ? getFinancialForRow(row) : null;
-        const isFinancedDone = fin && fin.remaining === 0;
+        const avail = row ? getRowAvail(row) : null;
+        // القاعدة المُحدَّثة: المطلوب = المحصّل (فالمتبقي صفر) **و** لا يوجد
+        // مبلغ متاح معلّق (لم يُسحب بعد كمعاملة). قبل هذا الإصلاح، كان الشرط
+        // يفحص "المتبقي = صفر" فقط، وبما أن صيغة المتبقي أصبحت تخصم "المتاح"
+        // ضمنياً، قضية فيها متاح لم يُسحب بعد كانت تُعتبَر "منتهية" بالخطأ.
+        const isFinancedDone = fin && fin.remaining === 0 && (avail === null || avail === 0);
 
         // قاعدة ثابتة غير قابلة للنقاش: أي قضية حالتها "قيد التنفيذ" يُمنع
         // حذفها نهائياً — تُنقل دائماً لقائمة "بحاجة إلى فصل" بدل الحذف.
@@ -6876,7 +6939,7 @@ function renderCasesPage(){
         // تجنّباً لنقل قضية لا يزال عليها مبلغ معلّق بالخطأ.
         if(status === "قيد التنفيذ"){
           if(!isFinancedDone){
-            showToast("⚠️ لا يمكن نقل هذه القضية — لا يزال عليها مبلغ متبقٍ", "warn");
+            showToast("⚠️ لا يمكن نقل هذه القضية — لا يزال عليها مبلغ متبقٍ أو متاح لم يُسحب بعد", "warn");
             return;
           }
           await markCaseNeedsClosure(key);
