@@ -823,6 +823,17 @@
     display:flex;flex-direction:column;gap:8px;
     background:#fbf5e9;border:1px dashed var(--brass);border-radius:12px;padding:10px;
   }
+  .lw-zero-section-header{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    background:#f3f4f6;border:1px solid #9ca3af;border-radius:10px;
+    padding:10px 16px;margin:20px 0 8px;cursor:pointer;
+    font-weight:700;font-size:13px;color:#4b5563;
+  }
+  .lw-zero-section-header:hover{filter:brightness(0.97);}
+  .lw-zero-section-body{
+    display:flex;flex-direction:column;gap:8px;
+    background:#f9fafb;border:1px dashed #9ca3af;border-radius:12px;padding:10px;opacity:0.85;
+  }
   .lw-transfer-btn:disabled{
     background:#f1f0ec;color:#a8a49a;border-color:#ddd9cd;cursor:not-allowed;opacity:0.8;
   }
@@ -4506,7 +4517,8 @@ function renderLwActionsBox(){
       const clientCode = client.includes("جابر") ? "J" : client.includes("حنين") ? "H" : "";
       const year = row ? getCaseYearNum(row).year : null;
       const dayGroup = rec["محامي_اجراء"].dayGroup || null;
-      items.push({key, row, info: rec["محامي_اجراء"], steps: rec["محامي_خطوات"] || {}, sector: rec["نوع_العمل"] || "", clientCode, year, dayGroup});
+      const parkedZero = !!rec["محامي_اجراء"].parkedInZeroSection;
+      items.push({key, row, info: rec["محامي_اجراء"], steps: rec["محامي_خطوات"] || {}, sector: rec["نوع_العمل"] || "", clientCode, year, dayGroup, parkedZero});
     }
   });
 
@@ -4723,12 +4735,40 @@ function renderLwActionsBox(){
     `;
   }
 
+  // ===== قسم "قضايا صفرية" — القضية تدخل هذا القسم فقط بعد أن يُرحِّلها
+  // المستخدم صراحةً وهي لا تزال بلا محصّل وبلا متاح (بدل الترحيل الخارجي
+  // المعتاد لصفحة المتابعات). أما "الخروج" من هذا القسم فتلقائي بالكامل:
+  // بمجرد وصول أي محصّل أو متاح، تُعرَض في القائمة العادية فوراً في إعادة
+  // الرسم التالية، وتُنظَّف علامة "التوقيف" تلقائياً من بياناتها.
+  function isItemStillZero(item){
+    if(!item.row) return false;
+    const fin = getFinancialForRow(item.row);
+    const itemAvail = getRowAvail(item.row);
+    return !(fin.total > 0) && !(itemAvail !== null && itemAvail > 0);
+  }
+  const zeroItems = [];
+  const nonZeroItems = [];
+  items.forEach(item=>{
+    if(item.parkedZero && isItemStillZero(item)){
+      zeroItems.push(item);
+    } else {
+      // "تخرّجت" من قسم الصفرية (وصلها مال) أو لم تُرحَّل إليه أصلاً — تنظيف
+      // العلامة تلقائياً إن كانت لا تزال موجودة لكنها لم تعد صفرية
+      if(item.parkedZero && !isItemStillZero(item)){
+        const rec = masterCache[item.key];
+        if(rec && rec["محامي_اجراء"]) delete rec["محامي_اجراء"].parkedInZeroSection;
+        saveMaster([item.key]); // حفظ صامت في الخلفية، بلا انتظار
+      }
+      nonZeroItems.push(item);
+    }
+  });
+
   // ===== تجميع "متابعة على مستوى اليوم" — القضايا المُضافة بوضع اليوم
   // مُفعَّلاً تُعرَض مُجمَّعة تحت عنوان قابل للطي بتاريخ إضافتها، بدل الظهور
   // في القائمة العامة المسطَّحة. القضايا العادية (بلا وسم يوم) لا تتأثر إطلاقاً.
-  const ungroupedItems = items.filter(i => !i.dayGroup);
+  const ungroupedItems = nonZeroItems.filter(i => !i.dayGroup);
   const dayGroupsMap = {};
-  items.filter(i => i.dayGroup).forEach(i=>{
+  nonZeroItems.filter(i => i.dayGroup).forEach(i=>{
     if(!dayGroupsMap[i.dayGroup]) dayGroupsMap[i.dayGroup] = [];
     dayGroupsMap[i.dayGroup].push(i);
   });
@@ -4750,6 +4790,19 @@ function renderLwActionsBox(){
       html += `<div class="lw-day-group-body">${groupItems.map(buildLwCard).join("")}</div>`;
     }
   });
+  // قسم القضايا الصفرية يظهر دائماً في الأسفل (أولوية أقل بصرياً) — قابل للطي
+  if(zeroItems.length){
+    const isZeroSectionFolded = localStorage.getItem('lw_zero_section_folded') === '1';
+    html += `
+      <div class="lw-zero-section-header" id="lwZeroSectionHeader">
+        <span>🔴 قضايا صفرية — بلا تحصيل وبلا متاح (${zeroItems.length})</span>
+        <span class="lw-day-group-toggle">${isZeroSectionFolded ? '▸ إظهار' : '▾ طي'}</span>
+      </div>
+    `;
+    if(!isZeroSectionFolded){
+      html += `<div class="lw-zero-section-body">${zeroItems.map(buildLwCard).join("")}</div>`;
+    }
+  }
   listEl.innerHTML = html;
 
   // Event delegation — مستمع واحد على الحاوية بدل مستمع لكل زر خطوة ولكل زر حذف.
@@ -4777,6 +4830,13 @@ function renderLwActionsBox(){
     const dayGroupHeader = e.target.closest(".lw-day-group-header");
     if(dayGroupHeader){
       toggleDayGroupFolded(dayGroupHeader.getAttribute("data-daykey"));
+      renderLwActionsBox();
+      return;
+    }
+    const zeroSectionHeader = e.target.closest("#lwZeroSectionHeader");
+    if(zeroSectionHeader){
+      const isFolded = localStorage.getItem('lw_zero_section_folded') === '1';
+      localStorage.setItem('lw_zero_section_folded', isFolded ? '0' : '1');
       renderLwActionsBox();
       return;
     }
@@ -4920,6 +4980,24 @@ function renderLwActionsBox(){
     const transferBtn = e.target.closest(".lw-transfer-btn");
     if(transferBtn){
       const key = transferBtn.getAttribute("data-key");
+      const row = getRowByKey(key);
+      const finCheck = row ? getFinancialForRow(row) : null;
+      const availCheck = row ? getRowAvail(row) : null;
+      const isZeroCase = !(finCheck && finCheck.total > 0) && !(availCheck !== null && availCheck > 0);
+      if(isZeroCase){
+        // ترحيل قضية صفرية لا يُرسلها لصفحة المتابعات الخارجية — بدلاً من
+        // ذلك، تُنقل إلى قسم "قضايا صفرية" داخل نفس الصندوق، وتخرج منه
+        // تلقائياً بمجرد وصول أي محصّل أو متاح لاحقاً.
+        const master = masterCache;
+        if(master[key] && master[key]["محامي_اجراء"]){
+          master[key]["محامي_اجراء"].parkedInZeroSection = true;
+          await saveMaster([key]);
+          masterCache = master;
+        }
+        renderLwActionsBox();
+        showToast("✓ نُقلت القضية إلى قسم \"قضايا صفرية\" داخل الصندوق — ستخرج منه تلقائياً عند وصول أي مبلغ", "ok");
+        return;
+      }
       // "وضع تفعيل الترحيل المؤقت" يتجاوز شرط الخطوتين تماماً — نفس الفحص
       // الذي يُحدِّد ظهور/تفعيل الزر نفسه، لتفادي أي تعارض بينهما مجدداً
       const transferModeActive = getAccurateNow().getTime() < _lwTransferModeUntil;
