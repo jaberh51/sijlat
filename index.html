@@ -4164,6 +4164,14 @@ function renderLwActionsBox(){
       _stepLongPressFired = true;
       const currentStatus = btn.getAttribute("data-status") || "";
       if(currentStatus === "done") return; // منجزة أصلاً، لا شيء إضافي
+      // تغيير المظهر فوراً بلا إعادة رسم كاملة للصندوق — إعادة الرسم أثناء
+      // استمرار لمس الإصبع للشاشة تُربك تتبّع اللمس في متصفحات الهواتف
+      // وتُلغي الإيماءة قبل اكتمالها. إعادة الرسم الكاملة الآمنة تحدث لاحقاً
+      // في معالج الضغط العادي، بعد أن يرفع المستخدم إصبعه فعلياً.
+      btn.classList.remove("lw-step-progress");
+      btn.classList.add("lw-step-done");
+      btn.setAttribute("data-status", "done");
+      if(navigator.vibrate) navigator.vibrate(80); // اهتزاز خفيف كتأكيد ملموس إن كان متاحاً
       const key = btn.getAttribute("data-key");
       const stepId = btn.getAttribute("data-step") || btn.getAttribute("data-p2step");
       const isP2 = btn.hasAttribute("data-p2step");
@@ -4178,7 +4186,6 @@ function renderLwActionsBox(){
         await toggleLwStep(key, stepId, currentStatus, "done");
       }
       showToast("✓ تم تحديد الخطوة كمُنجَزة", "ok");
-      renderLwActionsBox();
     }, 5000);
   };
   const cancelLongPress = ()=>{ clearTimeout(_stepLongPressTimer); };
@@ -4206,7 +4213,7 @@ function renderLwActionsBox(){
     }
     const p2StepBtn = e.target.closest("[data-p2step]");
     if(p2StepBtn){
-      if(_stepLongPressFired){ _stepLongPressFired = false; return; }
+      if(_stepLongPressFired){ _stepLongPressFired = false; renderLwActionsBox(); return; }
       const key = p2StepBtn.getAttribute("data-key");
       const stepId = p2StepBtn.getAttribute("data-p2step");
       const currentStatus = p2StepBtn.getAttribute("data-status") || "";
@@ -4287,7 +4294,7 @@ function renderLwActionsBox(){
     }
     const stepBtn = e.target.closest(".lw-step-btn");
     if(stepBtn){
-      if(_stepLongPressFired){ _stepLongPressFired = false; return; }
+      if(_stepLongPressFired){ _stepLongPressFired = false; renderLwActionsBox(); return; }
       const key = stepBtn.getAttribute("data-key");
       const stepId = stepBtn.getAttribute("data-step");
       const currentStatus = stepBtn.getAttribute("data-status") || "";
