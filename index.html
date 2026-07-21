@@ -547,6 +547,10 @@
     margin-inline-start:4px;padding:1px 3px;border-radius:4px;vertical-align:middle;
   }
   .cases-rem-edit-btn:hover{background:var(--paper-raised,#f3f4f6);}
+  .cases-rem-edit-btn-force{
+    background:#fee2e2;border:1px solid #fca5a5 !important;border-radius:50%;
+    animation:lwDeleteBtnPulse 1.4s ease-in-out infinite;
+  }
   .cases-protected-badge{
     display:inline-block;margin-inline-start:6px;font-size:12px;cursor:default;
   }
@@ -1569,7 +1573,7 @@
         <div style="display:flex;gap:8px;align-items:center;">
           <button class="btn secondary" id="casesAnalysisBtn">📊 تحليل الرديات</button>
           <button class="btn secondary" id="casesPrintBtn">🖨️ طباعة الكل</button>
-          <button class="btn secondary" id="casesForceDeleteModeBtn" title="يُظهر زر ✕ قسري بجانب كل قضية لمدة 10 ثوانٍ، بغضّ النظر عن حالتها المالية">🗑️ حذف قسري</button>
+          <button class="btn secondary" id="casesForceDeleteModeBtn" title="حذف قسري (✕) لمدة 10 ثوانٍ + تعديل قسري لكل الحقول (✏️) لمدة دقيقة، بغضّ النظر عن أي شروط">🗑️✏️ حذف/تعديل قسري</button>
           <button class="btn secondary" id="casesPageClose">✕ إغلاق والعودة</button>
         </div>
       </div>
@@ -6909,16 +6913,30 @@ let _casesForceDeleteModeUntil = 0;
 let _casesForceDeleteModeTimer = null;
 const CASES_FORCE_DELETE_MODE_DURATION_MS = 10 * 1000; // 10 ثوانٍ فقط — مدة قصيرة عمداً لخطورة تجاوز الشروط
 
+// وضع "التعديل القسري" — نفس الزر يُفعِّله معاً، لكن بمدة أطول (دقيقة كاملة)
+// لأن التعديل يحتاج وقتاً أكبر من مجرد ضغطة حذف سريعة. يُظهر القلم ✎ بجانب
+// كل قضية بلا استثناء، ويفتح قائمة التعديل الكاملة (المطلوب/المحصّل/المتبقي/
+// المتاح) بدل التعديل السريع المحدود بفارق دينارين فقط.
+let _casesForceEditModeUntil = 0;
+const CASES_FORCE_EDIT_MODE_DURATION_MS = 60 * 1000; // دقيقة كاملة
+
 function activateCasesForceDeleteMode(){
-  _casesForceDeleteModeUntil = getAccurateNow().getTime() + CASES_FORCE_DELETE_MODE_DURATION_MS;
+  const now = getAccurateNow().getTime();
+  _casesForceDeleteModeUntil = now + CASES_FORCE_DELETE_MODE_DURATION_MS;
+  _casesForceEditModeUntil = now + CASES_FORCE_EDIT_MODE_DURATION_MS;
   applyCasesFilter(true);
-  showToast("🗑️ وضع الحذف القسري مُفعَّل لمدة 10 ثوانٍ فقط — اضغط ✕ بجانب أي قضية لنقلها قسراً لبحاجة إلى فصل", "warn");
+  showToast("🗑️✏️ وُضعا الحذف والتعديل القسريان مُفعَّلان — الحذف 10 ثوانٍ، التعديل دقيقة كاملة", "warn");
   clearInterval(_casesForceDeleteModeTimer);
+  let wasDeleteActive = true, wasEditActive = true;
   _casesForceDeleteModeTimer = setInterval(()=>{
-    if(getAccurateNow().getTime() >= _casesForceDeleteModeUntil){
-      clearInterval(_casesForceDeleteModeTimer);
+    const stillDeleteActive = getAccurateNow().getTime() < _casesForceDeleteModeUntil;
+    const stillEditActive = getAccurateNow().getTime() < _casesForceEditModeUntil;
+    if(stillDeleteActive !== wasDeleteActive || stillEditActive !== wasEditActive){
       applyCasesFilter(true);
+      wasDeleteActive = stillDeleteActive;
+      wasEditActive = stillEditActive;
     }
+    if(!stillDeleteActive && !stillEditActive) clearInterval(_casesForceDeleteModeTimer);
   }, 1500);
 }
 
@@ -7400,8 +7418,11 @@ function renderCasesPage(){
     const naturalRem = fin.rawCalculatedRemaining;
     const canEditRem = naturalRem !== null && Math.abs(naturalRem) <= 2;
     const hasOverride = rec && rec["متبقي_يدوي"] !== undefined && rec["متبقي_يدوي"] !== null && rec["متبقي_يدوي"] !== "";
+    const forceEditModeActive = getAccurateNow().getTime() < _casesForceEditModeUntil;
     let remEditHtml = "";
-    if(canEditRem && !hasOverride){
+    if(forceEditModeActive){
+      remEditHtml = `<button class="cases-rem-edit-btn cases-rem-edit-btn-force" data-key="${escapeAttr(key)}" data-force="1" title="تعديل قسري — كل الحقول (المطلوب/المحصّل/المتبقي/المتاح)">✏️</button>`;
+    } else if(canEditRem && !hasOverride){
       remEditHtml = `<button class="cases-rem-edit-btn" data-key="${escapeAttr(key)}" title="تعديل المتبقي يدوياً (فرق رسوم المحكمة) — مسموح مرة واحدة فقط">✏️</button>`;
     }
 
@@ -7465,6 +7486,10 @@ function renderCasesPage(){
     const key = row.getAttribute("data-key");
 
     if(remEditBtn){
+      if(remEditBtn.getAttribute("data-force") === "1"){
+        showCasesDblClickMenu(e, key);
+        return;
+      }
       (async()=>{
         const dataRow = getDedupedRAW().find(r => caseKey(r) === key);
         const fin = dataRow ? getFinancialForRow(dataRow) : null;
