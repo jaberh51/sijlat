@@ -1587,6 +1587,10 @@
             <option value="999999">عرض الكل</option>
           </select>
           <span id="casesCount" class="cases-count">0 قضية</span>
+          <label class="closure-checkbox-label" title="إخفاء المقطعين الثاني والثالث من الأسماء">
+            <input type="checkbox" id="casesHideThirdSegment">
+            🙈
+          </label>
         </div>
         <div id="casesTypeBulkBar" style="display:none;align-items:center;gap:10px;margin-top:10px;padding:10px 14px;background:var(--brass-soft);border-radius:10px;flex-wrap:wrap;">
           <span id="casesTypeBulkCount" style="font-weight:700;font-size:12.5px;"></span>
@@ -7108,12 +7112,13 @@ function renderCasesPage(){
   const pageRows = casesFilteredRows.slice(start, start + CASES_PAGE_SIZE);
 
   const fmt = (n)=> n !== null ? n.toLocaleString('ar',{minimumFractionDigits:2,maximumFractionDigits:2}) : '<span class="amt-dash">—</span>';
+  const hideThirdCases = document.getElementById("casesHideThirdSegment").checked;
 
   tbody.innerHTML = pageRows.map(r=>{
     const key = caseKey(r);
     const rec = masterCache[key];
     const status = (r["حالة الدعوى"]||"").trim();
-    const def = getDefendantForRow(r);
+    const def = hideThirdCases ? maskThirdNameSegment(getDefendantForRow(r)) : getDefendantForRow(r);
     const fin = getFinancialForRow(r);
     const selected = casesSelected.has(key);
 
@@ -7968,6 +7973,7 @@ document.getElementById("casesSearch").addEventListener("input", ()=>{
 document.getElementById("casesStatusFilter").addEventListener("change", ()=> applyCasesFilter());
 document.getElementById("casesTypeFilter").addEventListener("change", ()=> applyCasesFilter());
 document.getElementById("casesCourtCityFilter").addEventListener("change", ()=> applyCasesFilter());
+document.getElementById("casesHideThirdSegment").addEventListener("change", ()=> renderCasesPage());
 document.getElementById("casesMarkPersonalBtn").onclick = ()=> bulkSetCaseType("شخصي");
 document.getElementById("casesMarkLawyerBtn").onclick = ()=> bulkSetCaseType("محامي");
 document.getElementById("casesClearTypeBtn").onclick = ()=> bulkSetCaseType(null);
