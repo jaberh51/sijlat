@@ -4513,6 +4513,18 @@ function renderLwActionsBox(){
     if(rec["مرحّل_للمتابعات"]) return;
     if(rec["محامي_اجراء"]){
       let row = getRowByKey(key);
+      // استبعاد رابع: القضية التي اكتمل تحصيلها بالكامل (المطلوب = المحصّل
+      // فعلياً عبر معاملات حقيقية) أو تحوَّلت حالتها إلى "فصل" — عملياً لم
+      // تعد بحاجة لأي متابعة إضافية من المحامي، فتخرج تلقائياً من الصندوق
+      // بأكمله (وبالتبعية من أي قسم فرعي داخله، اليومي أو الصفري، بما أنها
+      // لم تعد تصل أصلاً لمرحلة بناء تلك الأقسام).
+      if(row){
+        const status = (row["حالة الدعوى"]||"").trim();
+        const requested = parseNum(rec["مجموع المبالغ المطلوبة"]);
+        const fin = getFinancialForRow(row);
+        const fullyCollected = requested !== null && fin.total >= requested && requested > 0;
+        if(status === "فصل" || fullyCollected) return;
+      }
       const client = row ? getPlaintiffForRow(row) : "";
       const clientCode = client.includes("جابر") ? "J" : client.includes("حنين") ? "H" : "";
       const year = row ? getCaseYearNum(row).year : null;
