@@ -772,6 +772,11 @@
     box-shadow:0 1px 4px rgba(16,185,129,.25);
   }
   .fu-steps-chips-row{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px;}
+  .fu-party2-row{
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);
+  }
+  .fu-party2-name{font-size:12px;font-weight:700;color:var(--ink);}
 
   .fu-dot{
     display:inline-block;width:11px;height:11px;border-radius:50%;
@@ -829,6 +834,20 @@
     display:flex;flex-direction:column;gap:8px;
     background:#fbf5e9;border:1px dashed var(--brass);border-radius:12px;padding:10px;
   }
+  .lw-custom-group-header{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    background:linear-gradient(135deg,#ede9fe,#f3f0ff);border:1px solid #7c3aed;
+    border-radius:10px;padding:10px 16px;margin:16px 0 8px;cursor:pointer;
+    font-weight:700;font-size:13px;color:#5b21b6;
+  }
+  .lw-custom-group-header:hover{filter:brightness(1.03);}
+  .lw-custom-group-disband{font-size:11px;font-weight:700;color:#7c3aed;cursor:pointer;text-decoration:underline dotted;}
+  .lw-custom-group-disband:hover{color:#5b21b6;}
+  .lw-custom-group-body{
+    display:flex;flex-direction:column;gap:8px;
+    background:#faf9ff;border:1px dashed #7c3aed;border-radius:12px;padding:10px;
+  }
+  .lw-group-select-cb{width:16px;height:16px;cursor:pointer;flex:none;margin-inline-end:4px;}
   .lw-zero-section-header{
     display:flex;align-items:center;justify-content:space-between;gap:10px;
     background:#f3f4f6;border:1px solid #9ca3af;border-radius:10px;
@@ -1466,6 +1485,10 @@
           <input type="checkbox" id="lwHideThirdSegment">
           🙈
         </label>
+      </div>
+      <div id="lwGroupBulkBar" style="display:none;align-items:center;gap:10px;margin:10px 0;padding:10px 14px;background:var(--brass-soft);border-radius:10px;flex-wrap:wrap;">
+        <span id="lwGroupBulkCount" style="font-weight:700;font-size:12.5px;"></span>
+        <button class="btn secondary" id="lwCreateGroupBtn" style="font-size:11.5px;padding:6px 14px;">📦 تجميع في مجموعة مخصَّصة</button>
       </div>
       <div id="lwActionsBox" class="fu-tracked-list"></div>
     </div>
@@ -4487,9 +4510,67 @@ function toggleDayGroupFolded(dayKey){
   try{ localStorage.setItem('lw_folded_day_groups', JSON.stringify([...set])); }catch(e){}
 }
 
+// ===== المجموعات المخصَّصة — تحديد يدوي + تسمية يختارها المستخدم =====
+function getFoldedCustomGroupsSet(){
+  try{ return new Set(JSON.parse(localStorage.getItem('lw_folded_custom_groups') || '[]')); }
+  catch(e){ return new Set(); }
+}
+function toggleCustomGroupFolded(groupName){
+  const set = getFoldedCustomGroupsSet();
+  if(set.has(groupName)) set.delete(groupName); else set.add(groupName);
+  try{ localStorage.setItem('lw_folded_custom_groups', JSON.stringify([...set])); }catch(e){}
+}
+
+function updateLwGroupBulkBar(){
+  const bar = document.getElementById("lwGroupBulkBar");
+  const countEl = document.getElementById("lwGroupBulkCount");
+  if(lwSelectedForGroup.size > 0){
+    bar.style.display = "flex";
+    countEl.textContent = `${lwSelectedForGroup.size} قضية مُحدَّدة —`;
+  } else {
+    bar.style.display = "none";
+  }
+}
+
+async function createCustomGroupFromSelection(){
+  const keys = [...lwSelectedForGroup];
+  if(!keys.length) return;
+  const groupName = await askInput("اكتب عنواناً لهذه المجموعة (يمكن كتابة اسم مجموعة موجودة بالفعل لإضافة القضايا إليها):", {type:"text"});
+  if(!groupName || !groupName.trim()) return;
+  const name = groupName.trim();
+  keys.forEach(key=>{
+    if(masterCache[key] && masterCache[key]["محامي_اجراء"]){
+      masterCache[key]["محامي_اجراء"].customGroup = name;
+    }
+  });
+  await saveMaster(keys);
+  lwSelectedForGroup.clear();
+  showToast(`✓ أُضيفت ${keys.length} قضية إلى مجموعة "${name}"`, "ok");
+  renderLwActionsBox();
+}
+
+async function disbandCustomGroup(groupName){
+  const keysToUpdate = [];
+  Object.entries(masterCache).forEach(([key, rec])=>{
+    if(rec["محامي_اجراء"] && rec["محامي_اجراء"].customGroup === groupName){
+      delete rec["محامي_اجراء"].customGroup;
+      keysToUpdate.push(key);
+    }
+  });
+  if(keysToUpdate.length){
+    await saveMaster(keysToUpdate);
+    showToast(`↺ فُكَّت مجموعة "${groupName}" — عادت ${keysToUpdate.length} قضية للقائمة العادية`, "ok");
+    renderLwActionsBox();
+  }
+}
+
 // ===== "وضع الحذف المؤقت" — بديل موثوق تماماً عن إيماءات اللمس (الضغط
 // المطوّل والسحب فشلا كلاهما على الهاتف). زر واحد أعلى الصندوق يُفعِّل زر ✕
 // بجانب كل قضية لمدة دقيقة واحدة بالضبط، ثم يختفي تلقائياً بلا أي تفاعل. =====
+// تحديد يدوي للقضايا لتجميعها في مجموعة مخصَّصة بعنوان يختاره المستخدم —
+// محفوظ في الذاكرة فقط (يُصفَّر عند مغادرة الصفحة)، وليس محفوظاً بشكل دائم.
+let lwSelectedForGroup = new Set();
+
 let _lwDeleteModeUntil = 0;
 let _lwDeleteModeTimer = null;
 const LW_DELETE_MODE_DURATION_MS = 60 * 1000; // دقيقة واحدة بالضبط
@@ -4560,7 +4641,8 @@ function renderLwActionsBox(){
       const year = row ? getCaseYearNum(row).year : null;
       const dayGroup = rec["محامي_اجراء"].dayGroup || null;
       const parkedZero = !!rec["محامي_اجراء"].parkedInZeroSection;
-      items.push({key, row, info: rec["محامي_اجراء"], steps: rec["محامي_خطوات"] || {}, sector: rec["نوع_العمل"] || "", clientCode, year, dayGroup, parkedZero});
+      const customGroup = rec["محامي_اجراء"].customGroup || null;
+      items.push({key, row, info: rec["محامي_اجراء"], steps: rec["محامي_خطوات"] || {}, sector: rec["نوع_العمل"] || "", clientCode, year, dayGroup, parkedZero, customGroup});
     }
   });
 
@@ -4777,6 +4859,7 @@ function renderLwActionsBox(){
     return `
       <div class="fu-tracked-card lw-action-card" data-key="${escapeAttr(item.key)}">
         <div class="lw-card-row">
+          <input type="checkbox" class="lw-group-select-cb" data-key="${escapeAttr(item.key)}" ${lwSelectedForGroup.has(item.key) ? 'checked' : ''} title="تحديد للتجميع في مجموعة مخصَّصة">
           <div class="lw-card-name">${label}${sectorBadge}${amtsHtml}</div>
           <div class="lw-steps-grid">${stepsHtml}</div>
           ${transferHtml}
@@ -4820,16 +4903,45 @@ function renderLwActionsBox(){
   // ===== تجميع "متابعة على مستوى اليوم" — القضايا المُضافة بوضع اليوم
   // مُفعَّلاً تُعرَض مُجمَّعة تحت عنوان قابل للطي بتاريخ إضافتها، بدل الظهور
   // في القائمة العامة المسطَّحة. القضايا العادية (بلا وسم يوم) لا تتأثر إطلاقاً.
-  const ungroupedItems = nonZeroItems.filter(i => !i.dayGroup);
+  // ===== المجموعات المخصَّصة — يُنشئها المستخدم يدوياً بتحديد قضايا وتسميتها
+  // بعنوان من اختياره (أولوية أعلى من مجموعات اليوم التلقائية). =====
+  const customGroupItems = nonZeroItems.filter(i => i.customGroup);
+  const restAfterCustom = nonZeroItems.filter(i => !i.customGroup);
+  const customGroupsMap = {};
+  customGroupItems.forEach(i=>{
+    if(!customGroupsMap[i.customGroup]) customGroupsMap[i.customGroup] = [];
+    customGroupsMap[i.customGroup].push(i);
+  });
+  const customGroupNames = Object.keys(customGroupsMap).sort((a,b)=>a.localeCompare(b,'ar'));
+  const foldedCustomGroups = getFoldedCustomGroupsSet();
+
+  const ungroupedItems = restAfterCustom.filter(i => !i.dayGroup);
   const dayGroupsMap = {};
-  nonZeroItems.filter(i => i.dayGroup).forEach(i=>{
+  restAfterCustom.filter(i => i.dayGroup).forEach(i=>{
     if(!dayGroupsMap[i.dayGroup]) dayGroupsMap[i.dayGroup] = [];
     dayGroupsMap[i.dayGroup].push(i);
   });
   const dayGroupKeys = Object.keys(dayGroupsMap).sort((a,b)=> b.localeCompare(a)); // الأحدث أولاً
   const foldedDayGroups = getFoldedDayGroupsSet();
 
-  let html = ungroupedItems.map(buildLwCard).join("");
+  let html = "";
+  customGroupNames.forEach(groupName=>{
+    const groupItems = customGroupsMap[groupName];
+    const isFolded = foldedCustomGroups.has(groupName);
+    html += `
+      <div class="lw-custom-group-header" data-groupname="${escapeAttr(groupName)}">
+        <span>📦 ${escapeAttr(groupName)} (${groupItems.length} قضية)</span>
+        <span style="display:flex;gap:10px;align-items:center;">
+          <span class="lw-custom-group-disband" data-groupname="${escapeAttr(groupName)}" title="فك هذه المجموعة (تُعاد القضايا للقائمة العادية)">↺ فك</span>
+          <span class="lw-day-group-toggle">${isFolded ? '▸ إظهار' : '▾ طي'}</span>
+        </span>
+      </div>
+    `;
+    if(!isFolded){
+      html += `<div class="lw-custom-group-body">${groupItems.map(buildLwCard).join("")}</div>`;
+    }
+  });
+  html += ungroupedItems.map(buildLwCard).join("");
   dayGroupKeys.forEach(dayKey=>{
     const groupItems = dayGroupsMap[dayKey];
     const isGroupFolded = foldedDayGroups.has(dayKey);
@@ -4865,10 +4977,30 @@ function renderLwActionsBox(){
   // المتابعة" تُحوِّله مباشرة إلى "منجز" — بلا أي توقيت لمس مطوّل هش، فقط
   // حدث "الضغط" العادي الموثوق بنفس القدر على كل الأجهزة والمتصفحات.
 
+  listEl.onchange = (e)=>{
+    const cb = e.target.closest(".lw-group-select-cb");
+    if(!cb) return;
+    const key = cb.getAttribute("data-key");
+    if(cb.checked) lwSelectedForGroup.add(key);
+    else lwSelectedForGroup.delete(key);
+    updateLwGroupBulkBar();
+  };
+
   listEl.onclick = async (e)=>{
     const quickDeleteBtn = e.target.closest(".lw-quick-delete-btn");
     if(quickDeleteBtn){
       await confirmAndRemoveLawyerCase(quickDeleteBtn.getAttribute("data-key"));
+      return;
+    }
+    const disbandBtn = e.target.closest(".lw-custom-group-disband");
+    if(disbandBtn){
+      await disbandCustomGroup(disbandBtn.getAttribute("data-groupname"));
+      return;
+    }
+    const customGroupHeader = e.target.closest(".lw-custom-group-header");
+    if(customGroupHeader){
+      toggleCustomGroupFolded(customGroupHeader.getAttribute("data-groupname"));
+      renderLwActionsBox();
       return;
     }
     const dayGroupLabel = e.target.closest(".lw-day-group-label");
@@ -5139,7 +5271,7 @@ function getFollowupSourceRows(){
     if(!row) return;
     const status = (row["حالة الدعوى"]||"").trim();
     if(status === "فصل") return;         // مفصولة
-    out.push({key, row, steps: rec["محامي_خطوات"] || {}, sector: rec["نوع_العمل"] || ""});
+    out.push({key, row, steps: rec["محامي_خطوات"] || {}, sector: rec["نوع_العمل"] || "", party2: rec["محامي_طرف2"] || null});
   });
   return out;
 }
@@ -5216,7 +5348,7 @@ function renderFollowupList(){
   }
 
   listEl.innerHTML = items.map(item=>{
-    const { key, row, steps, sector } = item;
+    const { key, row, steps, sector, party2 } = item;
     const def = getDefendantForRow(row);
     const fin = getFinancialForRow(row);
     const hasTxns = fin.transactions && fin.transactions.length > 0;
@@ -5226,11 +5358,30 @@ function renderFollowupList(){
     const applicableStepIds = getApplicableSteps(sector);
 
     const stepsHtml = LW_STEPS.filter(s => applicableStepIds.includes(s.id)).map(s=>{
-      const done = steps[s.id] && steps[s.id].done;
+      const stepData = steps[s.id];
+      const done = stepData && (stepData.status === 'done' || stepData.done);
       return `<span class="fu-step-chip${done ? ' fu-step-chip-done' : ''}" title="${escapeAttr(s.label)}${done ? ' — ✓ منجَز' : ' — لم يُنجَز بعد'}">
         <span class="fu-step-icon">${done ? '✅' : '▫️'}</span>${escapeAttr(s.label)}
       </span>`;
     }).join("");
+
+    // عرض الطرف الثاني (إن وُجد) بنفس أسلوب صفحة "متابعة مع المحامي" —
+    // كانت هذه البيانات محفوظة بالفعل، لكن هذه الصفحة لم تكن تعرضها إطلاقاً.
+    let party2Html = "";
+    if(party2 && party2.name){
+      const p2s1 = party2.steps && party2.steps.step_kitabHasm && (party2.steps.step_kitabHasm.status === 'done' || party2.steps.step_kitabHasm.done);
+      const p2s2 = party2.steps && party2.steps.step_hajzMukafa && (party2.steps.step_hajzMukafa.status === 'done' || party2.steps.step_hajzMukafa.done);
+      party2Html = `
+        <div class="fu-party2-row">
+          <span class="fu-party2-name">👤 ${escapeAttr(party2.name)}</span>
+          <span class="fu-step-chip${p2s1 ? ' fu-step-chip-done' : ''}" title="كتاب حسم لاحق">
+            <span class="fu-step-icon">${p2s1 ? '✅' : '▫️'}</span>لاحق
+          </span>
+          <span class="fu-step-chip${p2s2 ? ' fu-step-chip-done' : ''}" title="حجز مكافأة">
+            <span class="fu-step-icon">${p2s2 ? '✅' : '▫️'}</span>حجز مكافأة
+          </span>
+        </div>`;
+    }
 
     return `
       <div class="fu-tracked-card lw-action-card" data-key="${escapeAttr(key)}">
@@ -5239,6 +5390,7 @@ function renderFollowupList(){
           <div class="lw-card-name">${escapeAttr(shortCaseNo(row["رقم الدعوى"]))} · ${escapeAttr(def)}${getClientBadgeHtml(row)}${sectorBadge}</div>
         </div>
         <div class="fu-steps-chips-row">${stepsHtml}</div>
+        ${party2Html}
       </div>
     `;
   }).join("");
@@ -8242,6 +8394,7 @@ document.addEventListener("click", (e)=>{
 
 document.getElementById("lwTransferModeBtn").onclick = activateLwTransferMode;
 document.getElementById("lwDeleteModeBtn").onclick = activateLwDeleteMode;
+document.getElementById("lwCreateGroupBtn").onclick = createCustomGroupFromSelection;
 document.getElementById("lwFilterClient").addEventListener("change", renderLwActionsBox);
 document.getElementById("lwFilterYear").addEventListener("change", renderLwActionsBox);
 document.getElementById("lwFilterSector").addEventListener("change", renderLwActionsBox);
