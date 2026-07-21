@@ -848,6 +848,18 @@
     background:#faf9ff;border:1px dashed #7c3aed;border-radius:12px;padding:10px;
   }
   .lw-group-select-cb{width:16px;height:16px;cursor:pointer;flex:none;margin-inline-end:4px;}
+  .audit-case-block{margin-top:6px;padding-inline-start:10px;border-inline-start:2px solid var(--line);}
+  .audit-field-row{
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px;
+    padding:3px 0;color:var(--ink-soft);
+  }
+  .audit-field-name{font-weight:700;color:var(--ink);min-width:90px;}
+  .audit-field-vals{flex:1;direction:ltr;text-align:right;unicode-bidi:plaintext;}
+  .audit-restore-btn{
+    background:none;border:1px solid var(--brass);color:var(--brass);border-radius:6px;
+    padding:1px 7px;font-size:11px;cursor:pointer;flex:none;
+  }
+  .audit-restore-btn:hover{background:var(--brass-soft);}
   .lw-zero-section-header{
     display:flex;align-items:center;justify-content:space-between;gap:10px;
     background:#f3f4f6;border:1px solid #9ca3af;border-radius:10px;
@@ -2231,8 +2243,8 @@ function applyAuditLogFilter(){
   const q = (document.getElementById("auditLogSearch").value || "").trim();
   const filtered = q.length >= 2
     ? _auditLogCache.filter(entry=>{
-        const all = [...(entry.changedKeys||[]), ...(entry.deletedKeys||[])].join(" ");
-        return all.includes(q);
+        const labels = (entry.changes||[]).map(c=>c.label).join(" ") + " " + (entry.changedKeys||[]).join(" ") + " " + (entry.deletedKeys||[]).join(" ");
+        return labels.includes(q);
       })
     : _auditLogCache;
   countEl.textContent = `${filtered.length} حدث${q.length>=2 ? ' مطابق' : ''}`;
@@ -2244,9 +2256,34 @@ function applyAuditLogFilter(){
     try{ const d = new Date(iso); return d.toLocaleDateString('ar-EG') + ' — ' + d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}); }
     catch(e){ return iso; }
   };
-  listEl.innerHTML = filtered.slice(0, 300).map(entry => {
-    const changedHtml = (entry.changedKeys||[]).length
-      ? `<div style="font-size:11.5px;color:var(--ink);">✏️ عُدِّل: ${entry.changedKeys.map(escapeAttr).join('، ')}</div>` : "";
+  // عرض مختصر وآمن لأي قيمة (نص، رقم، أو كائن/مصفوفة معقّدة) — للعرض فقط،
+  // القيمة الفعلية الكاملة تبقى محفوظة في السجل للاسترجاع الدقيق
+  const previewVal = (v)=>{
+    if(v === null || v === undefined || v === "") return "(فارغ)";
+    if(typeof v === "object") return "[بيانات مُركَّبة]";
+    return String(v);
+  };
+  listEl.innerHTML = filtered.slice(0, 300).map((entry, entryIdx) => {
+    let changesHtml = "";
+    if(entry.changes && entry.changes.length){
+      changesHtml = entry.changes.map(c=>{
+        if(!c.fields || !c.fields.length) return "";
+        const fieldsHtml = c.fields.map((f, fIdx)=>`
+          <div class="audit-field-row">
+            <span class="audit-field-name">${escapeAttr(f.field)}</span>
+            <span class="audit-field-vals">${escapeAttr(previewVal(f.before))} ← ${escapeAttr(previewVal(f.after))}</span>
+            <button class="audit-restore-btn" data-entrykey="${escapeAttr(entry.key)}" data-casekey="${escapeAttr(c.key)}" data-field="${escapeAttr(f.field)}" title="استرجاع هذا الحقل تحديداً لقيمته السابقة">↩️</button>
+          </div>
+        `).join("");
+        return `<div class="audit-case-block">
+          <div style="font-size:11.5px;font-weight:700;color:var(--ink);">✏️ ${escapeAttr(c.label)}</div>
+          ${fieldsHtml}
+        </div>`;
+      }).join("");
+    } else if(entry.changedKeys && entry.changedKeys.length){
+      // توافق مع سجلات قديمة (قبل إضافة تفاصيل الحقول) — عرض الاسم فقط
+      changesHtml = `<div style="font-size:11.5px;color:var(--ink);">✏️ عُدِّل: ${entry.changedKeys.map(escapeAttr).join('، ')}</div>`;
+    }
     const deletedHtml = (entry.deletedKeys||[]).length
       ? `<div style="font-size:11.5px;color:#dc2626;">🗑️ حُذف: ${entry.deletedKeys.map(escapeAttr).join('، ')}</div>` : "";
     return `
@@ -2255,10 +2292,33 @@ function applyAuditLogFilter(){
           <span style="font-weight:700;font-size:12.5px;color:var(--brass);">👤 ${escapeAttr(entry.email||'غير معروف')}</span>
           <span style="font-size:11px;color:var(--ink-soft);">${escapeAttr(fmtDate(entry.timestamp))}</span>
         </div>
-        ${changedHtml}${deletedHtml}
+        ${changesHtml}${deletedHtml}
       </div>
     `;
   }).join("") + (filtered.length > 300 ? `<div class="fu-search-hint">تُعرَض أحدث 300 حدث فقط — استخدم البحث لتضييق النتائج</div>` : "");
+
+  listEl.querySelectorAll(".audit-restore-btn").forEach(btn=>{
+    btn.onclick = async ()=>{
+      const entryKey = btn.getAttribute("data-entrykey");
+      const caseKeyVal = btn.getAttribute("data-casekey");
+      const fieldName = btn.getAttribute("data-field");
+      const entry = _auditLogCache.find(e=>e.key === entryKey);
+      const change = entry && entry.changes && entry.changes.find(c=>c.key === caseKeyVal);
+      const fieldChange = change && change.fields.find(f=>f.field === fieldName);
+      if(!fieldChange) return;
+      const pwd = await askPassword(`استرجاع حقل "${fieldName}" لقيمته السابقة. أدخل كلمة السر للتأكيد:`);
+      if(!(await verifyPassword(pwd, LW_STEP_PASS_HASH))){
+        showToast("⚠️ كلمة السر غير صحيحة", "warn");
+        return;
+      }
+      if(!masterCache[caseKeyVal]) masterCache[caseKeyVal] = {};
+      if(fieldChange.before === null) delete masterCache[caseKeyVal][fieldName];
+      else masterCache[caseKeyVal][fieldName] = fieldChange.before;
+      await saveMaster([caseKeyVal]);
+      showToast(`✓ استُرجعت القيمة السابقة لحقل "${fieldName}"`, "ok");
+      renderAuditLogList();
+    };
+  });
 }
 
 async function renderTrashList(){
@@ -3175,17 +3235,43 @@ function getCurrentUserEmail(){
 
 // تسجيل حدث تعديل — صامت تماماً، لا يُبطئ الحفظ ولا يُظهر أي رسالة، ولا
 // يمنع الحفظ الأساسي من الاكتمال حتى لو فشل تسجيل السجل نفسه لأي سبب.
-async function logAuditEntry(changedKeys, deletedKeys){
+// ===== تتبّع "آخر حالة محفوظة معروفة" لكل قضية — تُستخدَم لحساب الفرق
+// الدقيق (قبل/بعد) لكل حقل عند كل حفظ، بلا أي قراءة إضافية من Firebase
+// (مقارنة محلية بحتة، سريعة وبلا أي تأخير إضافي على الحفظ نفسه).
+let _lastKnownSnapshot = {};
+
+// مقارنة الحقول العليا فقط بين نسختين من نفس القضية — تُرجع قائمة بكل حقل
+// تغيَّرت قيمته فعلياً (بمقارنة مستقرة لا تتأثر بترتيب المفاتيح الداخلي)
+function computeFieldDiff(before, after){
+  const changes = [];
+  const beforeObj = before || {};
+  const afterObj = after || {};
+  const allFields = new Set([...Object.keys(beforeObj), ...Object.keys(afterObj)]);
+  allFields.forEach(field=>{
+    const b = beforeObj[field];
+    const a = afterObj[field];
+    if(stableStringify(b) !== stableStringify(a)){
+      changes.push({field, before: b === undefined ? null : b, after: a === undefined ? null : a});
+    }
+  });
+  return changes;
+}
+
+async function logAuditEntry(changedKeys, deletedKeys, fieldChangesByKey){
   if(!fbDb || (!changedKeys?.length && !deletedKeys?.length)) return;
   try{
     const fb = window.__fbModular;
+    const changesDetailed = (changedKeys||[]).map(k=>{
+      const row = getRowByKey(k);
+      const label = row ? `${shortCaseNo(row["رقم الدعوى"])} — ${getDefendantForRow(row)}` : k;
+      const fields = (fieldChangesByKey && fieldChangesByKey[k]) || [];
+      return {key: k, label, fields: sanitizeForFirebase(fields)};
+    });
     const entry = {
       email: getCurrentUserEmail(),
       timestamp: getAccurateNow().toISOString(),
-      changedKeys: (changedKeys||[]).map(k=>{
-        const row = getRowByKey(k);
-        return row ? `${shortCaseNo(row["رقم الدعوى"])} — ${getDefendantForRow(row)}` : k;
-      }),
+      changedKeys: changesDetailed.map(c=>c.label), // للتوافق مع العرض القديم إن لزم
+      changes: changesDetailed,
       deletedKeys: (deletedKeys||[]).map(k=>{
         const row = getRowByKey(k);
         return row ? `${shortCaseNo(row["رقم الدعوى"])} — ${getDefendantForRow(row)}` : k;
@@ -3234,6 +3320,15 @@ async function saveMaster(changedKeys){
       toSave = {};
       changedKeys.forEach(k=>{ if(masterCache[k] !== undefined) toSave[k] = masterCache[k]; });
     }
+    // حساب الفرق الدقيق (قبل/بعد) لكل قضية متأثرة، بمقارنة محلية بحتة مع
+    // "آخر حالة معروفة" — بلا أي قراءة إضافية من الشبكة، فلا تأخير على الحفظ.
+    const fieldChangesByKey = {};
+    if(changedKeys && changedKeys.length){
+      changedKeys.forEach(k=>{
+        const diff = computeFieldDiff(_lastKnownSnapshot[k], masterCache[k]);
+        if(diff.length) fieldChangesByKey[k] = diff;
+      });
+    }
     const ok = await fbSaveAllCases(toSave, deletions);
     if(ok) _pendingFbDeletions.clear();
     else showToast("⚠️ تعذّر الحفظ سحابياً — حُفظ محلياً فقط. السبب: " + (_lastFbSaveError || "غير معروف"), "warn");
@@ -3242,9 +3337,14 @@ async function saveMaster(changedKeys){
     // احتياطية) يُسجَّل كملخّص بالعدد فقط، تفادياً لتضخيم السجل بآلاف الأسماء.
     if(ok){
       if(changedKeys && changedKeys.length){
-        logAuditEntry(changedKeys, deletions);
+        logAuditEntry(changedKeys, deletions, fieldChangesByKey);
+        // تحديث "آخر حالة معروفة" لتصبح مرجع "قبل" للتعديل التالي
+        changedKeys.forEach(k=>{
+          _lastKnownSnapshot[k] = masterCache[k] !== undefined
+            ? JSON.parse(JSON.stringify(masterCache[k])) : undefined;
+        });
       } else {
-        logAuditEntry([`[حفظ كامل شامل: ${Object.keys(toSave).length} قضية]`], deletions);
+        logAuditEntry([`[حفظ كامل شامل: ${Object.keys(toSave).length} قضية]`], deletions, {});
       }
     }
   }
@@ -3316,6 +3416,9 @@ async function bootstrapMasterCache(){
         processAccumulatedBatches();
         try{ await idbSet('master_cases', JSON.stringify(masterCache)); }catch(e){}
       }
+      // تهيئة "آخر حالة معروفة" لكل القضايا — مرجع "قبل" صحيح لسجل التدقيق
+      // الدقيق لأي تعديل يحدث من الآن فصاعداً في هذه الجلسة
+      _lastKnownSnapshot = JSON.parse(JSON.stringify(masterCache));
     });
   } else {
     window._masterCacheFullSyncPromise = Promise.resolve();
