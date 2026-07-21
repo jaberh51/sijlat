@@ -450,6 +450,12 @@
     display:inline-block;margin-inline-start:6px;font-size:10.5px;font-weight:700;
     background:#dcfce7;color:#166534;border:1px solid #86efac;border-radius:6px;padding:2px 7px;
   }
+  .cases-type-badge{
+    display:inline-block;margin-inline-start:6px;font-size:10px;font-weight:700;
+    border-radius:6px;padding:2px 7px;white-space:nowrap;
+  }
+  .cases-type-badge-personal{background:#ede9fe;color:#6d28d9;}
+  .cases-type-badge-lawyer{background:#dbeafe;color:#1d4ed8;}
   .closure-header{
     display:flex;align-items:center;justify-content:space-between;cursor:pointer;
     font-weight:700;font-size:14.5px;color:#92400e;
@@ -1564,6 +1570,11 @@
             <option value="إسقاط">إسقاط</option>
             <option value="مجددة">مجددة</option>
           </select>
+          <select id="casesTypeFilter" class="cases-select">
+            <option value="">شخصي/محامي (الكل)</option>
+            <option value="شخصي">شخصي فقط</option>
+            <option value="محامي">محامي فقط</option>
+          </select>
           <select id="casesPageSizeSelect" class="cases-select" title="عدد القضايا في الصفحة الواحدة">
             <option value="25">25 في الصفحة</option>
             <option value="50">50 في الصفحة</option>
@@ -1571,6 +1582,12 @@
             <option value="999999">عرض الكل</option>
           </select>
           <span id="casesCount" class="cases-count">0 قضية</span>
+        </div>
+        <div id="casesTypeBulkBar" style="display:none;align-items:center;gap:10px;margin-top:10px;padding:10px 14px;background:var(--brass-soft);border-radius:10px;flex-wrap:wrap;">
+          <span id="casesTypeBulkCount" style="font-weight:700;font-size:12.5px;"></span>
+          <button class="btn secondary" id="casesMarkPersonalBtn" style="font-size:11.5px;padding:6px 14px;">🏷️ تصنيف: شخصي</button>
+          <button class="btn secondary" id="casesMarkLawyerBtn" style="font-size:11.5px;padding:6px 14px;">🏷️ تصنيف: محامي</button>
+          <button class="btn secondary" id="casesClearTypeBtn" style="font-size:11.5px;padding:6px 14px;">↺ إلغاء التصنيف</button>
         </div>
       </div>
     </div>
@@ -6501,7 +6518,36 @@ function isRecentlyIncreased(key){
 let casesFilteredRows = [];
 let casesCurrentPage = 0;
 let casesSearchTimer = null;
-let casesSelected = new Set(); // مفاتيح القضايا المحددة للطباعة
+let casesSelected = new Set(); // مفاتيح القضايا المحددة للطباعة أو التصنيف الجماعي
+
+// تحديث ظهور/عدد شريط التصنيف الجماعي — يُستدعى في كل مرة يتغيّر فيها التحديد
+function updateCasesTypeBulkBar(){
+  const bar = document.getElementById("casesTypeBulkBar");
+  const countEl = document.getElementById("casesTypeBulkCount");
+  if(casesSelected.size > 0){
+    bar.style.display = "flex";
+    countEl.textContent = `${casesSelected.size} قضية مُحدَّدة —`;
+  } else {
+    bar.style.display = "none";
+  }
+}
+
+// تصنيف كل القضايا المُحدَّدة دفعة واحدة (شخصي/محامي)، أو إلغاء التصنيف (null)
+async function bulkSetCaseType(type){
+  const keys = [...casesSelected];
+  if(!keys.length) return;
+  keys.forEach(key=>{
+    if(!masterCache[key]) masterCache[key] = {};
+    if(type) masterCache[key]["نوع_القضية"] = type;
+    else delete masterCache[key]["نوع_القضية"];
+  });
+  await saveMaster(keys);
+  showToast(type ? `✓ صُنِّفت ${keys.length} قضية كـ"${type}"` : `↺ أُلغي تصنيف ${keys.length} قضية`, "ok");
+  casesSelected.clear();
+  updateCasesTypeBulkBar();
+  casesAllRows = getCasesRows();
+  applyCasesFilter(true);
+}
 
 // دالة حفظ القضايا المُزالة (تسوية خارجية) في الماستر
 async function markCaseRemoved(key){
@@ -6905,12 +6951,18 @@ function updateCasesSortUI(){
 function applyCasesFilter(keepPage){
   const q = document.getElementById("casesSearch").value.trim();
   const status = document.getElementById("casesStatusFilter").value;
+  const typeFilter = document.getElementById("casesTypeFilter").value;
   detectAvailIncreases(casesAllRows);
   casesFilteredRows = casesAllRows.filter(r=>{
     if(status){
       const s = (r["حالة الدعوى"]||"").trim();
       if(status === "فصل" && s !== "فصل") return false;
       if(status !== "فصل" && s !== status) return false;
+    }
+    if(typeFilter){
+      const rec = masterCache[caseKey(r)];
+      const caseType = (rec && rec["نوع_القضية"]) || "";
+      if(caseType !== typeFilter) return false;
     }
     if(q.length >= 2){
       return (r["رقم الدعوى"]||"").includes(q) ||
@@ -7112,8 +7164,13 @@ function renderCasesPage(){
         : (isProtectedFromDelete ? `<span class="cases-protected-badge" title="محمية من الحذف — لها مبلغ متاح. دبل كليك على الصف للخيارات">🔒</span>` : ""));
     const dblClickClass = isDblClickEligible ? " cases-row-dblclick" : "";
 
+    const caseTypeRec = masterCache[key];
+    const caseTypeVal = caseTypeRec && caseTypeRec["نوع_القضية"];
+    const caseTypeBadge = caseTypeVal
+      ? `<span class="cases-type-badge cases-type-badge-${caseTypeVal === 'شخصي' ? 'personal' : 'lawyer'}">${caseTypeVal === 'شخصي' ? '🙋 شخصي' : '⚖️ محامي'}</span>`
+      : "";
     return `<tr class="cases-row${selected?' cases-row-selected':''}${rowBgClass}${dblClickClass}" data-key="${escapeAttr(key)}">
-      <td class="cases-cell-no" data-col="رقم القضية">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${finishedBadge}</td>
+      <td class="cases-cell-no" data-col="رقم القضية">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${finishedBadge}${caseTypeBadge}</td>
       <td data-col="الطرف">${escapeAttr(def)}${getClientBadgeHtml(r)}</td>
       <td data-col="المحكمة">${escapeAttr(displayCourtName(r["المحكمة"]))}</td>
       <td data-col="الحالة"><span class="cases-badge ${statusClass}">${escapeAttr(status)}</span></td>
@@ -7209,6 +7266,7 @@ function renderCasesPage(){
     else casesSelected.add(key);
     row.classList.toggle("cases-row-selected", casesSelected.has(key));
     renderCasesPrintBtn();
+    updateCasesTypeBulkBar();
   };
 
   // دبل كليك على أي صف → تمييزه كقضية طارئة (أحمر، محفوظ دائماً في الماستر)
@@ -7901,6 +7959,10 @@ document.getElementById("casesSearch").addEventListener("input", ()=>{
   casesSearchTimer = setTimeout(()=> applyCasesFilter(), 250);
 });
 document.getElementById("casesStatusFilter").addEventListener("change", ()=> applyCasesFilter());
+document.getElementById("casesTypeFilter").addEventListener("change", ()=> applyCasesFilter());
+document.getElementById("casesMarkPersonalBtn").onclick = ()=> bulkSetCaseType("شخصي");
+document.getElementById("casesMarkLawyerBtn").onclick = ()=> bulkSetCaseType("محامي");
+document.getElementById("casesClearTypeBtn").onclick = ()=> bulkSetCaseType(null);
 
 document.getElementById("casesPageSizeSelect").value = String(CASES_PAGE_SIZE);
 document.getElementById("casesPageSizeSelect").addEventListener("change", (e)=>{
