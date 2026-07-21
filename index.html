@@ -1462,9 +1462,9 @@
         <select id="lwFilterStep" class="cases-select">
           <option value="">كل الخطوات</option>
         </select>
-        <label class="closure-checkbox-label">
+        <label class="closure-checkbox-label" title="إخفاء المقطعين الثاني والثالث من الأسماء">
           <input type="checkbox" id="lwHideThirdSegment">
-          🙈 إخفاء المقطعين الثاني والثالث من الأسماء
+          🙈
         </label>
       </div>
       <div id="lwActionsBox" class="fu-tracked-list"></div>
@@ -1574,6 +1574,11 @@
             <option value="">شخصي/محامي (الكل)</option>
             <option value="شخصي">شخصي فقط</option>
             <option value="محامي">محامي فقط</option>
+          </select>
+          <select id="casesCourtCityFilter" class="cases-select">
+            <option value="">كل المحاكم</option>
+            <option value="عجلون">عجلون</option>
+            <option value="إربد">إربد</option>
           </select>
           <select id="casesPageSizeSelect" class="cases-select" title="عدد القضايا في الصفحة الواحدة">
             <option value="25">25 في الصفحة</option>
@@ -6952,6 +6957,7 @@ function applyCasesFilter(keepPage){
   const q = document.getElementById("casesSearch").value.trim();
   const status = document.getElementById("casesStatusFilter").value;
   const typeFilter = document.getElementById("casesTypeFilter").value;
+  const courtCityFilter = document.getElementById("casesCourtCityFilter").value;
   detectAvailIncreases(casesAllRows);
   casesFilteredRows = casesAllRows.filter(r=>{
     if(status){
@@ -6964,6 +6970,7 @@ function applyCasesFilter(keepPage){
       const caseType = (rec && rec["نوع_القضية"]) || "";
       if(caseType !== typeFilter) return false;
     }
+    if(courtCityFilter && !(r["المحكمة"]||"").includes(courtCityFilter)) return false;
     if(q.length >= 2){
       return (r["رقم الدعوى"]||"").includes(q) ||
              (r["المحكمة"]||"").includes(q) ||
@@ -7960,6 +7967,7 @@ document.getElementById("casesSearch").addEventListener("input", ()=>{
 });
 document.getElementById("casesStatusFilter").addEventListener("change", ()=> applyCasesFilter());
 document.getElementById("casesTypeFilter").addEventListener("change", ()=> applyCasesFilter());
+document.getElementById("casesCourtCityFilter").addEventListener("change", ()=> applyCasesFilter());
 document.getElementById("casesMarkPersonalBtn").onclick = ()=> bulkSetCaseType("شخصي");
 document.getElementById("casesMarkLawyerBtn").onclick = ()=> bulkSetCaseType("محامي");
 document.getElementById("casesClearTypeBtn").onclick = ()=> bulkSetCaseType(null);
