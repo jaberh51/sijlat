@@ -1349,6 +1349,23 @@
      زر طباعة خاص بنوع طلبها (إن كان قالبه متوفراً) -->
 <!-- نافذة تحذير قسرية لأي "موعد صارم" خلال 14 يوماً القادمة أو فات بالفعل —
      تظهر تلقائياً عند فتح النظام، ولا تختفي إلا بضغطة صريحة من المستخدم -->
+<!-- نافذة إدخال الموعد الصارم — تقويم بصري حقيقي بدل الكتابة اليدوية، لتفادي
+     أي خطأ في صيغة التاريخ (بما فيها مشكلة الأرقام الهندية) نهائياً -->
+<div id="deadlineInputModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:10001;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:16px;padding:22px 20px;min-width:280px;max-width:400px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.3);direction:rtl;font-family:'Tajawal',sans-serif;">
+    <div id="deadlineInputTitle" style="font-weight:700;font-size:15px;margin-bottom:14px;"></div>
+    <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:4px;">📅 التاريخ</label>
+    <input type="date" id="deadlineInputDate" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-family:'Tajawal',sans-serif;font-size:14px;margin-bottom:14px;box-sizing:border-box;">
+    <label style="font-size:12px;font-weight:700;color:#555;display:block;margin-bottom:4px;">📝 وصف مختصر (مثلاً: جلسة استماع)</label>
+    <input type="text" id="deadlineInputLabel" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-family:'Tajawal',sans-serif;font-size:14px;margin-bottom:16px;box-sizing:border-box;">
+    <div style="display:flex;gap:8px;">
+      <button id="deadlineInputConfirm" class="btn" style="flex:1;background:var(--brass);color:#fff;border:none;padding:10px;font-weight:700;">✓ حفظ</button>
+      <button id="deadlineInputRemove" class="btn secondary" style="flex:1;padding:10px;display:none;">🗑️ حذف الموعد</button>
+      <button id="deadlineInputCancel" class="btn secondary" style="flex:1;padding:10px;">إلغاء</button>
+    </div>
+  </div>
+</div>
+
 <div id="strictDeadlineModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10000;align-items:center;justify-content:center;">
   <div style="background:#fff;border-radius:16px;padding:22px 20px;min-width:300px;max-width:480px;width:92%;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.35);direction:rtl;font-family:'Tajawal',sans-serif;border:3px solid #dc2626;">
     <div style="font-weight:900;font-size:17px;color:#dc2626;margin-bottom:4px;">⚠️ مواعيد صارمة تحتاج انتباهك</div>
@@ -7306,7 +7323,7 @@ const STRICT_DEADLINE_WARNING_DAYS = 14; // أسبوعان قبل الموعد
 async function promptAddStrictDeadline(){
   const caseNoInput = await askInput("أدخل رقم القضية التي تريد إضافة موعد صارم لها:", {type:"text"});
   if(!caseNoInput || !caseNoInput.trim()) return;
-  const target = caseNoInput.trim();
+  const target = normalizeArabicDigits(caseNoInput.trim());
   const match = getDedupedRAW().find(r=>{
     const norm = shortCaseNo(r["رقم الدعوى"]);
     return norm === target || (norm.split(" - ")[0] === target);
@@ -7318,26 +7335,58 @@ async function promptAddStrictDeadline(){
   await setStrictDeadline(caseKey(match));
 }
 
+// نافذة إدخال الموعد الصارم — تُعيد {date, label} عند الحفظ، "REMOVE" عند
+// طلب الحذف الصريح، أو null عند الإلغاء. لا تعتمد على كتابة نصية للتاريخ
+// إطلاقاً (تقويم بصري حقيقي)، فتتفادى كل مشاكل صيغة التاريخ والأرقام الهندية.
+function askDeadlineInput(title, existing){
+  return new Promise((resolve)=>{
+    const modal = document.getElementById("deadlineInputModal");
+    const titleEl = document.getElementById("deadlineInputTitle");
+    const dateEl = document.getElementById("deadlineInputDate");
+    const labelEl = document.getElementById("deadlineInputLabel");
+    const confirmBtn = document.getElementById("deadlineInputConfirm");
+    const removeBtn = document.getElementById("deadlineInputRemove");
+    const cancelBtn = document.getElementById("deadlineInputCancel");
+
+    titleEl.textContent = title;
+    dateEl.value = existing ? existing.date : "";
+    labelEl.value = existing ? existing.label : "";
+    removeBtn.style.display = existing ? "block" : "none";
+    modal.style.display = "flex";
+    setTimeout(()=> dateEl.focus(), 50);
+
+    function cleanup(val){
+      modal.style.display = "none";
+      confirmBtn.removeEventListener("click", onConfirm);
+      removeBtn.removeEventListener("click", onRemove);
+      cancelBtn.removeEventListener("click", onCancel);
+      resolve(val);
+    }
+    function onConfirm(){
+      if(!dateEl.value){ showToast("⚠️ اختر تاريخاً من التقويم أولاً", "warn"); return; }
+      cleanup({date: dateEl.value, label: labelEl.value.trim() || "موعد بلا وصف"});
+    }
+    function onRemove(){ cleanup("REMOVE"); }
+    function onCancel(){ cleanup(null); }
+    confirmBtn.addEventListener("click", onConfirm);
+    removeBtn.addEventListener("click", onRemove);
+    cancelBtn.addEventListener("click", onCancel);
+  });
+}
+
 async function setStrictDeadline(key){
   const row = getRowByKey(key);
   const rec = masterCache[key];
   const existing = rec && rec["موعد_صارم"];
-  const promptText = existing
-    ? "أدخل تاريخ الموعد الصارم (YYYY-MM-DD) — أو امسح الحقل واترك فارغاً لحذف الموعد الحالي:"
-    : "أدخل تاريخ الموعد الصارم (YYYY-MM-DD):";
-  const dateInput = await askInput(promptText, {type:"text", defaultValue: existing ? existing.date : ""});
-  if(dateInput === null) return; // إلغاء صريح
-  if(dateInput.trim() === ""){
-    if(existing) await removeStrictDeadline(key);
+  const caseLabel = row ? `${shortCaseNo(row["رقم الدعوى"])} — ${getDefendantForRow(row)}` : key;
+  const result = await askDeadlineInput(`⏰ موعد صارم لـ: ${caseLabel}`, existing);
+  if(result === null) return; // إلغاء
+  if(result === "REMOVE"){
+    await removeStrictDeadline(key);
     return;
   }
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(dateInput.trim())){
-    showToast("⚠️ صيغة التاريخ غير صحيحة — استخدم YYYY-MM-DD مثل 2026-08-15", "warn");
-    return;
-  }
-  const label = await askInput("وصف مختصر للموعد (مثلاً: جلسة استماع):", {type:"text", defaultValue: existing ? existing.label : ""});
   if(!masterCache[key]) masterCache[key] = {};
-  masterCache[key]["موعد_صارم"] = {date: dateInput.trim(), label: label || "موعد بلا وصف"};
+  masterCache[key]["موعد_صارم"] = {date: result.date, label: result.label};
   await saveMaster([key]);
   showToast("✓ تم تسجيل الموعد الصارم لهذه القضية", "ok");
   applyCasesFilter(true);
