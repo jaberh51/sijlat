@@ -1630,11 +1630,6 @@
           </select>
           <select id="casesCourtCityFilter" class="cases-select">
             <option value="">كل المحاكم</option>
-            <option value="عجلون">عجلون</option>
-            <option value="اربد">اربد</option>
-            <option value="بني عبيد">بني عبيد</option>
-            <option value="الاغوار الشمالية">الأغوار الشمالية</option>
-            <option value="الشونة الجنوبية">الشونة الجنوبية</option>
           </select>
           <select id="casesPageSizeSelect" class="cases-select" title="عدد القضايا في الصفحة الواحدة">
             <option value="25">25 في الصفحة</option>
@@ -2843,6 +2838,20 @@ function getDefendantNames(r){
 
 function normalizeName(s){
   return String(s||"").replace(/\s+/g," ").trim();
+}
+
+// تطبيع النص العربي للبحث فقط (لا يُستخدَم للعرض أو التخزين، فقط للمقارنة
+// عند البحث) — يُوحِّد كل صيغ الهمزة (أ/إ/آ→ا)، التاء المربوطة/الهاء (ة→ه)،
+// والألف المقصورة/الياء (ى→ي)، فيحل مشكلة "اربد/إربد" جذرياً، ولأي كلمة
+// أخرى مشابهة قد تظهر مستقبلاً، بلا الحاجة لتذكّر كل حالة يدوياً كل مرة.
+function normalizeArabicForSearch(s){
+  return String(s||"")
+    .replace(/[أإآ]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/[\u064B-\u065F\u0670]/g, "") // إزالة أي تشكيل إن وُجد
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 // Count how many cases each defendant appears in, to know who has multiple cases
@@ -7247,11 +7256,35 @@ function updateCasesSortUI(){
   });
 }
 
+// استخراج ديناميكي لكل "أسماء المحاكم" الفعلية من البيانات — بدل قائمة ثابتة
+// قد تصبح ناقصة (كما حدث فعلياً)، هذه الدالة تكتشف تلقائياً كل قيمة موجودة
+// حقاً في عمود "المحكمة"، فتبقى محدَّثة دائماً بلا أي تدخّل يدوي مستقبلاً.
+let _dynamicCourtNamesCache = null;
+function getKnownCourtNames(){
+  if(_dynamicCourtNamesCache) return _dynamicCourtNamesCache;
+  const set = new Set();
+  getDedupedRAW().forEach(r=>{
+    const displayed = displayCourtName(r["المحكمة"]); // يُزيل بادئة "تنفيذ" الثابتة
+    if(displayed) set.add(displayed.trim());
+  });
+  _dynamicCourtNamesCache = [...set].sort((a,b)=>a.localeCompare(b,'ar'));
+  return _dynamicCourtNamesCache;
+}
+
 function applyCasesFilter(keepPage){
   const q = document.getElementById("casesSearch").value.trim();
   const status = document.getElementById("casesStatusFilter").value;
   const typeFilter = document.getElementById("casesTypeFilter").value;
-  const courtCityFilter = document.getElementById("casesCourtCityFilter").value;
+  const courtSelect = document.getElementById("casesCourtCityFilter");
+  // تعبئة قائمة المحاكم ديناميكياً من البيانات الفعلية — تبقى محدَّثة تلقائياً
+  // مهما تغيّرت المحاكم مستقبلاً، بلا الحاجة لتعديل الكود يدوياً كل مرة.
+  if(courtSelect.options.length <= 1){
+    const currentVal = courtSelect.value;
+    const courts = getKnownCourtNames();
+    courtSelect.innerHTML = `<option value="">كل المحاكم</option>` + courts.map(c=>`<option value="${escapeAttr(c)}">${escapeAttr(c)}</option>`).join("");
+    courtSelect.value = courts.includes(currentVal) ? currentVal : "";
+  }
+  const courtCityFilter = courtSelect.value;
   detectAvailIncreases(casesAllRows);
   casesFilteredRows = casesAllRows.filter(r=>{
     if(status){
@@ -7264,16 +7297,19 @@ function applyCasesFilter(keepPage){
       const caseType = (rec && rec["نوع_القضية"]) || "";
       if(caseType !== typeFilter) return false;
     }
-    if(courtCityFilter && !(r["المحكمة"]||"").includes(courtCityFilter)) return false;
+    if(courtCityFilter && !normalizeArabicForSearch(r["المحكمة"]||"").includes(normalizeArabicForSearch(courtCityFilter))) return false;
     if(q.length >= 2){
       // بحث ذكي مُدمَج: كل كلمة مفصولة بمسافة في مربّع البحث تُفحَص بذكاء —
-      // سنة (4 أرقام)، تصنيف (شخصي/محامي)، اسم محكمة معروف، أو مقطع اسم عادي
-      // (يُطابَق في أي موقع من الاسم، بلا حاجة لتجاور الأحرف). كل الكلمات
-      // يجب أن تتحقق معاً (AND) — يسمح بدمج عدة معايير في بحث واحد فقط.
-      const tokens = q.split(/\s+/).filter(t=>t.length);
-      const KNOWN_COURT_CITIES = ["اربد","عجلون","بني عبيد","الاغوار الشمالية","الشونة الجنوبية"];
-      const allNamesText = [...getDefendantNames(r), getPlaintiffForRow(r)].join(" ");
-      const courtNameText = r["المحكمة"]||"";
+      // سنة (4 أرقام)، تصنيف (شخصي/محامي)، اسم محكمة معروف (من قائمة ديناميكية
+      // مُستخرَجة فعلياً من البيانات، وليست ثابتة قد تصبح ناقصة)، أو مقطع اسم
+      // عادي (يُطابَق في أي موقع من الاسم). كل الكلمات يجب أن تتحقق معاً (AND).
+      // كل المقارنات النصية تمرّ عبر تطبيع عربي (يُوحِّد الهمزة/التاء المربوطة/
+      // الألف المقصورة) — فالبحث عن "اربد" يُطابق "إربد" أيضاً تلقائياً، ولأي
+      // كلمة أخرى مشابهة، بلا الحاجة لتذكّر كل حالة يدوياً.
+      const tokens = q.split(/\s+/).filter(t=>t.length).map(normalizeArabicForSearch);
+      const KNOWN_COURT_NAMES = getKnownCourtNames().map(normalizeArabicForSearch);
+      const allNamesText = normalizeArabicForSearch([...getDefendantNames(r), getPlaintiffForRow(r)].join(" "));
+      const courtNameText = normalizeArabicForSearch(r["المحكمة"]||"");
       const caseNoText = r["رقم الدعوى"]||"";
       const recForSearch = masterCache[caseKey(r)];
       const caseTypeForSearch = (recForSearch && recForSearch["نوع_القضية"]) || "";
@@ -7281,7 +7317,7 @@ function applyCasesFilter(keepPage){
       return tokens.every(token=>{
         if(/^\d{4}$/.test(token)) return String(caseYearForSearch) === token;
         if(token === "شخصي" || token === "محامي") return caseTypeForSearch === token;
-        if(KNOWN_COURT_CITIES.includes(token)) return courtNameText.includes(token);
+        if(KNOWN_COURT_NAMES.includes(token)) return courtNameText.includes(token);
         return caseNoText.includes(token) || courtNameText.includes(token) || allNamesText.includes(token);
       });
     }
@@ -7403,6 +7439,21 @@ function renderCasesPage(){
 
   if(!total){
     tbody.innerHTML = "";
+    // رسالة تشخيصية بدل "لا نتائج" عامة — تُظهر بالضبط أي الفلاتر النشطة
+    // حالياً، حتى يعرف المستخدم فوراً ماذا يُعدِّل بدل التخمين (معيار تجربة
+    // بحث حديث: صفحة "لا نتائج" يجب أن تكون مفيدة، لا فارغة).
+    const activeFilters = [];
+    const q = document.getElementById("casesSearch").value.trim();
+    const statusVal = document.getElementById("casesStatusFilter").value;
+    const typeVal = document.getElementById("casesTypeFilter").value;
+    const courtVal = document.getElementById("casesCourtCityFilter").value;
+    if(q) activeFilters.push(`بحث: "${q}"`);
+    if(statusVal) activeFilters.push(`الحالة: ${statusVal}`);
+    if(typeVal) activeFilters.push(`التصنيف: ${typeVal}`);
+    if(courtVal) activeFilters.push(`المحكمة: ${courtVal}`);
+    emptyEl.innerHTML = activeFilters.length
+      ? `لا توجد نتائج مطابقة لـ(${activeFilters.join(' + ')}) — جرّب تضييق أو إزالة أحد هذه الشروط`
+      : `لا توجد قضايا مطابقة`;
     emptyEl.style.display = "block";
     pagerEl.innerHTML = "";
     renderCasesPrintBtn();
@@ -7788,6 +7839,7 @@ function goCases(){
   document.body.style.overflow = "hidden";
   currentSection = "cases";
   document.body.classList.remove("mode-remittances");
+  _dynamicCourtNamesCache = null; // إعادة اكتشاف المحاكم من الصفر عند كل فتح، لضمان التحديث الدائم
   openCasesPage();
   saveCurrentSection("cases");
 }
