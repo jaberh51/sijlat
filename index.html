@@ -1734,6 +1734,7 @@
       <div class="fu-page-title">📊 تحليل الرديات الجديدة</div>
       <div style="display:flex;gap:8px;align-items:center;">
         <button class="btn secondary" id="analysisPrintBtn">🖨️ طباعة</button>
+        <button class="btn secondary" id="analysisUnlockBtnTop" title="يسمح بإضافة شهر جديد لمدة دقيقة واحدة — يتطلّب كلمة السر">⚡ تفعيل</button>
         <button class="btn secondary" id="analysisPageClose">✕ إغلاق والعودة</button>
       </div>
     </div>
@@ -1754,7 +1755,7 @@
         <input type="text" id="analysisSearch" class="fu-search-input" placeholder="ابحث باسم الطرف، رقم القضية، أو اسم المحكمة...">
         <span id="analysisCount" class="cases-count">0 قضية</span>
       </div>
-      <div class="analysis-hint">💡 اضغط "⚡ تفعيل" أدناه للسماح بإضافة شهر تحليل جديد لمدة 5 دقائق — أنت من يُقرِّر التوقيت المناسب (بعد وصول كل المبالغ من الجهات). يمكنك تحديث الشهر الأخير في أي وقت عبر 🔄 بلا حاجة لتفعيل.</div>
+      <div class="analysis-hint">💡 اضغط "⚡ تفعيل" أعلى الصفحة (يتطلّب كلمة السر) للسماح بإضافة شهر تحليل جديد لمدة دقيقة واحدة — أنت من يُقرِّر التوقيت المناسب (بعد وصول كل المبالغ من الجهات). يمكنك تحديث الشهر الأخير في أي وقت عبر 🔄 بلا حاجة لتفعيل.</div>
       <div class="analysis-months-bar" id="analysisMonthsBar"></div>
       <div class="analysis-cards" id="analysisCards"></div>
       <div id="analysisEmpty" class="fu-search-hint" style="display:none;">لا توجد قضايا مطابقة</div>
@@ -8190,17 +8191,22 @@ async function freezeNewMonth(monthId){
 
 // إنشاء الشهر الأول تلقائياً عند أول فتح للصفحة — لا يتكرر بعد ذلك أبداً
 // ===== نظام "تفعيل مؤقت" بديل لقفل يوم 25 السابق — أنت من يُقرِّر التوقيت
-// المناسب يدوياً (بضغط زر ⚡ تفعيل) بدل قاعدة تاريخ ثابتة، لمدة 5 دقائق فقط. =====
+// المناسب يدوياً (بضغط زر ⚡ تفعيل + كلمة السر) بدل قاعدة تاريخ ثابتة، لمدة دقيقة واحدة فقط. =====
 let _analysisAddMonthUnlockedUntil = 0;
-const ANALYSIS_UNLOCK_DURATION_MS = 5 * 60 * 1000; // 5 دقائق
+const ANALYSIS_UNLOCK_DURATION_MS = 60 * 1000; // دقيقة واحدة فقط
 
 function canAddNewAnalysisMonth(){
   return getAccurateNow().getTime() < _analysisAddMonthUnlockedUntil;
 }
 
-function activateAnalysisAddMonthUnlock(){
+async function activateAnalysisAddMonthUnlock(){
+  const pwd = await askPassword("أدخل كلمة السر للسماح بإضافة شهر تحليل جديد لمدة دقيقة واحدة:");
+  if(!(await verifyPassword(pwd, LW_STEP_PASS_HASH))){
+    showToast("⚠️ كلمة السر غير صحيحة", "warn");
+    return;
+  }
   _analysisAddMonthUnlockedUntil = getAccurateNow().getTime() + ANALYSIS_UNLOCK_DURATION_MS;
-  showToast("⚡ سُمح بإضافة شهر جديد لمدة 5 دقائق", "ok");
+  showToast("⚡ سُمح بإضافة شهر جديد لمدة دقيقة واحدة", "ok");
   renderAnalysisPage();
   setTimeout(()=>{
     if(getAccurateNow().getTime() >= _analysisAddMonthUnlockedUntil) renderAnalysisPage();
@@ -8308,17 +8314,11 @@ function renderAnalysisMonthsBar(months){
     </div>`;
   }).join("");
   const canAdd = canAddNewAnalysisMonth();
-  const addBtnTitle = canAdd ? "إضافة شهر جديد" : "اضغط \"⚡ تفعيل\" أولاً للسماح بالإضافة";
-  const unlockBtnHtml = canAdd ? "" : `<button class="analysis-add-pill" id="analysisUnlockBtn" title="يسمح بإضافة شهر جديد لمدة 5 دقائق" style="background:var(--brass);">⚡ تفعيل</button>`;
+  const addBtnTitle = canAdd ? "إضافة شهر جديد" : "اضغط \"⚡ تفعيل\" أعلى الصفحة أولاً للسماح بالإضافة";
   bar.innerHTML = pills +
-    `<button class="analysis-add-pill" id="analysisAddMonthBtn" title="${addBtnTitle}" ${canAdd ? "" : "disabled"}>+</button>` +
-    unlockBtnHtml;
+    `<button class="analysis-add-pill" id="analysisAddMonthBtn" title="${addBtnTitle}" ${canAdd ? "" : "disabled"}>+</button>`;
 
   document.getElementById("analysisAddMonthBtn").onclick = ()=>{ addAnalysisMonth(); };
-  const unlockBtnEl = document.getElementById("analysisUnlockBtn");
-  if(unlockBtnEl){
-    unlockBtnEl.onclick = (e)=>{ e.stopPropagation(); activateAnalysisAddMonthUnlock(); };
-  }
   const refreshBtnEl = document.getElementById("analysisRefreshLastBtn");
   if(refreshBtnEl){
     refreshBtnEl.onclick = (e)=>{ e.stopPropagation(); refreshLastAnalysisMonth(); };
@@ -8329,8 +8329,23 @@ function renderAnalysisMonthsBar(months){
 }
 
 function renderAnalysisPage(){
-  const months = getAnalysisMonths();
+  // ترتيب تصاعدي صريح حسب رقم الشهر (وليس ترتيب التخزين الداخلي) — يضمن ظهور
+  // الشهر الأصغر رقماً (مثلاً 6) دائماً في أقصى اليمين (بداية القراءة RTL)،
+  // والأشهر التالية بجانبه بالترتيب الصحيح — بنفس الترتيب في الشريط والأعمدة معاً.
+  const months = getAnalysisMonths().slice().sort((a,b)=> parseInt(a.label,10) - parseInt(b.label,10));
   renderAnalysisMonthsBar(months);
+
+  // ترتيب القضايا: الأعلى قيمة في آخر شهر (الحالي) أولاً — أي قضية وصلها
+  // مبلغ جديد لهذا الشهر تقفز للمقدمة تلقائياً، بغضّ النظر عن أي صفحة كانت
+  // فيها سابقاً. القضايا بقيمة صفر في الشهر الحالي تُدفَع للأسفل تلقائياً.
+  const lastMonthIdx = months.length - 1;
+  if(lastMonthIdx >= 0){
+    analysisFilteredRows = [...analysisFilteredRows].sort((a,b)=>{
+      const va = getMonthColumnValue(a, lastMonthIdx, months) || 0;
+      const vb = getMonthColumnValue(b, lastMonthIdx, months) || 0;
+      return vb - va;
+    });
+  }
 
   const cardsEl = document.getElementById("analysisCards");
   const emptyEl = document.getElementById("analysisEmpty");
@@ -8468,6 +8483,7 @@ function goAnalysis(){
 }
 
 document.getElementById("analysisPageClose").onclick = ()=>{ goCases(); };
+document.getElementById("analysisUnlockBtnTop").onclick = activateAnalysisAddMonthUnlock;
 document.getElementById("casesAnalysisBtn").onclick = ()=>{ goAnalysis(); };
 document.getElementById("analysisPrintBtn").onclick = ()=>{ printAnalysis(); };
 document.getElementById("analysisSearch").addEventListener("input", ()=>{
