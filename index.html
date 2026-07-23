@@ -1614,7 +1614,7 @@
 
       <div class="fu-page-section" id="casesSearchSection">
         <div class="cases-controls">
-          <input type="text" id="casesSearch" class="fu-search-input" placeholder="ابحث باسم الطرف، رقم القضية، أو اسم المحكمة...">
+          <input type="text" id="casesSearch" class="fu-search-input" placeholder="بحث ذكي مُدمَج — اسم، محكمة، سنة، شخصي/محامي معاً (مثال: علي 2024 شخصي اربد)">
           <select id="casesStatusFilter" class="cases-select">
             <option value="">كل الحالات</option>
             <option value="قيد التنفيذ">قيد التنفيذ</option>
@@ -1632,6 +1632,9 @@
             <option value="">كل المحاكم</option>
             <option value="عجلون">عجلون</option>
             <option value="اربد">اربد</option>
+            <option value="بني عبيد">بني عبيد</option>
+            <option value="الاغوار الشمالية">الأغوار الشمالية</option>
+            <option value="الشونة الجنوبية">الشونة الجنوبية</option>
           </select>
           <select id="casesPageSizeSelect" class="cases-select" title="عدد القضايا في الصفحة الواحدة">
             <option value="25">25 في الصفحة</option>
@@ -7263,10 +7266,24 @@ function applyCasesFilter(keepPage){
     }
     if(courtCityFilter && !(r["المحكمة"]||"").includes(courtCityFilter)) return false;
     if(q.length >= 2){
-      return (r["رقم الدعوى"]||"").includes(q) ||
-             (r["المحكمة"]||"").includes(q) ||
-             getDefendantNames(r).some(n=>n.includes(q)) ||
-             getPlaintiffForRow(r).includes(q);
+      // بحث ذكي مُدمَج: كل كلمة مفصولة بمسافة في مربّع البحث تُفحَص بذكاء —
+      // سنة (4 أرقام)، تصنيف (شخصي/محامي)، اسم محكمة معروف، أو مقطع اسم عادي
+      // (يُطابَق في أي موقع من الاسم، بلا حاجة لتجاور الأحرف). كل الكلمات
+      // يجب أن تتحقق معاً (AND) — يسمح بدمج عدة معايير في بحث واحد فقط.
+      const tokens = q.split(/\s+/).filter(t=>t.length);
+      const KNOWN_COURT_CITIES = ["اربد","عجلون","بني عبيد","الاغوار الشمالية","الشونة الجنوبية"];
+      const allNamesText = [...getDefendantNames(r), getPlaintiffForRow(r)].join(" ");
+      const courtNameText = r["المحكمة"]||"";
+      const caseNoText = r["رقم الدعوى"]||"";
+      const recForSearch = masterCache[caseKey(r)];
+      const caseTypeForSearch = (recForSearch && recForSearch["نوع_القضية"]) || "";
+      const caseYearForSearch = getCaseYearNum(r).year;
+      return tokens.every(token=>{
+        if(/^\d{4}$/.test(token)) return String(caseYearForSearch) === token;
+        if(token === "شخصي" || token === "محامي") return caseTypeForSearch === token;
+        if(KNOWN_COURT_CITIES.includes(token)) return courtNameText.includes(token);
+        return caseNoText.includes(token) || courtNameText.includes(token) || allNamesText.includes(token);
+      });
     }
     return true;
   });
