@@ -5806,7 +5806,7 @@ function printFollowupSheet(){
     const hasTxns = fin.transactions && fin.transactions.length > 0;
     const dotColor = hasTxns ? "#22c55e" : "#ef4444";
     const stepsText = LW_STEPS.map(s=>{
-      const done = steps[s.id] && steps[s.id].done;
+      const done = steps[s.id] && (steps[s.id].status === 'done' || steps[s.id].done);
       return `${done ? '✅' : '▫️'} ${s.label}`;
     }).join("&nbsp;&nbsp;");
     return `
@@ -7397,7 +7397,7 @@ async function removeStrictDeadline(key){
   await saveMaster([key]);
   showToast("✓ حُذف الموعد الصارم", "ok");
   applyCasesFilter(true);
-  checkStrictDeadlines(); // إعادة فحص فوري — قد يُغلق النافذة تلقائياً إن لم يبقَ شيء
+  checkStrictDeadlines(true); // إعادة فحص قسرية (تتجاوز علامة الجلسة) — قد يُغلق النافذة تلقائياً إن لم يبقَ شيء
 }
 
 function getDaysUntil(dateStr){
@@ -7409,7 +7409,12 @@ function getDaysUntil(dateStr){
 
 // فحص كل القضايا بحثاً عن مواعيد صارمة خلال 14 يوماً أو فائتة — يُظهر نافذة
 // قسرية إن وُجد أي منها. يُستدعى عند كل فتح للصفحة الرئيسية.
-function checkStrictDeadlines(){
+// علامة جلسة (ليست محفوظة بشكل دائم) تمنع الظهور المتكرر عند مجرد التنقّل
+// بين الأقسام (رجوع للرئيسية) — تظهر مرة واحدة فقط لكل جلسة استخدام حقيقية
+// (تتصفّر تلقائياً فقط بإعادة تحميل الصفحة فعلياً، وليس بمجرد التنقّل الداخلي).
+let _strictDeadlineShownThisSession = false;
+function checkStrictDeadlines(forceRecheck){
+  if(_strictDeadlineShownThisSession && !forceRecheck) return;
   const items = [];
   Object.entries(masterCache).forEach(([key, rec])=>{
     if(!rec["موعد_صارم"]) return;
@@ -7419,7 +7424,11 @@ function checkStrictDeadlines(){
       items.push({key, row, days, ...rec["موعد_صارم"]});
     }
   });
-  if(!items.length) return;
+  if(!items.length){
+    if(forceRecheck) document.getElementById("strictDeadlineModal").style.display = "none";
+    return;
+  }
+  _strictDeadlineShownThisSession = true; // نُثبِّتها فقط عند وجود ما يُعرَض فعلاً
   items.sort((a,b)=> a.days - b.days); // الأقرب أولاً (أو الأكثر تأخّراً)
 
   const listEl = document.getElementById("strictDeadlineList");
@@ -8925,15 +8934,15 @@ document.getElementById("lwPrintBtn").onclick = ()=>{
   });
   const TOTAL_STEPS = LW_STEPS.length;
   items.sort((a,b)=>{
-    const aDone = Object.values(a.steps||{}).filter(s=>s.done).length;
-    const bDone = Object.values(b.steps||{}).filter(s=>s.done).length;
+    const aDone = Object.values(a.steps||{}).filter(s=>s.status === 'done' || s.done).length;
+    const bDone = Object.values(b.steps||{}).filter(s=>s.status === 'done' || s.done).length;
     if(aDone !== bDone) return aDone - bDone;
     return new Date(b.info.date) - new Date(a.info.date);
   });
   const rows = items.map(item=>{
     const label = item.row ? `${escapeAttr(shortCaseNo(item.row["رقم الدعوى"]))}${getClientSuffixText(item.row)} · ${escapeAttr(getDefendantForRow(item.row))}` : item.key;
     const stepsRow = LW_STEPS.map(s=>{
-      const done = item.steps[s.id] && item.steps[s.id].done;
+      const done = item.steps[s.id] && (item.steps[s.id].status === 'done' || item.steps[s.id].done);
       return `<td style="text-align:center;padding:4px 6px;font-size:12px;">${done ? '✓' : '○'}</td>`;
     }).join("");
     return `<tr style="border-bottom:1px solid #eee;"><td style="padding:6px 8px;font-size:12px;font-weight:700;">${label}</td>${stepsRow}</tr>`;
