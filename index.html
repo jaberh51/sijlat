@@ -7666,15 +7666,18 @@ function openLwPrintRequestsModal(){
   Object.entries(masterCache).forEach(([key, rec])=>{
     if(!rec["محامي_اجراء"]) return;
     if(rec["تسوية_خارجية"] || rec["بحاجة_فصل"] || rec["مرحّل_للمتابعات"]) return;
+    // فقط القضايا المصنَّفة "شخصي" (من فلتر شخصي/محامي في صفحة القضايا) —
+    // طلبات المحامي (تصنيف "محامي") مستبعدة عمداً هنا بناءً على طلب المستخدم
+    if((rec["نوع_القضية"] || "") !== "شخصي") return;
     const row = getRowByKey(key);
     if(!row) return;
     items.push({key, row, actionName: rec["محامي_اجراء"].action || "—"});
   });
   items.sort((a,b)=> a.actionName.localeCompare(b.actionName, 'ar'));
 
-  countEl.textContent = `${items.length} قضية متابَعة`;
+  countEl.textContent = `${items.length} قضية متابَعة (شخصي فقط)`;
   if(!items.length){
-    listEl.innerHTML = `<div class="fu-tracked-empty">لا توجد قضايا متابَعة حالياً في صندوق المتابعات.</div>`;
+    listEl.innerHTML = `<div class="fu-tracked-empty">لا توجد قضايا شخصية متابَعة حالياً (تُستبعَد هنا عمداً قضايا "محامي").</div>`;
   } else {
     listEl.innerHTML = items.map(item=>{
       const hasTemplate = !!LW_PRINT_TEMPLATES[item.actionName];
