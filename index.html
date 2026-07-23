@@ -1341,6 +1341,19 @@
   </div>
 </div>
 
+<!-- نافذة قائمة "طلبات جاهزة للطباعة" — كل القضايا المتابَعة، وبجانب كل واحدة
+     زر طباعة خاص بنوع طلبها (إن كان قالبه متوفراً) -->
+<div id="lwPrintRequestsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:var(--paper,#fff);border-radius:16px;padding:22px 20px;min-width:300px;max-width:520px;width:92%;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25);direction:rtl;font-family:'Tajawal',sans-serif;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+      <div style="font-weight:700;font-size:16px;color:var(--ink,#222);">📑 طلبات جاهزة للطباعة</div>
+      <button id="lwPrintRequestsClose" class="btn secondary" style="padding:5px 12px;font-size:12px;">✕ إغلاق</button>
+    </div>
+    <div id="lwPrintRequestsCount" style="font-size:12px;color:var(--ink-soft,#777);margin-bottom:12px;"></div>
+    <div id="lwPrintRequestsList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px;"></div>
+  </div>
+</div>
+
 <div id="auditLogPage" class="fu-page" style="display:none;">
   <div class="fu-page-inner">
     <div class="fu-page-header">
@@ -1478,6 +1491,7 @@
         <div class="fu-page-subtitle">📋 صندوق المتابعات (<span id="lwActionsCount">0</span>)</div>
         <div style="display:flex;gap:8px;">
           <button class="btn secondary" id="lwPrintBtn">🖨️ طباعة</button>
+          <button class="btn secondary" id="lwPrintRequestsBtn" title="قائمة كل القضايا المتابَعة، وبجانب كل واحدة زر طباعة طلبها الرسمي الخاص">📑 طلبات جاهزة للطباعة</button>
           <button class="btn secondary" id="lwTransferModeBtn" title="يُفعِّل ترحيل كل القضايا لمدة دقيقة واحدة، بغضّ النظر عن الشروط المعتادة">🚚 تفعيل الترحيل</button>
           <button class="btn secondary" id="lwDeleteModeBtn" title="يُظهر زر ✕ بجانب كل قضية لمدة دقيقة واحدة">🗑️ حذف</button>
         </div>
@@ -1709,7 +1723,7 @@
         <input type="text" id="analysisSearch" class="fu-search-input" placeholder="ابحث باسم الطرف، رقم القضية، أو اسم المحكمة...">
         <span id="analysisCount" class="cases-count">0 قضية</span>
       </div>
-      <div class="analysis-hint">💡 يُتاح إنشاء شهر تحليل جديد فقط من يوم 25 من كل شهر فصاعداً، حتى تصل كل المبالغ من جميع الجهات أولاً. يمكنك تحديث الشهر الأخير في أي وقت عبر 🔄.</div>
+      <div class="analysis-hint">💡 اضغط "⚡ تفعيل" أدناه للسماح بإضافة شهر تحليل جديد لمدة 5 دقائق — أنت من يُقرِّر التوقيت المناسب (بعد وصول كل المبالغ من الجهات). يمكنك تحديث الشهر الأخير في أي وقت عبر 🔄 بلا حاجة لتفعيل.</div>
       <div class="analysis-months-bar" id="analysisMonthsBar"></div>
       <div class="analysis-cards" id="analysisCards"></div>
       <div id="analysisEmpty" class="fu-search-hint" style="display:none;">لا توجد قضايا مطابقة</div>
@@ -7596,6 +7610,102 @@ function renderCasesPrintBtn(){
   btn.textContent = n > 0 ? `🖨️ طباعة المحددة (${n})` : "🖨️ طباعة الكل";
 }
 
+// ===== طباعة طلب رسمي "حسم راتب" — مُعبَّأ تلقائياً من بيانات القضية =====
+// النص مطابق حرفياً لما زوَّدنا به المستخدم، مع تعبئة الحقول المتغيّرة فقط
+// (رقم القضية، الجهة المالية، والتاريخ الحالي) — بلا أي تغيير في الصياغة القانونية.
+function printLawyerRequest_HasmRatib(key){
+  const row = getRowByKey(key);
+  if(!row){ showToast("⚠️ تعذّر إيجاد بيانات هذه القضية", "warn"); return; }
+  const rec = masterCache[key];
+  const caseNo = shortCaseNo(row["رقم الدعوى"]);
+  const sector = (rec && rec["نوع_العمل"]) || "..........................";
+  const today = getAccurateNow();
+  const day = String(today.getDate()).padStart(2,'0');
+  const month = String(today.getMonth()+1).padStart(2,'0');
+  const year = today.getFullYear();
+
+  const html = `<html><head><meta charset="utf-8">
+    <style>
+      body{font-family:'Amiri',Tajawal,Arial,serif;direction:rtl;padding:40px 50px;font-size:16px;line-height:2.4;}
+      .req-caseno{font-weight:700;margin-bottom:24px;}
+      .req-body{text-align:justify;}
+      .req-signatures{display:flex;justify-content:space-between;margin-top:70px;font-weight:700;}
+      @media print{ @page{ margin:2cm; } }
+    </style></head>
+    <body>
+      <div class="req-caseno">رقم القضية: ${escapeAttr(caseNo)} / *</div>
+      <div class="req-body">
+        حضر المحكوم له بالذات وقال:<br>
+        التمس تسطير كتاب حســـم للسيد المديـر المالي/ ${escapeAttr(sector)}<br>
+        وذلك لحسم ثلث الراتب للمحكوم عليه ) ( وللطلـب ترفع الأوراق<br>
+        الى رئيس التنفيذ تحريراً في ${day} / ${month} / ${year}
+      </div>
+      <div class="req-signatures">
+        <span>المحكوم لـه</span>
+        <span>مأمور التنفيذ</span>
+      </div>
+    </body></html>`;
+  const w = window.open('','_blank');
+  w.document.write(html);
+  w.document.close();
+  w.print();
+}
+
+// خريطة: اسم الإجراء → دالة الطباعة المخصَّصة له (يُضاف نوع جديد هنا فور
+// توفّر نصّه الرسمي — الأنواع غير المُدرَجة هنا تظهر في القائمة بلا زر طباعة فعّال)
+const LW_PRINT_TEMPLATES = {
+  "حسم راتب": printLawyerRequest_HasmRatib
+};
+
+function openLwPrintRequestsModal(){
+  const modal = document.getElementById("lwPrintRequestsModal");
+  const listEl = document.getElementById("lwPrintRequestsList");
+  const countEl = document.getElementById("lwPrintRequestsCount");
+
+  const items = [];
+  Object.entries(masterCache).forEach(([key, rec])=>{
+    if(!rec["محامي_اجراء"]) return;
+    if(rec["تسوية_خارجية"] || rec["بحاجة_فصل"] || rec["مرحّل_للمتابعات"]) return;
+    const row = getRowByKey(key);
+    if(!row) return;
+    items.push({key, row, actionName: rec["محامي_اجراء"].action || "—"});
+  });
+  items.sort((a,b)=> a.actionName.localeCompare(b.actionName, 'ar'));
+
+  countEl.textContent = `${items.length} قضية متابَعة`;
+  if(!items.length){
+    listEl.innerHTML = `<div class="fu-tracked-empty">لا توجد قضايا متابَعة حالياً في صندوق المتابعات.</div>`;
+  } else {
+    listEl.innerHTML = items.map(item=>{
+      const hasTemplate = !!LW_PRINT_TEMPLATES[item.actionName];
+      const label = `${shortCaseNo(item.row["رقم الدعوى"])} · ${getDefendantForRow(item.row)}`;
+      const printBtn = hasTemplate
+        ? `<button class="btn secondary lw-print-req-btn" data-key="${escapeAttr(item.key)}" data-action="${escapeAttr(item.actionName)}" style="font-size:11.5px;padding:6px 12px;">🖨️ طباعة</button>`
+        : `<span style="font-size:10.5px;color:var(--ink-soft);">قالب الطباعة غير متوفر بعد</span>`;
+      return `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:var(--paper-raised);border:1px solid var(--line);border-radius:10px;padding:10px 14px;">
+          <div>
+            <div style="font-weight:700;font-size:12.5px;">${escapeAttr(label)}</div>
+            <div style="font-size:11px;color:var(--brass);font-weight:700;">${escapeAttr(item.actionName)}</div>
+          </div>
+          ${printBtn}
+        </div>
+      `;
+    }).join("");
+  }
+
+  modal.style.display = "flex";
+
+  listEl.querySelectorAll(".lw-print-req-btn").forEach(btn=>{
+    btn.onclick = ()=>{
+      const key = btn.getAttribute("data-key");
+      const actionName = btn.getAttribute("data-action");
+      const fn = LW_PRINT_TEMPLATES[actionName];
+      if(fn) fn(key);
+    };
+  });
+}
+
 function printCases(){
   const fmt = (n)=> n !== null ? n.toLocaleString('ar',{minimumFractionDigits:2,maximumFractionDigits:2}) : "—";
   const rowsToPrint = casesSelected.size > 0
@@ -7817,12 +7927,22 @@ async function freezeNewMonth(monthId){
 }
 
 // إنشاء الشهر الأول تلقائياً عند أول فتح للصفحة — لا يتكرر بعد ذلك أبداً
-// لا يُسمح بإنشاء شهر تحليل جديد إلا من يوم 25 من الشهر فصاعداً — لأن مبالغ
-// الأشهر السابقة (رواتب جهات مختلفة) تصل بأوقات متفرّقة، والإنشاء المبكر
-// يُسجّل لقطة ناقصة. لا ينطبق هذا على الشهر الأول (ensureFirstMonth) لأنه
-// تأسيس أولي بلا "شهر سابق" يُقارَن به أصلاً.
+// ===== نظام "تفعيل مؤقت" بديل لقفل يوم 25 السابق — أنت من يُقرِّر التوقيت
+// المناسب يدوياً (بضغط زر ⚡ تفعيل) بدل قاعدة تاريخ ثابتة، لمدة 5 دقائق فقط. =====
+let _analysisAddMonthUnlockedUntil = 0;
+const ANALYSIS_UNLOCK_DURATION_MS = 5 * 60 * 1000; // 5 دقائق
+
 function canAddNewAnalysisMonth(){
-  return getAccurateNow().getDate() >= 25;
+  return getAccurateNow().getTime() < _analysisAddMonthUnlockedUntil;
+}
+
+function activateAnalysisAddMonthUnlock(){
+  _analysisAddMonthUnlockedUntil = getAccurateNow().getTime() + ANALYSIS_UNLOCK_DURATION_MS;
+  showToast("⚡ سُمح بإضافة شهر جديد لمدة 5 دقائق", "ok");
+  renderAnalysisPage();
+  setTimeout(()=>{
+    if(getAccurateNow().getTime() >= _analysisAddMonthUnlockedUntil) renderAnalysisPage();
+  }, ANALYSIS_UNLOCK_DURATION_MS + 500);
 }
 
 async function ensureFirstMonth(){
@@ -7837,7 +7957,7 @@ async function ensureFirstMonth(){
 // إضافة شهر جديد تلقائياً (بلا نافذة حوار) — الرقم = رقم آخر شهر + 1
 async function addAnalysisMonth(){
   if(!canAddNewAnalysisMonth()){
-    showToast("⚠️ لا يمكن إنشاء شهر جديد قبل يوم 25 من الشهر (حتى تصل كل المبالغ)", "warn");
+    showToast("⚠️ اضغط زر \"⚡ تفعيل\" أولاً للسماح بإضافة شهر جديد (لمدة 5 دقائق)", "warn");
     return;
   }
   const months = getAnalysisMonths();
@@ -7926,11 +8046,17 @@ function renderAnalysisMonthsBar(months){
     </div>`;
   }).join("");
   const canAdd = canAddNewAnalysisMonth();
-  const addBtnTitle = canAdd ? "إضافة شهر جديد" : "يُتاح فقط من يوم 25 فصاعداً";
+  const addBtnTitle = canAdd ? "إضافة شهر جديد" : "اضغط \"⚡ تفعيل\" أولاً للسماح بالإضافة";
+  const unlockBtnHtml = canAdd ? "" : `<button class="analysis-add-pill" id="analysisUnlockBtn" title="يسمح بإضافة شهر جديد لمدة 5 دقائق" style="background:var(--brass);">⚡ تفعيل</button>`;
   bar.innerHTML = pills +
-    `<button class="analysis-add-pill" id="analysisAddMonthBtn" title="${addBtnTitle}" ${canAdd ? "" : "disabled"}>+</button>`;
+    `<button class="analysis-add-pill" id="analysisAddMonthBtn" title="${addBtnTitle}" ${canAdd ? "" : "disabled"}>+</button>` +
+    unlockBtnHtml;
 
   document.getElementById("analysisAddMonthBtn").onclick = ()=>{ addAnalysisMonth(); };
+  const unlockBtnEl = document.getElementById("analysisUnlockBtn");
+  if(unlockBtnEl){
+    unlockBtnEl.onclick = (e)=>{ e.stopPropagation(); activateAnalysisAddMonthUnlock(); };
+  }
   const refreshBtnEl = document.getElementById("analysisRefreshLastBtn");
   if(refreshBtnEl){
     refreshBtnEl.onclick = (e)=>{ e.stopPropagation(); refreshLastAnalysisMonth(); };
@@ -8577,6 +8703,11 @@ document.getElementById("lwPrintBtn").onclick = ()=>{
   w.document.write(html);
   w.document.close();
   w.print();
+};
+
+document.getElementById("lwPrintRequestsBtn").onclick = openLwPrintRequestsModal;
+document.getElementById("lwPrintRequestsClose").onclick = ()=>{
+  document.getElementById("lwPrintRequestsModal").style.display = "none";
 };
 
 document.getElementById("backupExportBtn").onclick = async ()=>{
