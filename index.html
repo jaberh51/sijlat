@@ -456,6 +456,10 @@
   }
   .cases-type-badge-personal{background:#ede9fe;color:#6d28d9;}
   .cases-type-badge-lawyer{background:#dbeafe;color:#1d4ed8;}
+  .cases-deadline-badge{
+    display:inline-block;margin-inline-start:6px;font-size:10px;font-weight:900;
+    color:#fff;border-radius:6px;padding:2px 7px;white-space:nowrap;cursor:pointer;
+  }
   .closure-header{
     display:flex;align-items:center;justify-content:space-between;cursor:pointer;
     font-weight:700;font-size:14.5px;color:#92400e;
@@ -1343,6 +1347,17 @@
 
 <!-- نافذة قائمة "طلبات جاهزة للطباعة" — كل القضايا المتابَعة، وبجانب كل واحدة
      زر طباعة خاص بنوع طلبها (إن كان قالبه متوفراً) -->
+<!-- نافذة تحذير قسرية لأي "موعد صارم" خلال 14 يوماً القادمة أو فات بالفعل —
+     تظهر تلقائياً عند فتح النظام، ولا تختفي إلا بضغطة صريحة من المستخدم -->
+<div id="strictDeadlineModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10000;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:16px;padding:22px 20px;min-width:300px;max-width:480px;width:92%;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.35);direction:rtl;font-family:'Tajawal',sans-serif;border:3px solid #dc2626;">
+    <div style="font-weight:900;font-size:17px;color:#dc2626;margin-bottom:4px;">⚠️ مواعيد صارمة تحتاج انتباهك</div>
+    <div style="font-size:12px;color:#666;margin-bottom:14px;">هذه المواعيد ستستمر بالظهور عند كل فتح للنظام حتى تمرّ أو تُحذَف يدوياً.</div>
+    <div id="strictDeadlineList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px;margin-bottom:14px;"></div>
+    <button id="strictDeadlineAckBtn" class="btn" style="background:#dc2626;color:#fff;border:none;padding:10px;font-weight:700;">✓ فهمت</button>
+  </div>
+</div>
+
 <div id="lwPrintRequestsModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;">
   <div style="background:var(--paper,#fff);border-radius:16px;padding:22px 20px;min-width:300px;max-width:520px;width:92%;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25);direction:rtl;font-family:'Tajawal',sans-serif;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
@@ -1588,6 +1603,7 @@
           <button class="btn secondary" id="casesAnalysisBtn">📊 تحليل الرديات</button>
           <button class="btn secondary" id="casesPrintBtn">🖨️ طباعة الكل</button>
           <button class="btn secondary" id="casesForceDeleteModeBtn" title="حذف قسري (✕) لمدة 10 ثوانٍ + تعديل قسري لكل الحقول (✏️) لمدة دقيقة، بغضّ النظر عن أي شروط">🗑️✏️ حذف/تعديل قسري</button>
+          <button class="btn secondary" id="casesAddDeadlineBtn" title="إضافة موعد صارم لقضية معيّنة — يُنبِّه قسرياً قبله بأسبوعين">⏰ إضافة موعد صارم</button>
           <button class="btn secondary" id="casesPageClose">✕ إغلاق والعودة</button>
         </div>
       </div>
@@ -2844,8 +2860,18 @@ function normalizeName(s){
 // عند البحث) — يُوحِّد كل صيغ الهمزة (أ/إ/آ→ا)، التاء المربوطة/الهاء (ة→ه)،
 // والألف المقصورة/الياء (ى→ي)، فيحل مشكلة "اربد/إربد" جذرياً، ولأي كلمة
 // أخرى مشابهة قد تظهر مستقبلاً، بلا الحاجة لتذكّر كل حالة يدوياً كل مرة.
-function normalizeArabicForSearch(s){
+// تحويل الأرقام الهندية (٠-٩) والفارسية (۰-۹) إلى أرقام غربية عادية —
+// لوحة المفاتيح العربية على الهواتف تُنتج هذه الأرقام تلقائياً أحياناً، وهي
+// نقاط Unicode مختلفة تماماً عن "2026" العادية المُخزَّنة في البيانات، فبلا
+// هذا التحويل لن يُطابق البحث أي رقم مكتوب بها إطلاقاً.
+function normalizeArabicDigits(s){
   return String(s||"")
+    .replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 1632)) // أرقام هندية
+    .replace(/[۰-۹]/g, d => String(d.charCodeAt(0) - 1776)); // أرقام فارسية (احتياطاً)
+}
+
+function normalizeArabicForSearch(s){
+  return normalizeArabicDigits(String(s||""))
     .replace(/[أإآ]/g, "ا")
     .replace(/ة/g, "ه")
     .replace(/ى/g, "ي")
@@ -6652,6 +6678,7 @@ function goHome(){
   currentSection = null;
   document.body.classList.remove("mode-remittances");
   saveCurrentSection('home');
+  checkStrictDeadlines();
 }
 
 function goTrash(){
@@ -7271,6 +7298,98 @@ function getKnownCourtNames(){
   return _dynamicCourtNamesCache;
 }
 
+// ===== نظام "المواعيد الصارمة" — تنبيه قسري لا يمكن تجاهله بسهولة =====
+const STRICT_DEADLINE_WARNING_DAYS = 14; // أسبوعان قبل الموعد
+
+// نقطة الدخول الوحيدة: زر واحد في الصفحة يسأل عن رقم القضية أولاً، ثم يُكمل
+// بنفس تدفّق setStrictDeadline (تاريخ + رسالة) بمجرد إيجاد القضية المطابقة
+async function promptAddStrictDeadline(){
+  const caseNoInput = await askInput("أدخل رقم القضية التي تريد إضافة موعد صارم لها:", {type:"text"});
+  if(!caseNoInput || !caseNoInput.trim()) return;
+  const target = caseNoInput.trim();
+  const match = getDedupedRAW().find(r=>{
+    const norm = shortCaseNo(r["رقم الدعوى"]);
+    return norm === target || (norm.split(" - ")[0] === target);
+  });
+  if(!match){
+    showToast(`⚠️ لم أجد قضية بالرقم "${target}"`, "warn");
+    return;
+  }
+  await setStrictDeadline(caseKey(match));
+}
+
+async function setStrictDeadline(key){
+  const row = getRowByKey(key);
+  const rec = masterCache[key];
+  const existing = rec && rec["موعد_صارم"];
+  const promptText = existing
+    ? "أدخل تاريخ الموعد الصارم (YYYY-MM-DD) — أو امسح الحقل واترك فارغاً لحذف الموعد الحالي:"
+    : "أدخل تاريخ الموعد الصارم (YYYY-MM-DD):";
+  const dateInput = await askInput(promptText, {type:"text", defaultValue: existing ? existing.date : ""});
+  if(dateInput === null) return; // إلغاء صريح
+  if(dateInput.trim() === ""){
+    if(existing) await removeStrictDeadline(key);
+    return;
+  }
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(dateInput.trim())){
+    showToast("⚠️ صيغة التاريخ غير صحيحة — استخدم YYYY-MM-DD مثل 2026-08-15", "warn");
+    return;
+  }
+  const label = await askInput("وصف مختصر للموعد (مثلاً: جلسة استماع):", {type:"text", defaultValue: existing ? existing.label : ""});
+  if(!masterCache[key]) masterCache[key] = {};
+  masterCache[key]["موعد_صارم"] = {date: dateInput.trim(), label: label || "موعد بلا وصف"};
+  await saveMaster([key]);
+  showToast("✓ تم تسجيل الموعد الصارم لهذه القضية", "ok");
+  applyCasesFilter(true);
+}
+
+async function removeStrictDeadline(key){
+  if(masterCache[key]) delete masterCache[key]["موعد_صارم"];
+  await saveMaster([key]);
+  showToast("✓ حُذف الموعد الصارم", "ok");
+  applyCasesFilter(true);
+  checkStrictDeadlines(); // إعادة فحص فوري — قد يُغلق النافذة تلقائياً إن لم يبقَ شيء
+}
+
+function getDaysUntil(dateStr){
+  const target = new Date(dateStr + "T00:00:00");
+  const now = getAccurateNow();
+  const nowMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.round((target - nowMidnight) / 86400000);
+}
+
+// فحص كل القضايا بحثاً عن مواعيد صارمة خلال 14 يوماً أو فائتة — يُظهر نافذة
+// قسرية إن وُجد أي منها. يُستدعى عند كل فتح للصفحة الرئيسية.
+function checkStrictDeadlines(){
+  const items = [];
+  Object.entries(masterCache).forEach(([key, rec])=>{
+    if(!rec["موعد_صارم"]) return;
+    const days = getDaysUntil(rec["موعد_صارم"].date);
+    if(days <= STRICT_DEADLINE_WARNING_DAYS){
+      const row = getRowByKey(key);
+      items.push({key, row, days, ...rec["موعد_صارم"]});
+    }
+  });
+  if(!items.length) return;
+  items.sort((a,b)=> a.days - b.days); // الأقرب أولاً (أو الأكثر تأخّراً)
+
+  const listEl = document.getElementById("strictDeadlineList");
+  listEl.innerHTML = items.map(item=>{
+    const label = item.row ? `${shortCaseNo(item.row["رقم الدعوى"])} · ${getDefendantForRow(item.row)}` : item.key;
+    const daysText = item.days < 0 ? `⚠️ فات منذ ${Math.abs(item.days)} يوم` : item.days === 0 ? "🔴 اليوم!" : `متبقي ${item.days} يوم`;
+    const urgentColor = item.days <= 2 ? "#dc2626" : item.days <= 7 ? "#ea580c" : "#a16207";
+    return `
+      <div style="border:1px solid ${urgentColor};border-radius:10px;padding:10px 12px;background:#fff;">
+        <div style="font-weight:700;font-size:13px;">${escapeAttr(label)}</div>
+        <div style="font-size:11.5px;color:#555;margin:2px 0;">${escapeAttr(item.label)}</div>
+        <div style="font-weight:900;font-size:12.5px;color:${urgentColor};">${daysText} — ${escapeAttr(item.date)}</div>
+      </div>
+    `;
+  }).join("");
+
+  document.getElementById("strictDeadlineModal").style.display = "flex";
+}
+
 function applyCasesFilter(keepPage){
   const q = document.getElementById("casesSearch").value.trim();
   const status = document.getElementById("casesStatusFilter").value;
@@ -7539,8 +7658,16 @@ function renderCasesPage(){
     const caseTypeBadge = caseTypeVal
       ? `<span class="cases-type-badge cases-type-badge-${caseTypeVal === 'شخصي' ? 'personal' : 'lawyer'}">${caseTypeVal === 'شخصي' ? '🙋 شخصي' : '⚖️ محامي'}</span>`
       : "";
+    const deadlineRec = caseTypeRec && caseTypeRec["موعد_صارم"];
+    let deadlineBadge = "";
+    if(deadlineRec){
+      const daysLeft = getDaysUntil(deadlineRec.date);
+      const dColor = daysLeft <= 2 ? "#dc2626" : daysLeft <= 7 ? "#ea580c" : "#a16207";
+      const dText = daysLeft < 0 ? `فات ${Math.abs(daysLeft)}ي` : daysLeft === 0 ? "اليوم" : `${daysLeft}ي`;
+      deadlineBadge = `<span class="cases-deadline-badge" data-key="${escapeAttr(key)}" style="background:${dColor};" title="${escapeAttr(deadlineRec.label)} — ${escapeAttr(deadlineRec.date)} (اضغط للتعديل/الحذف)">⏰ ${dText}</span>`;
+    }
     return `<tr class="cases-row${selected?' cases-row-selected':''}${rowBgClass}${dblClickClass}" data-key="${escapeAttr(key)}">
-      <td class="cases-cell-no" data-col="رقم القضية">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${finishedBadge}${caseTypeBadge}</td>
+      <td class="cases-cell-no" data-col="رقم القضية">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${finishedBadge}${caseTypeBadge}${deadlineBadge}</td>
       <td data-col="الطرف">${escapeAttr(def)}${getClientBadgeHtml(r)}</td>
       <td data-col="المحكمة">${escapeAttr(displayCourtName(r["المحكمة"]))}</td>
       <td data-col="الحالة"><span class="cases-badge ${statusClass}">${escapeAttr(status)}</span></td>
@@ -7556,6 +7683,11 @@ function renderCasesPage(){
 
   // Event delegation على tbody بدل listener لكل صف (أسرع وبدون memory leak)
   tbody.onclick = (e)=>{
+    const deadlineBadge = e.target.closest(".cases-deadline-badge");
+    if(deadlineBadge){
+      setStrictDeadline(deadlineBadge.getAttribute("data-key"));
+      return;
+    }
     const forceRemoveBtn = e.target.closest(".cases-force-remove-btn");
     if(forceRemoveBtn){
       forceMoveCaseToClosure(forceRemoveBtn.getAttribute("data-key"));
@@ -8288,6 +8420,10 @@ document.getElementById("analysisSearch").addEventListener("input", ()=>{
 document.getElementById("casesPageClose").onclick = ()=>{ goHome(); };
 document.getElementById("casesPrintBtn").onclick = ()=>{ printCases(); };
 document.getElementById("casesForceDeleteModeBtn").onclick = activateCasesForceDeleteMode;
+document.getElementById("casesAddDeadlineBtn").onclick = promptAddStrictDeadline;
+document.getElementById("strictDeadlineAckBtn").onclick = ()=>{
+  document.getElementById("strictDeadlineModal").style.display = "none";
+};
 
 // ===== قائمة الضغط المزدوج للقضايا المفصولة ذات المتاح =====
 // (حذف نهائي / تعديل المتاح / تعديل المتبقي) — تظهر بجانب موضع الضغط
