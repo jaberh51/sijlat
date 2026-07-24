@@ -2479,6 +2479,7 @@ async function renderBackupsList(){
   const listEl = document.getElementById("backupsList");
   listEl.innerHTML = `<div class="fu-search-hint">جارٍ التحميل...</div>`;
   const items = await listBackups();
+  showToast(`🔍 تشخيص مباشر: listBackups() وجدت ${items.length} نسخة الآن بالضبط`, "ok");
   if(!items.length){
     listEl.innerHTML = `<div class="fu-tracked-empty">لا توجد نسخ احتياطية بعد — ستُؤخَذ أول نسخة تلقائياً غداً، أو اضغط "نسخة احتياطية الآن" من الصفحة الرئيسية.</div>`;
     return;
