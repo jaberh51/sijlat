@@ -826,22 +826,10 @@
   }
   .lw-folded-card:hover{background:#e2e4ea;}
   .lw-folded-hint{font-size:10.5px;font-weight:400;color:var(--slate);}
-  .lw-day-group-header{
-    display:flex;align-items:center;justify-content:space-between;gap:10px;
-    background:linear-gradient(135deg,var(--brass-soft),#f5ebd3);border:1px solid var(--brass);
-    border-radius:10px;padding:10px 16px;margin:16px 0 8px;cursor:pointer;
-    font-weight:700;font-size:13px;color:#7a5a1f;
-  }
-  .lw-day-group-header:hover{filter:brightness(1.03);}
-  .lw-day-group-toggle{font-size:11px;font-weight:700;color:var(--brass);}
-  .lw-day-group-label{
-    text-decoration:underline dotted;text-decoration-color:#a5793a;cursor:pointer;
-  }
-  .lw-day-group-label:hover{color:#5a3d10;}
-  .lw-day-group-body{
-    display:flex;flex-direction:column;gap:8px;
-    background:#fbf5e9;border:1px dashed var(--brass);border-radius:12px;padding:10px;
-  }
+  .lw-fold-toggle-pair{display:flex;justify-content:space-between;gap:14px;font-size:11px;font-weight:700;min-width:70px;}
+  .lw-toggle-fold, .lw-toggle-show{cursor:pointer;}
+  .lw-toggle-active{color:var(--brass);opacity:1;}
+  .lw-toggle-inactive{color:var(--ink-soft);opacity:0.4;}
   .lw-custom-group-header{
     display:flex;align-items:center;justify-content:space-between;gap:10px;
     background:linear-gradient(135deg,#ede9fe,#f3f0ff);border:1px solid #7c3aed;
@@ -1508,10 +1496,6 @@
 
     <div class="fu-page-section">
       <div class="fu-page-subtitle">🔎 ابحث عن قضية لتسجيل مراسلة معها</div>
-      <label class="closure-checkbox-label" style="margin-bottom:10px;">
-        <input type="checkbox" id="lwDayModeToggle">
-        📅 متابعة على مستوى اليوم (القضايا المُضافة الآن تُجمَّع تحت تاريخ اليوم)
-      </label>
       <input type="text" id="lwSearchInput" class="fu-search-input" placeholder="ابحث باسم الطرف، رقم القضية، أو اسم المحكمة...">
       <div id="lwSearchResults" class="fu-search-results">
         <div class="fu-search-hint">اكتب حرفين على الأقل للبحث في كل القضايا...</div>
@@ -4201,50 +4185,14 @@ function getLawyerAction(key){
   return (rec && rec["محامي_اجراء"]) ? rec["محامي_اجراء"] : null;
 }
 
-// مفتاح تاريخ اليوم بصيغة موحَّدة (YYYY-MM-DD) لتجميع "متابعة على مستوى
-// اليوم" — بالوقت الدقيق من خوادم Firebase، وليس ساعة الجهاز المحلية.
-function getTodayDayGroupKey(){
-  const d = getAccurateNow();
-  const pad = n => String(n).padStart(2,'0');
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-}
-function formatDayGroupLabel(dayGroupKey){
-  const [y,m,d] = dayGroupKey.split("-").map(Number);
-  const pad = n => String(n).padStart(2,'0');
-  return `${pad(d)}/${pad(m)}/${y}`;
-}
 
-// تسمية مخصَّصة لعنوان مجموعة اليوم — يبدأ بالتاريخ الرقمي تلقائياً، لكن
-// قابل للتحرير يدوياً وتُحفَظ التسمية المخصَّصة دائماً في هذا المتصفح.
-function getDayGroupCustomLabels(){
-  try{ return JSON.parse(localStorage.getItem('lw_day_group_labels') || '{}'); }
-  catch(e){ return {}; }
-}
-function getDayGroupDisplayLabel(dayGroupKey){
-  const labels = getDayGroupCustomLabels();
-  return labels[dayGroupKey] || formatDayGroupLabel(dayGroupKey);
-}
-function setDayGroupCustomLabel(dayGroupKey, text){
-  const labels = getDayGroupCustomLabels();
-  if(text && text.trim()) labels[dayGroupKey] = text.trim();
-  else delete labels[dayGroupKey]; // نص فارغ = رجوع للتاريخ التلقائي
-  try{ localStorage.setItem('lw_day_group_labels', JSON.stringify(labels)); }catch(e){}
-}
-
-
-async function setLawyerAction(key, actionText, sector, dayGroup){
+async function setLawyerAction(key, actionText, sector){
   const master = masterCache;
   if(!master[key]) master[key] = {"رقم القضية": key.split("||")[0]};
   if(master[key]["محامي_اجراء"]){
     return false; // إجراء واحد فقط لكل قضية
   }
   master[key]["محامي_اجراء"] = {action: actionText, date: new Date().toISOString()};
-  // إن كانت "متابعة على مستوى اليوم" مُفعَّلة عند الإضافة، نُسجِّل تاريخ ذلك
-  // اليوم كوسم تجميع (YYYY-MM-DD) — تُجمَّع القضية تلقائياً تحت عنوان ذلك
-  // اليوم في صندوق المتابعات بدل الظهور في القائمة العامة.
-  if(dayGroup){
-    master[key]["محامي_اجراء"].dayGroup = dayGroup;
-  }
   // قطاع العمل يُحفظ مرة واحدة فقط عند أول إجراء ويبقى ثابتاً بعدها
   if(sector && !master[key]["نوع_العمل"]){
     master[key]["نوع_العمل"] = sector;
@@ -4572,9 +4520,7 @@ function renderActionPickerForSector(picker, key, rowEl, sector){
   picker.querySelectorAll(".lw-action-opt").forEach(optBtn=>{
     optBtn.onclick = async ()=>{
       const action = optBtn.getAttribute("data-action");
-      const dayModeOn = document.getElementById("lwDayModeToggle").checked;
-      const dayGroup = dayModeOn ? getTodayDayGroupKey() : null;
-      const ok = await setLawyerAction(key, action, sector, dayGroup);
+      const ok = await setLawyerAction(key, action, sector);
       if(ok){
         showToast(`✓ تم تسجيل "${action}" (${sector}) ونسخها إلى المتابعات`, "ok");
         renderLwActionsBox();
@@ -4717,27 +4663,17 @@ function toggleCaseFolded(key){
   saveFoldedCasesSet(set);
 }
 
-// نفس نمط طي القضايا الفردية أعلاه، لكن لمجموعات "متابعة على مستوى اليوم"
-// كاملة — محفوظ دائماً في هذا المتصفح حتى يُفتَح يدوياً.
-function getFoldedDayGroupsSet(){
-  try{ return new Set(JSON.parse(localStorage.getItem('lw_folded_day_groups') || '[]')); }
-  catch(e){ return new Set(); }
-}
-function toggleDayGroupFolded(dayKey){
-  const set = getFoldedDayGroupsSet();
-  if(set.has(dayKey)) set.delete(dayKey); else set.add(dayKey);
-  try{ localStorage.setItem('lw_folded_day_groups', JSON.stringify([...set])); }catch(e){}
-}
-
 // ===== المجموعات المخصَّصة — تحديد يدوي + تسمية يختارها المستخدم =====
-function getFoldedCustomGroupsSet(){
-  try{ return new Set(JSON.parse(localStorage.getItem('lw_folded_custom_groups') || '[]')); }
+// نُخزِّن أسماء المجموعات "المفتوحة يدوياً" فقط (بدل "المطوية") — بهذا
+// تكون الحالة الافتراضية لأي مجموعة (جديدة أو لم تُفتَح من قبل) = مطوية دائماً.
+function getUnfoldedCustomGroupsSet(){
+  try{ return new Set(JSON.parse(localStorage.getItem('lw_unfolded_custom_groups') || '[]')); }
   catch(e){ return new Set(); }
 }
 function toggleCustomGroupFolded(groupName){
-  const set = getFoldedCustomGroupsSet();
+  const set = getUnfoldedCustomGroupsSet();
   if(set.has(groupName)) set.delete(groupName); else set.add(groupName);
-  try{ localStorage.setItem('lw_folded_custom_groups', JSON.stringify([...set])); }catch(e){}
+  try{ localStorage.setItem('lw_unfolded_custom_groups', JSON.stringify([...set])); }catch(e){}
 }
 
 function updateLwGroupBulkBar(){
@@ -4868,10 +4804,9 @@ function renderLwActionsBox(){
       const client = row ? getPlaintiffForRow(row) : "";
       const clientCode = client.includes("جابر") ? "J" : client.includes("حنين") ? "H" : "";
       const year = row ? getCaseYearNum(row).year : null;
-      const dayGroup = rec["محامي_اجراء"].dayGroup || null;
       const parkedZero = !!rec["محامي_اجراء"].parkedInZeroSection;
       const customGroup = rec["محامي_اجراء"].customGroup || null;
-      items.push({key, row, info: rec["محامي_اجراء"], steps: rec["محامي_خطوات"] || {}, sector: rec["نوع_العمل"] || "", clientCode, year, dayGroup, parkedZero, customGroup});
+      items.push({key, row, info: rec["محامي_اجراء"], steps: rec["محامي_خطوات"] || {}, sector: rec["نوع_العمل"] || "", clientCode, year, parkedZero, customGroup});
     }
   });
 
@@ -5129,40 +5064,39 @@ function renderLwActionsBox(){
     }
   });
 
-  // ===== تجميع "متابعة على مستوى اليوم" — القضايا المُضافة بوضع اليوم
-  // مُفعَّلاً تُعرَض مُجمَّعة تحت عنوان قابل للطي بتاريخ إضافتها، بدل الظهور
-  // في القائمة العامة المسطَّحة. القضايا العادية (بلا وسم يوم) لا تتأثر إطلاقاً.
   // ===== المجموعات المخصَّصة — يُنشئها المستخدم يدوياً بتحديد قضايا وتسميتها
-  // بعنوان من اختياره (أولوية أعلى من مجموعات اليوم التلقائية). =====
+  // بعنوان من اختياره. =====
   const customGroupItems = nonZeroItems.filter(i => i.customGroup);
-  const restAfterCustom = nonZeroItems.filter(i => !i.customGroup);
+  const ungroupedItems = nonZeroItems.filter(i => !i.customGroup);
   const customGroupsMap = {};
   customGroupItems.forEach(i=>{
     if(!customGroupsMap[i.customGroup]) customGroupsMap[i.customGroup] = [];
     customGroupsMap[i.customGroup].push(i);
   });
   const customGroupNames = Object.keys(customGroupsMap).sort((a,b)=>a.localeCompare(b,'ar'));
-  const foldedCustomGroups = getFoldedCustomGroupsSet();
+  // الحالة الافتراضية = مطوي دائماً — المجموعة تبقى مطوية إلا إن فتحها
+  // المستخدم صراحةً (Set يحتوي أسماء المجموعات "المفتوحة يدوياً" فقط)
+  const unfoldedCustomGroups = getUnfoldedCustomGroupsSet();
 
-  const ungroupedItems = restAfterCustom.filter(i => !i.dayGroup);
-  const dayGroupsMap = {};
-  restAfterCustom.filter(i => i.dayGroup).forEach(i=>{
-    if(!dayGroupsMap[i.dayGroup]) dayGroupsMap[i.dayGroup] = [];
-    dayGroupsMap[i.dayGroup].push(i);
-  });
-  const dayGroupKeys = Object.keys(dayGroupsMap).sort((a,b)=> b.localeCompare(a)); // الأحدث أولاً
-  const foldedDayGroups = getFoldedDayGroupsSet();
+  // زران بموضعين ثابتين دائماً (طي أقصى اليسار، إظهار أقصى اليمين) — الفعّال
+  // منهما (الذي يُنفِّذ فعلاً عند الضغط) مميَّز بصرياً، والآخر باهت للسياق فقط
+  const foldToggleHtml = (isFolded, dataAttr)=> `
+    <span class="lw-fold-toggle-pair">
+      <span class="lw-toggle-fold ${isFolded ? 'lw-toggle-inactive' : 'lw-toggle-active'}" ${dataAttr}>▾ طي</span>
+      <span class="lw-toggle-show ${isFolded ? 'lw-toggle-active' : 'lw-toggle-inactive'}" ${dataAttr}>▸ إظهار</span>
+    </span>
+  `;
 
   let html = "";
   customGroupNames.forEach(groupName=>{
     const groupItems = customGroupsMap[groupName];
-    const isFolded = foldedCustomGroups.has(groupName);
+    const isFolded = !unfoldedCustomGroups.has(groupName);
     html += `
       <div class="lw-custom-group-header" data-groupname="${escapeAttr(groupName)}">
         <span>📦 ${escapeAttr(groupName)} (${groupItems.length} قضية)</span>
         <span style="display:flex;gap:10px;align-items:center;">
           <span class="lw-custom-group-disband" data-groupname="${escapeAttr(groupName)}" title="فك هذه المجموعة (تُعاد القضايا للقائمة العادية)">↺ فك</span>
-          <span class="lw-day-group-toggle">${isFolded ? '▸ إظهار' : '▾ طي'}</span>
+          ${foldToggleHtml(isFolded, `data-groupname="${escapeAttr(groupName)}"`)}
         </span>
       </div>
     `;
@@ -5171,27 +5105,14 @@ function renderLwActionsBox(){
     }
   });
   html += ungroupedItems.map(buildLwCard).join("");
-  dayGroupKeys.forEach(dayKey=>{
-    const groupItems = dayGroupsMap[dayKey];
-    const isGroupFolded = foldedDayGroups.has(dayKey);
-    const label = getDayGroupDisplayLabel(dayKey);
-    html += `
-      <div class="lw-day-group-header" data-daykey="${escapeAttr(dayKey)}">
-        <span>📅 <span class="lw-day-group-label" data-daykey="${escapeAttr(dayKey)}" title="اضغط لتعديل التسمية">${escapeAttr(label)}</span> (${groupItems.length} قضية)</span>
-        <span class="lw-day-group-toggle" data-daykey="${escapeAttr(dayKey)}">${isGroupFolded ? '▸ إظهار' : '▾ طي'}</span>
-      </div>
-    `;
-    if(!isGroupFolded){
-      html += `<div class="lw-day-group-body">${groupItems.map(buildLwCard).join("")}</div>`;
-    }
-  });
   // قسم القضايا الصفرية يظهر دائماً في الأسفل (أولوية أقل بصرياً) — قابل للطي
+  // — مطوي افتراضياً أيضاً، إلا إن فتحه المستخدم صراحةً
   if(zeroItems.length){
-    const isZeroSectionFolded = localStorage.getItem('lw_zero_section_folded') === '1';
+    const isZeroSectionFolded = localStorage.getItem('lw_zero_section_unfolded') !== '1';
     html += `
       <div class="lw-zero-section-header" id="lwZeroSectionHeader">
         <span>🔴 قضايا صفرية — بلا تحصيل وبلا متاح (${zeroItems.length})</span>
-        <span class="lw-day-group-toggle">${isZeroSectionFolded ? '▸ إظهار' : '▾ طي'}</span>
+        ${foldToggleHtml(isZeroSectionFolded, 'data-zerosection="1"')}
       </div>
     `;
     if(!isZeroSectionFolded){
@@ -5232,26 +5153,10 @@ function renderLwActionsBox(){
       renderLwActionsBox();
       return;
     }
-    const dayGroupLabel = e.target.closest(".lw-day-group-label");
-    if(dayGroupLabel){
-      const dayKey = dayGroupLabel.getAttribute("data-daykey");
-      const currentText = dayGroupLabel.textContent;
-      const newText = await askInput("اكتب تسمية جديدة لهذه المجموعة (اتركه فارغاً للرجوع للتاريخ التلقائي):", {type:"text", defaultValue: currentText});
-      if(newText === null) return; // إلغاء
-      setDayGroupCustomLabel(dayKey, newText);
-      renderLwActionsBox();
-      return;
-    }
-    const dayGroupHeader = e.target.closest(".lw-day-group-header");
-    if(dayGroupHeader){
-      toggleDayGroupFolded(dayGroupHeader.getAttribute("data-daykey"));
-      renderLwActionsBox();
-      return;
-    }
     const zeroSectionHeader = e.target.closest("#lwZeroSectionHeader");
     if(zeroSectionHeader){
-      const isFolded = localStorage.getItem('lw_zero_section_folded') === '1';
-      localStorage.setItem('lw_zero_section_folded', isFolded ? '0' : '1');
+      const isUnfolded = localStorage.getItem('lw_zero_section_unfolded') === '1';
+      localStorage.setItem('lw_zero_section_unfolded', isUnfolded ? '0' : '1');
       renderLwActionsBox();
       return;
     }
