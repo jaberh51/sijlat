@@ -2076,7 +2076,7 @@ async function moveToTrash(type, label, data){
     return true;
   }catch(e){
     console.error("فشل نقل العنصر إلى سلة المهملات:", e);
-    showToast("⚠️ تعذّر حفظ نسخة في سلة المهملات — قد تكون قواعد Firebase لا تسمح بذلك (السبب: " + (e.message || e) + ")", "warn");
+    setTimeout(()=> showToast("⚠️ تعذّر حفظ نسخة في سلة المهملات — قد تكون قواعد Firebase لا تسمح بذلك (السبب: " + (e.message || e) + ")", "warn"), 3500);
     return false;
   }
 }
@@ -2196,10 +2196,14 @@ async function saveBackupNow(showFeedback){
 async function cleanupOldBackups(){
   if(!fbDb) return;
   const fb = window.__fbModular;
+  // تأخير أي رسالة تشخيصية هنا 3.5 ثانية — تُستدعى هذه الدالة قبل رسالة "تم
+  // أخذ نسخة احتياطية" الناجحة مباشرة، وكلاهما يستخدمان نفس عنصر التنبيه
+  // الوحيد في الصفحة، فتُستبدَل رسالة التشخيص فوراً بلا أن تُرى إطلاقاً.
+  const delayedToast = (msg, kind)=> setTimeout(()=> showToast(msg, kind), 3500);
   try{
     const snap = await fb.get(fb.ref(fbDb, 'backups_meta'));
     if(!snap.exists()){
-      showToast("🔍 تشخيص: مسار backups_meta فارغ تماماً بالنسبة لـFirebase", "warn");
+      delayedToast("🔍 تشخيص: مسار backups_meta فارغ تماماً بالنسبة لـFirebase", "warn");
       return;
     }
     const keys = [];
@@ -2216,13 +2220,13 @@ async function cleanupOldBackups(){
       // تحقّق مباشر بعد الحذف المُفترَض — هل تغيّر العدد فعلياً في Firebase؟
       const verifySnap = await fb.get(fb.ref(fbDb, 'backups_meta'));
       const afterCount = verifySnap.exists() ? Object.keys(verifySnap.val()).length : 0;
-      showToast(`🔍 تشخيص: كان ${keys.length} نسخة، حاولت حذف ${toDelete.length}، النتيجة الفعلية بعد التحقق: ${afterCount} نسخة`, "warn");
+      delayedToast(`🔍 تشخيص: كان ${keys.length} نسخة، حاولت حذف ${toDelete.length}، النتيجة الفعلية بعد التحقق: ${afterCount} نسخة`, "warn");
     } else {
-      showToast(`🔍 تشخيص: العدد الحالي ${keys.length} (لا يتجاوز الحد ${BACKUP_MAX_COUNT}، فلا حاجة لحذف)`, "ok");
+      delayedToast(`🔍 تشخيص: العدد الحالي ${keys.length} (لا يتجاوز الحد ${BACKUP_MAX_COUNT}، فلا حاجة لحذف)`, "ok");
     }
   }catch(e){
     console.error("فشل تنظيف النسخ الاحتياطية القديمة:", e);
-    showToast("⚠️ تعذّر حذف النسخ الاحتياطية الزائدة عن 10 — السبب: " + (e.message || e), "warn");
+    delayedToast("⚠️ تعذّر حذف النسخ الاحتياطية الزائدة عن 10 — السبب: " + (e.message || e), "warn");
   }
 }
 
