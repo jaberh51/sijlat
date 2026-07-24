@@ -268,6 +268,14 @@
     text-align:center;font-size:11.5px;color:var(--ink-soft);font-weight:700;
     margin-top:22px;opacity:0.6;letter-spacing:0.5px;
   }
+  .connection-badge{
+    position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:100000;
+    font-size:11px;font-weight:700;padding:4px 14px;border-radius:999px;
+    box-shadow:0 2px 8px rgba(0,0,0,.15);font-family:'Tajawal',sans-serif;
+    transition:background .3s ease, color .3s ease;
+  }
+  .connection-online{background:#dcfce7;color:#166534;}
+  .connection-offline{background:#fee2e2;color:#991b1b;animation:lwDeleteBtnPulse 1.4s ease-in-out infinite;}
   .home-btn{
     background:var(--paper-raised);border:1px solid var(--line);border-radius:16px;
     padding:28px 20px;cursor:pointer;box-shadow:var(--shadow);text-align:center;
@@ -1250,6 +1258,8 @@
 </head>
 <body>
 
+<div id="connectionBadge" class="connection-badge connection-online" style="display:none;">🟢 متصل</div>
+
 <div id="authScreen" style="position:fixed;inset:0;z-index:99999;background:var(--paper);display:flex;align-items:center;justify-content:center;padding:20px;">
   <div style="background:var(--paper-raised);border:1px solid var(--line);border-radius:16px;padding:36px 32px;max-width:360px;width:100%;box-shadow:var(--shadow);text-align:center;">
     <div class="seal" style="margin:0 auto 16px;">د</div>
@@ -2215,6 +2225,7 @@ function getTodayDateStr(){
 // إلا عند الاسترجاع الفعلي لنسخة واحدة بعينها.
 async function saveBackupNow(showFeedback){
   if(!fbDb) return false;
+  if(!requireOnlineOrWarn("النسخ الاحتياطي")) return false;
   const fb = window.__fbModular;
   // انتظار اكتمال الاتصال الكامل بـFirebase أولاً — بلا هذا، عملية النسخ
   // الاحتياطي (وتنظيف الزائد عن 10) قد تُنفَّذ مبكراً جداً (مثلاً فور فتح
@@ -4705,6 +4716,48 @@ const DEFAULT_APP_SETTINGS = {
 };
 let appSettings = {...DEFAULT_APP_SETTINGS};
 
+// ===== مراقبة حالة الاتصال الحقيقي بـFirebase — عبر المسار الخاص
+// ".info/connected" الذي توفّره كل قاعدة بيانات Firebase تلقائياً، وهو أدق
+// بكثير من navigator.onLine (الذي يفحص فقط وجود شبكة، لا وصولاً فعلياً للخادم). =====
+let isFirebaseConnected = true; // افتراضياً متصل حتى يثبت العكس فور بدء المراقبة
+
+function watchConnectionState(){
+  if(!fbDb) return;
+  const fb = window.__fbModular;
+  fb.onValue(fb.ref(fbDb, '.info/connected'), (snap)=>{
+    isFirebaseConnected = snap.val() === true;
+    updateConnectionBadge();
+  });
+}
+
+function updateConnectionBadge(){
+  const badge = document.getElementById("connectionBadge");
+  if(!badge) return;
+  badge.style.display = "block";
+  if(isFirebaseConnected){
+    badge.textContent = "🟢 متصل";
+    badge.className = "connection-badge connection-online";
+    // إخفاء الشارة تلقائياً بعد ثانيتين عند العودة للاتصال — لا داعي لبقائها
+    // ظاهرة دائماً في الحالة الطبيعية، فقط تنبيه عابر بعودة الاتصال
+    clearTimeout(updateConnectionBadge._hideTimer);
+    updateConnectionBadge._hideTimer = setTimeout(()=>{ badge.style.display = "none"; }, 2000);
+  } else {
+    clearTimeout(updateConnectionBadge._hideTimer);
+    badge.textContent = "🔴 غير متصل — التعديلات لن تُحفَظ حتى تعود الشبكة";
+    badge.className = "connection-badge connection-offline";
+  }
+}
+
+// يُستخدَم قبل أي إجراء يعتمد حصرياً على Firebase (نسخ احتياطي، سلة مهملات،
+// سجل تدقيق) — يُظهر رسالة واضحة بدل الفشل الصامت إن كان الاتصال مقطوعاً
+function requireOnlineOrWarn(featureName){
+  if(!isFirebaseConnected){
+    showToast(`⚠️ "${featureName}" يحتاج اتصالاً بالإنترنت — أنت غير متصل حالياً`, "warn");
+    return false;
+  }
+  return true;
+}
+
 async function loadAppSettings(){
   if(!fbDb) return;
   try{
@@ -6106,7 +6159,7 @@ function printFinancialSheet(label, rows, total){
         <td class="p-del-cell"><button class="p-del-btn" title="حذف من هذه المعاينة فقط">✕</button></td>
         <td class="p-idx">${i+1}</td>
         <td>${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${getClientSuffixText(r)}</td>
-        <td>${getPlaintiffForRow(r) || "—"}</td>
+        <td>${escapeAttr(getPlaintiffForRow(r) || "—")}</td>
         <td>${escapeAttr(getDefendantForRow(r))}</td>
         <td>${escapeAttr(r["تاريخ الشيك/الحوالة"] || "—")}</td>
         <td class="p-amt">${amt.toLocaleString('ar',{minimumFractionDigits:2, maximumFractionDigits:2})}</td>
@@ -7118,7 +7171,41 @@ async function bulkSetCaseType(type){
 }
 
 // دالة حفظ القضايا المُزالة (تسوية خارجية) في الماستر
+// ===== محرك اكتشاف الأخطاء (فحص اكتمال بيانات القضية) — يعمل خفياً، يُستدعى
+// تلقائياً قبل أي إغلاق/حذف/نقل عادي لقضية (وليس القسري، الذي يبقى متجاوزاً
+// كل الفحوصات عمداً بتصميمه الأصلي). =====
+function computeCaseCompleteness(key){
+  const row = getRowByKey(key);
+  const rec = masterCache[key];
+  const checks = [];
+  checks.push({label: "رقم القضية", pass: !!(row && (row["رقم الدعوى"]||"").trim())});
+  checks.push({label: "المحكمة", pass: !!(row && (row["المحكمة"]||"").trim())});
+  checks.push({label: "الموكل (المدعي)", pass: !!(row && getPlaintiffForRow(row).trim())});
+  const requested = rec ? parseNum(rec["مجموع المبالغ المطلوبة"]) : null;
+  checks.push({label: "المبلغ المطلوب (ليس صفراً)", pass: requested !== null && requested > 0});
+  // فحص المرفقات: غير مُفعَّل حالياً لأن نظام المرفقات نفسه لم يُبنَ بعد
+  // (أُجِّل سابقاً بسبب تكلفة Firebase Storage) — سيُفعَّل تلقائياً فور بنائه
+  // مستقبلاً، بلا حاجة لتعديل هذا المحرك حينها إلا بإزالة هذا التعليق.
+  // checks.push({label: "يوجد مرفقات", pass: !!(rec && rec["مرفقات"] && rec["مرفقات"].length)});
+
+  const passed = checks.filter(c=>c.pass).length;
+  const percentage = Math.round((passed / checks.length) * 100);
+  return {checks, percentage};
+}
+
+// يُظهر تحذيراً قبل أي إجراء إغلاق/حذف/نقل عادي إن كانت النسبة أقل من 100% —
+// يُعيد true للمتابعة، false للإلغاء (المستخدم اختار التراجع)
+async function confirmCaseCompletenessOrProceed(key, actionLabel){
+  const {checks, percentage} = computeCaseCompleteness(key);
+  if(percentage >= 100) return true; // كل شيء مكتمل، لا داعي لأي تحذير
+  const failedList = checks.filter(c=>!c.pass).map(c=>`• ${c.label}`).join("\n");
+  return await askConfirm(
+    `⚠️ نسبة اكتمال بيانات هذه القضية: ${percentage}%\n\nناقص:\n${failedList}\n\nهل تريد المتابعة بـ"${actionLabel}" رغم ذلك؟`
+  );
+}
+
 async function markCaseRemoved(key){
+  if(!(await confirmCaseCompletenessOrProceed(key, "الإزالة النهائية"))) return false;
   const master = masterCache;
   if(!master[key]) master[key] = {};
   // نسخة كاملة من كل بيانات القضية (المالية، متابعة المحامي، الملاحظات...)
@@ -7132,6 +7219,7 @@ async function markCaseRemoved(key){
   master[key]["تسوية_خارجية"] = true;
   await saveMaster([key]);
   masterCache = master; invalidateMasterCaseNoIndex();
+  return true;
 }
 
 function isCaseRemoved(key){
@@ -7512,9 +7600,11 @@ document.getElementById("closureList").onclick = async (e)=>{
     showToast("⚠️ كلمة السر غير صحيحة", "warn");
     return;
   }
-  await markCaseRemoved(key);
-  renderClosureNeededBox();
-  showToast("✓ تمت إزالة القضية نهائياً من النظام", "ok");
+  const ok = await markCaseRemoved(key);
+  if(ok){
+    renderClosureNeededBox();
+    showToast("✓ تمت إزالة القضية نهائياً من النظام", "ok");
+  }
 };
 document.getElementById("closureRestoreModeBtn").onclick = (e)=>{
   e.stopPropagation(); // منع فتح/طي الصندوق عند الضغط على هذا الزر
@@ -8062,6 +8152,7 @@ function renderCasesPage(){
             showToast("⚠️ لا يمكن نقل هذه القضية — لا يزال عليها مبلغ متبقٍ أو متاح لم يُسحب بعد", "warn");
             return;
           }
+          if(!(await confirmCaseCompletenessOrProceed(key, "النقل إلى بحاجة إلى فصل"))) return;
           await markCaseNeedsClosure(key);
           casesSelected.delete(key);
           casesAllRows = getCasesRows();
@@ -8076,11 +8167,13 @@ function renderCasesPage(){
           showToast("⚠️ كلمة السر غير صحيحة", "warn");
           return;
         }
-        await markCaseRemoved(key);
-        casesSelected.delete(key);
-        casesAllRows = getCasesRows();
-        applyCasesFilter(true);
-        showToast("✓ تمت إزالة القضية نهائياً", "ok");
+        const ok = await markCaseRemoved(key);
+        if(ok){
+          casesSelected.delete(key);
+          casesAllRows = getCasesRows();
+          applyCasesFilter(true);
+          showToast("✓ تمت إزالة القضية نهائياً", "ok");
+        }
       })();
       return;
     }
@@ -8805,11 +8898,13 @@ function showCasesDblClickMenu(e, key){
         showToast("⚠️ كلمة السر غير صحيحة", "warn");
         return;
       }
-      await markCaseRemoved(key);
-      casesSelected.delete(key);
-      casesAllRows = getCasesRows();
-      applyCasesFilter(true);
-      showToast("✓ تمت إزالة القضية نهائياً", "ok");
+      const ok = await markCaseRemoved(key);
+      if(ok){
+        casesSelected.delete(key);
+        casesAllRows = getCasesRows();
+        applyCasesFilter(true);
+        showToast("✓ تمت إزالة القضية نهائياً", "ok");
+      }
       return;
     }
 
@@ -9013,6 +9108,7 @@ async function initApp(){
   // تحميل إعدادات النظام مبكراً (كلمة السر المخصَّصة إن وُجدت، مدد الاحتفاظ،
   // إلخ) — قبل أي تفاعل قد يحتاجها، بلا حجب بقية التحميل (fire-and-forget)
   loadAppSettings();
+  watchConnectionState();
 
   // 2) تنظيف الماستر القديم — مرة واحدة فقط (نتحقق من علامة في localStorage)
   const cleanupDone = localStorage.getItem('_cleanupDone');
@@ -9169,8 +9265,8 @@ document.getElementById("backupNowBtn").onclick = async ()=>{
   btn.textContent = "💾 نسخة احتياطية الآن";
 };
 document.getElementById("viewBackupsBtn").onclick = goBackups;
-document.getElementById("viewTrashBtn").onclick = goTrash;
-document.getElementById("viewAuditLogBtn").onclick = goAuditLog;
+document.getElementById("viewTrashBtn").onclick = ()=>{ if(requireOnlineOrWarn("سلة المهملات")) goTrash(); };
+document.getElementById("viewAuditLogBtn").onclick = ()=>{ if(requireOnlineOrWarn("سجل التدقيق")) goAuditLog(); };
 document.getElementById("auditLogPageClose").onclick = goHome;
 document.getElementById("auditLogSearch").addEventListener("input", applyAuditLogFilter);
 document.getElementById("trashPageClose").onclick = goHome;
@@ -9273,6 +9369,65 @@ document.getElementById("backupExportBtn").onclick = async ()=>{
   importStatusEl.textContent = `تم تنزيل نسخة احتياطية تحتوي على ${rows.length} قضية إلى جهازك`;
 };
 
+// ===== Service Worker مضمَّن بالكامل — يُتيح فتح التطبيق نفسه بلا أي اتصال
+// إنترنت إطلاقاً (وليس فقط عرض بيانات محفوظة مسبقاً). مُضمَّن كنص داخل هذا
+// الملف نفسه (تقنية Blob URL) بدل ملف sw.js منفصل، حفاظاً على رفع ملف واحد
+// فقط كالمعتاد تماماً — بلا أي تغيير في طريقة الرفع المعتادة.
+if('serviceWorker' in navigator){
+  const swCode = `
+    const CACHE_NAME = 'sijil-dawa-app-v1';
+    const APP_SHELL_URLS = [
+      self.location.origin + '/',
+      'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+      'https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js',
+      'https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js',
+      'https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js'
+    ];
+    self.addEventListener('install', (event)=>{
+      event.waitUntil(
+        caches.open(CACHE_NAME).then(cache=>
+          Promise.all(APP_SHELL_URLS.map(url=>
+            cache.add(url).catch(()=>{}) // تجاهل أي مورد فشل تحميله بصمت، بلا إفشال التسجيل كله
+          ))
+        )
+      );
+      self.skipWaiting();
+    });
+    self.addEventListener('activate', (event)=>{
+      event.waitUntil(
+        caches.keys().then(keys=>
+          Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))
+        )
+      );
+      self.clients.claim();
+    });
+    self.addEventListener('fetch', (event)=>{
+      if(event.request.method !== 'GET') return; // لا نتدخّل في طلبات الكتابة لـFirebase إطلاقاً
+      event.respondWith(
+        fetch(event.request).then(freshResponse=>{
+          // الشبكة متاحة — نُحدِّث الذاكرة المؤقتة بأحدث نسخة في الخلفية، ونُرجع الطلب الطازج
+          if(freshResponse && freshResponse.ok){
+            const clone = freshResponse.clone();
+            caches.open(CACHE_NAME).then(cache=> cache.put(event.request, clone));
+          }
+          return freshResponse;
+        }).catch(()=>
+          // فشلت الشبكة تماماً (بلا اتصال) — استخدم النسخة المحفوظة إن وُجدت
+          caches.match(event.request)
+        )
+      );
+    });
+  `;
+  try{
+    const blob = new Blob([swCode], {type: 'application/javascript'});
+    const swUrl = URL.createObjectURL(blob);
+    navigator.serviceWorker.register(swUrl).catch(e=>{
+      console.error('فشل تسجيل Service Worker (العمل بلا اتصال قد لا يعمل على هذا المتصفح تحديداً):', e);
+    });
+  }catch(e){
+    console.error('تعذّر إعداد Service Worker:', e);
+  }
+}
 </script>
 </body>
 </html>
