@@ -1322,6 +1322,8 @@
         نسخة تلقائية تُؤخَذ عند أول فتح للنظام كل يوم — يُحتفَظ بآخر 10 نسخ فقط تلقائياً.
         الاسترجاع يستبدل كل بياناتك الحالية بمحتوى النسخة المختارة.
       </div>
+      <button class="btn secondary" id="backupsDiagnosticBtn" style="margin-bottom:12px;">🔬 تشخيص متقدم (اضغط واحصل على تقرير كامل)</button>
+      <pre id="backupsDiagnosticOutput" style="display:none;background:#1e1e1e;color:#4ade80;padding:14px;border-radius:10px;font-size:11px;white-space:pre-wrap;word-break:break-all;direction:ltr;text-align:left;margin-bottom:14px;max-height:400px;overflow-y:auto;"></pre>
       <div id="backupsList" style="display:flex;flex-direction:column;gap:10px;"></div>
     </div>
   </div>
@@ -8976,6 +8978,39 @@ document.getElementById("auditLogPageClose").onclick = goHome;
 document.getElementById("auditLogSearch").addEventListener("input", applyAuditLogFilter);
 document.getElementById("trashPageClose").onclick = goHome;
 document.getElementById("backupsPageClose").onclick = goHome;
+document.getElementById("backupsDiagnosticBtn").onclick = async ()=>{
+  const outEl = document.getElementById("backupsDiagnosticOutput");
+  outEl.style.display = "block";
+  outEl.textContent = "جارٍ الفحص...";
+  try{
+    const fb = window.__fbModular;
+    const snap = await fb.get(fb.ref(fbDb, 'backups_meta'));
+    const exists = snap.exists();
+    const numChildren = exists && snap.numChildren ? snap.numChildren() : 0;
+    const keys = [];
+    if(exists) snap.forEach(child => keys.push(child.key));
+    keys.sort();
+    const rawVal = exists ? snap.val() : null;
+    const rawKeysCount = rawVal ? Object.keys(rawVal).length : 0;
+    const report = [
+      "=== تقرير تشخيص النسخ الاحتياطية ===",
+      "",
+      "هل المسار backups_meta موجود؟ " + exists,
+      "snap.numChildren(): " + numChildren,
+      "عدد المفاتيح (forEach يدوياً): " + keys.length,
+      "عدد المفاتيح (Object.keys على snap.val()): " + rawKeysCount,
+      "",
+      "=== كل المفاتيح مرتَّبة (الأقدم أولاً) ===",
+      ...keys.map((k,i)=> `${i+1}. ${k}`),
+      "",
+      "=== الحد الأقصى المُعرَّف في الكود ===",
+      "BACKUP_MAX_COUNT = " + BACKUP_MAX_COUNT
+    ].join("\n");
+    outEl.textContent = report;
+  }catch(e){
+    outEl.textContent = "❌ خطأ أثناء الفحص:\n" + (e.message || e) + "\n\n" + (e.stack || "");
+  }
+};
 
 document.getElementById("fuPrintBtn").onclick = printFollowupSheet;
 
@@ -9075,11 +9110,5 @@ document.getElementById("backupExportBtn").onclick = async ()=>{
 };
 
 </script>
-
-<!-- ===== أداة تشخيص مؤقتة للهاتف (Eruda) — سنزيلها بعد حل مشكلة النسخ
-     الاحتياطية. تُضيف زراً عائماً يفتح كونسولاً كاملاً على شاشة الهاتف نفسها،
-     بلا أي حاجة لحاسوب أو "وضع مطوّر" في إعدادات الهاتف. ===== -->
-<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-<script>eruda.init();</script>
 </body>
 </html>
