@@ -2076,6 +2076,7 @@ async function moveToTrash(type, label, data){
     return true;
   }catch(e){
     console.error("فشل نقل العنصر إلى سلة المهملات:", e);
+    showToast("⚠️ تعذّر حفظ نسخة في سلة المهملات — قد تكون قواعد Firebase لا تسمح بذلك (السبب: " + (e.message || e) + ")", "warn");
     return false;
   }
 }
@@ -2210,7 +2211,10 @@ async function cleanupOldBackups(){
       });
       await fb.update(fb.ref(fbDb), updates);
     }
-  }catch(e){ console.error("فشل تنظيف النسخ الاحتياطية القديمة:", e); }
+  }catch(e){
+    console.error("فشل تنظيف النسخ الاحتياطية القديمة:", e);
+    showToast("⚠️ تعذّر حذف النسخ الاحتياطية الزائدة عن 10 — السبب: " + (e.message || e), "warn");
+  }
 }
 
 // يُستدعى مرة عند كل بدء تشغيل — يتحقق هل يوجد أي نسخة أُخذت اليوم أصلاً
@@ -3354,6 +3358,7 @@ async function logAuditEntry(changedKeys, deletedKeys, fieldChangesByKey){
     await fb.set(fb.ref(fbDb, 'audit_log/' + getAuditTimestampKey()), entry);
   }catch(e){
     console.error("فشل تسجيل حدث في سجل التدقيق (لا يؤثر على الحفظ نفسه):", e);
+    showToast("⚠️ تعذّر تسجيل هذا التعديل في سجل التدقيق — السبب: " + (e.message || e), "warn");
   }
 }
 
