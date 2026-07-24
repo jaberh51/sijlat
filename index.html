@@ -840,6 +840,8 @@
   .lw-custom-group-header:hover{filter:brightness(1.03);}
   .lw-custom-group-disband{font-size:11px;font-weight:700;color:#7c3aed;cursor:pointer;text-decoration:underline dotted;flex:none;}
   .lw-custom-group-disband:hover{color:#5b21b6;}
+  .lw-custom-group-rename{font-size:11px;font-weight:700;color:#7c3aed;cursor:pointer;text-decoration:underline dotted;flex:none;}
+  .lw-custom-group-rename:hover{color:#5b21b6;}
   .lw-custom-group-body{
     display:flex;flex-direction:column;gap:8px;
     background:#faf9ff;border:1px dashed #7c3aed;border-radius:12px;padding:10px;
@@ -4720,6 +4722,31 @@ async function disbandCustomGroup(groupName){
   }
 }
 
+async function renameCustomGroup(oldName){
+  const newName = await askInput(`إعادة تسمية المجموعة "${oldName}" — اكتب الاسم الجديد:`, {type:"text", defaultValue: oldName});
+  if(!newName || !newName.trim() || newName.trim() === oldName) return;
+  const finalName = newName.trim();
+  const keysToUpdate = [];
+  Object.entries(masterCache).forEach(([key, rec])=>{
+    if(rec["محامي_اجراء"] && rec["محامي_اجراء"].customGroup === oldName){
+      rec["محامي_اجراء"].customGroup = finalName;
+      keysToUpdate.push(key);
+    }
+  });
+  if(!keysToUpdate.length) return;
+  await saveMaster(keysToUpdate);
+  // نقل حالة "الطي/الإظهار" المحفوظة من الاسم القديم للاسم الجديد، حتى لا
+  // تعود المجموعة مطوية بالخطأ بعد إعادة التسمية مباشرة
+  const unfoldedSet = getUnfoldedCustomGroupsSet();
+  if(unfoldedSet.has(oldName)){
+    unfoldedSet.delete(oldName);
+    unfoldedSet.add(finalName);
+    try{ localStorage.setItem('lw_unfolded_custom_groups', JSON.stringify([...unfoldedSet])); }catch(e){}
+  }
+  showToast(`✓ أُعيدت تسمية المجموعة إلى "${finalName}"`, "ok");
+  renderLwActionsBox();
+}
+
 // ===== "وضع الحذف المؤقت" — بديل موثوق تماماً عن إيماءات اللمس (الضغط
 // المطوّل والسحب فشلا كلاهما على الهاتف). زر واحد أعلى الصندوق يُفعِّل زر ✕
 // بجانب كل قضية لمدة دقيقة واحدة بالضبط، ثم يختفي تلقائياً بلا أي تفاعل. =====
@@ -5097,7 +5124,10 @@ function renderLwActionsBox(){
         ${foldBtnHtml(isFolded, attr)}
         <span class="lw-group-header-mid">
           📦 ${escapeAttr(groupName)} (${groupItems.length} قضية)
-          <span class="lw-custom-group-disband" ${attr} title="فك هذه المجموعة (تُعاد القضايا للقائمة العادية)">↺ فك</span>
+          <span style="display:flex;gap:8px;">
+            <span class="lw-custom-group-rename" ${attr} title="إعادة تسمية هذه المجموعة">✎ تسمية</span>
+            <span class="lw-custom-group-disband" ${attr} title="فك هذه المجموعة (تُعاد القضايا للقائمة العادية)">↺ فك</span>
+          </span>
         </span>
         ${showBtnHtml(isFolded, attr)}
       </div>
@@ -5144,6 +5174,11 @@ function renderLwActionsBox(){
     const quickDeleteBtn = e.target.closest(".lw-quick-delete-btn");
     if(quickDeleteBtn){
       await confirmAndRemoveLawyerCase(quickDeleteBtn.getAttribute("data-key"));
+      return;
+    }
+    const renameBtn = e.target.closest(".lw-custom-group-rename");
+    if(renameBtn){
+      await renameCustomGroup(renameBtn.getAttribute("data-groupname"));
       return;
     }
     const disbandBtn = e.target.closest(".lw-custom-group-disband");
