@@ -2213,7 +2213,7 @@ async function cleanupOldBackups(){
     const keys = [];
     snap.forEach(child => keys.push(child.key));
     keys.sort(); // الصيغة الزمنية تُرتَّب صحيحاً كنص أبجدي أيضاً
-    step(`🔍 خطوة1: وجدت ${keys.length} مفتاحاً. الحد=${BACKUP_MAX_COUNT}. سأحذف=${keys.length > BACKUP_MAX_COUNT}`, "warn", 4000);
+    step(`🔍 خطوة1: numChildren=${snap.numChildren ? snap.numChildren() : '؟'} | عدّي اليدوي=${keys.length} | أول: ${keys[0]||'-'} | آخر: ${keys[keys.length-1]||'-'}`, "warn", 4000);
     if(keys.length > BACKUP_MAX_COUNT){
       const toDelete = keys.slice(0, keys.length - BACKUP_MAX_COUNT);
       step(`🔍 خطوة2: سأحذف ${toDelete.length} — أول مفتاح للحذف: ${toDelete[0]}`, "warn", 8000);
@@ -9075,5 +9075,11 @@ document.getElementById("backupExportBtn").onclick = async ()=>{
 };
 
 </script>
+
+<!-- ===== أداة تشخيص مؤقتة للهاتف (Eruda) — سنزيلها بعد حل مشكلة النسخ
+     الاحتياطية. تُضيف زراً عائماً يفتح كونسولاً كاملاً على شاشة الهاتف نفسها،
+     بلا أي حاجة لحاسوب أو "وضع مطوّر" في إعدادات الهاتف. ===== -->
+<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
+<script>eruda.init();</script>
 </body>
 </html>
