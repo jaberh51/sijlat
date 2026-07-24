@@ -2198,7 +2198,10 @@ async function cleanupOldBackups(){
   const fb = window.__fbModular;
   try{
     const snap = await fb.get(fb.ref(fbDb, 'backups_meta'));
-    if(!snap.exists()) return;
+    if(!snap.exists()){
+      showToast("🔍 تشخيص: مسار backups_meta فارغ تماماً بالنسبة لـFirebase", "warn");
+      return;
+    }
     const keys = [];
     snap.forEach(child => keys.push(child.key));
     keys.sort(); // الصيغة الزمنية تُرتَّب صحيحاً كنص أبجدي أيضاً
@@ -2210,6 +2213,12 @@ async function cleanupOldBackups(){
         updates['backups_meta/' + k] = null;
       });
       await fb.update(fb.ref(fbDb), updates);
+      // تحقّق مباشر بعد الحذف المُفترَض — هل تغيّر العدد فعلياً في Firebase؟
+      const verifySnap = await fb.get(fb.ref(fbDb, 'backups_meta'));
+      const afterCount = verifySnap.exists() ? Object.keys(verifySnap.val()).length : 0;
+      showToast(`🔍 تشخيص: كان ${keys.length} نسخة، حاولت حذف ${toDelete.length}، النتيجة الفعلية بعد التحقق: ${afterCount} نسخة`, "warn");
+    } else {
+      showToast(`🔍 تشخيص: العدد الحالي ${keys.length} (لا يتجاوز الحد ${BACKUP_MAX_COUNT}، فلا حاجة لحذف)`, "ok");
     }
   }catch(e){
     console.error("فشل تنظيف النسخ الاحتياطية القديمة:", e);
