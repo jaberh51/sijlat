@@ -1322,7 +1322,8 @@
         نسخة تلقائية تُؤخَذ عند أول فتح للنظام كل يوم — يُحتفَظ بآخر 10 نسخ فقط تلقائياً.
         الاسترجاع يستبدل كل بياناتك الحالية بمحتوى النسخة المختارة.
       </div>
-      <button class="btn secondary" id="backupsDiagnosticBtn" style="margin-bottom:12px;">🔬 تشخيص متقدم (اضغط واحصل على تقرير كامل)</button>
+      <button class="btn secondary" id="backupsDiagnosticBtn" style="margin-bottom:8px;">🔬 تشخيص متقدم (اضغط واحصل على تقرير كامل)</button>
+      <button class="btn" id="backupsRepairBtn" style="margin-bottom:12px;background:#dc2626;color:#fff;border:none;">🔧 إصلاح الآن (إعادة بناء + تنظيف)</button>
       <pre id="backupsDiagnosticOutput" style="display:none;background:#1e1e1e;color:#4ade80;padding:14px;border-radius:10px;font-size:11px;white-space:pre-wrap;word-break:break-all;direction:ltr;text-align:left;margin-bottom:14px;max-height:400px;overflow-y:auto;"></pre>
       <div id="backupsList" style="display:flex;flex-direction:column;gap:10px;"></div>
     </div>
@@ -9009,6 +9010,47 @@ document.getElementById("backupsDiagnosticBtn").onclick = async ()=>{
     outEl.textContent = report;
   }catch(e){
     outEl.textContent = "❌ خطأ أثناء الفحص:\n" + (e.message || e) + "\n\n" + (e.stack || "");
+  }
+};
+document.getElementById("backupsRepairBtn").onclick = async ()=>{
+  const outEl = document.getElementById("backupsDiagnosticOutput");
+  outEl.style.display = "block";
+  outEl.textContent = "جارٍ الإصلاح — لا تُغلق الصفحة...";
+  try{
+    const fb = window.__fbModular;
+    // 1) قراءة backups الحقيقية (البيانات الثقيلة) — المصدر الموثوق، لأن
+    // backups_meta هي التي ظهرت فاسدة/غير متناسقة في التشخيص السابق
+    const heavySnap = await fb.get(fb.ref(fbDb, 'backups'));
+    if(!heavySnap.exists()){
+      outEl.textContent = "لا توجد أي نسخ احتياطية حقيقية أصلاً في مسار backups — لا شيء لإصلاحه.";
+      return;
+    }
+    const realKeys = Object.keys(heavySnap.val());
+    realKeys.sort();
+    // 2) إعادة بناء backups_meta بالكامل من الصفر — مطابقة تماماً للمفاتيح
+    // الحقيقية الموجودة فعلياً في backups، بمعلومات تقريبية معقولة لكل واحدة
+    const rebuiltMeta = {};
+    realKeys.forEach(k=>{
+      const caseCount = heavySnap.val()[k] ? Object.keys(heavySnap.val()[k]).length : 0;
+      rebuiltMeta[k] = {count: caseCount, savedAt: Date.now()};
+    });
+    await fb.set(fb.ref(fbDb, 'backups_meta'), rebuiltMeta);
+    // 3) الآن تنظيف طبيعي — الاحتفاظ بآخر 10 فقط من المفاتيح الحقيقية
+    let deletedCount = 0;
+    if(realKeys.length > BACKUP_MAX_COUNT){
+      const toDelete = realKeys.slice(0, realKeys.length - BACKUP_MAX_COUNT);
+      const updates = {};
+      toDelete.forEach(k=>{
+        updates['backups/' + k] = null;
+        updates['backups_meta/' + k] = null;
+      });
+      await fb.update(fb.ref(fbDb), updates);
+      deletedCount = toDelete.length;
+    }
+    outEl.textContent = `✓ تم الإصلاح بنجاح!\n\nعدد النسخ الحقيقية التي وُجدت: ${realKeys.length}\nعدد ما حُذف (الزائد عن 10): ${deletedCount}\nالعدد النهائي المتبقي: ${Math.min(realKeys.length, BACKUP_MAX_COUNT)}\n\nأعد فتح هذه الصفحة الآن للتأكد.`;
+    showToast("✓ تم إصلاح النسخ الاحتياطية بنجاح", "ok");
+  }catch(e){
+    outEl.textContent = "❌ فشل الإصلاح:\n" + (e.message || e);
   }
 };
 
