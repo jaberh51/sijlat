@@ -210,9 +210,6 @@
   .fu-result-row:hover{background:#faf9f5;}
   .fu-result-info{flex:1;min-width:200px;}
   .fu-result-case{font-weight:700;color:var(--ink);display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-  .lw-tracked-only-text{
-    display:inline-flex;align-items:center;font-size:13px;font-weight:700;color:var(--green);
-  }
   .fu-result-meta{font-size:12px;color:var(--ink-soft);margin-top:2px;}
   .fu-result-row .btn{padding:7px 14px;font-size:12.5px;flex:none;}
   .fu-result-added{color:var(--green);font-weight:700;font-size:12.5px;}
@@ -527,6 +524,11 @@
     border-color:transparent transparent transparent #fff;
   }
   .closure-card-sub{font-size:11.5px;color:var(--ink-soft,#777);font-weight:400;margin-top:2px;}
+  .settings-row{
+    display:flex;justify-content:space-between;align-items:center;gap:12px;
+    padding:8px 0;border-bottom:1px solid var(--line);font-size:12.5px;
+  }
+  .settings-row label{color:var(--ink);font-weight:600;}
   .closure-checkbox-label{
     display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;
     color:#166534;cursor:pointer;white-space:nowrap;
@@ -1297,6 +1299,7 @@
       <button class="btn secondary" id="viewBackupsBtn" style="font-size:11.5px;padding:6px 14px;">📜 عرض النسخ الاحتياطية</button>
       <button class="btn secondary" id="viewTrashBtn" style="font-size:11.5px;padding:6px 14px;">🗑️ سلة المهملات</button>
       <button class="btn secondary" id="viewAuditLogBtn" style="font-size:11.5px;padding:6px 14px;">📋 سجل التدقيق</button>
+      <button class="btn secondary" id="viewSettingsBtn" style="font-size:11.5px;padding:6px 14px;">⚙️ الإعدادات</button>
       <button class="btn secondary" id="signOutBtn" style="font-size:11.5px;padding:6px 14px;">🔒 تسجيل الخروج</button>
     </div>
   </div>
@@ -1363,6 +1366,71 @@
     <div style="font-size:12px;color:#666;margin-bottom:14px;">هذه المواعيد ستستمر بالظهور عند كل فتح للنظام حتى تمرّ أو تُحذَف يدوياً.</div>
     <div id="strictDeadlineList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px;margin-bottom:14px;"></div>
     <button id="strictDeadlineAckBtn" class="btn" style="background:#dc2626;color:#fff;border:none;padding:10px;font-weight:700;">✓ فهمت</button>
+  </div>
+</div>
+
+<div id="settingsPage" class="fu-page" style="display:none;">
+  <div class="fu-page-inner">
+    <div class="fu-page-header">
+      <div class="fu-page-title">⚙️ الإعدادات</div>
+      <button class="btn secondary" id="settingsPageClose">✕ إغلاق والعودة</button>
+    </div>
+
+    <div class="fu-page-section">
+      <div class="fu-page-subtitle">🔒 الأمان</div>
+      <div style="font-size:12px;color:var(--ink-soft);margin-bottom:10px;">مسجَّل دخولك حالياً باسم: <strong id="settingsCurrentEmail">—</strong></div>
+      <button class="btn secondary" id="settingsChangePwdBtn">🔑 تغيير كلمة السر (المستخدَمة في كل النظام)</button>
+    </div>
+
+    <div class="fu-page-section">
+      <div class="fu-page-subtitle">🗄️ البيانات والصيانة</div>
+      <div class="settings-row">
+        <label>عدد النسخ الاحتياطية المحفوظة</label>
+        <input type="number" id="settingsBackupMaxCount" class="cases-select" min="3" max="50" style="width:90px;">
+      </div>
+      <div class="settings-row">
+        <label>مدة الاحتفاظ بسلة المهملات (أيام)</label>
+        <input type="number" id="settingsTrashRetention" class="cases-select" min="1" max="365" style="width:90px;">
+      </div>
+      <div class="settings-row">
+        <label>مدة الاحتفاظ بسجل التدقيق (أيام)</label>
+        <input type="number" id="settingsAuditRetention" class="cases-select" min="1" max="365" style="width:90px;">
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+        <button class="btn secondary" id="settingsGoBackups">💾 نسخة احتياطية الآن</button>
+        <button class="btn secondary" id="settingsGoTrash">🗑️ سلة المهملات</button>
+        <button class="btn secondary" id="settingsGoAudit">📋 سجل التدقيق</button>
+      </div>
+    </div>
+
+    <div class="fu-page-section">
+      <div class="fu-page-subtitle">⏰ التذكيرات</div>
+      <div class="settings-row">
+        <label>التحذير المسبق للمواعيد الصارمة (أيام قبل الموعد)</label>
+        <input type="number" id="settingsDeadlineDays" class="cases-select" min="1" max="90" style="width:90px;">
+      </div>
+    </div>
+
+    <div class="fu-page-section">
+      <div class="fu-page-subtitle">🎨 التفضيلات</div>
+      <label class="closure-checkbox-label" style="margin-bottom:8px;">
+        <input type="checkbox" id="settingsDefaultFolded">
+        الحالة الافتراضية للمجموعات القابلة للطي = مطوية
+      </label>
+      <label class="closure-checkbox-label">
+        <input type="checkbox" id="settingsDefaultHideThird">
+        تفعيل "إخفاء المقطعين" افتراضياً عند فتح صفحتَي المحامي والقضايا
+      </label>
+    </div>
+
+    <div class="fu-page-section">
+      <div class="fu-page-subtitle">ℹ️ معلومات النظام</div>
+      <div id="settingsAboutInfo" style="font-size:12.5px;color:var(--ink-soft);line-height:2;"></div>
+    </div>
+
+    <div class="fu-page-section">
+      <button class="btn" id="settingsSaveBtn" style="width:100%;padding:12px;font-weight:700;">✓ حفظ كل الإعدادات</button>
+    </div>
   </div>
 </div>
 
@@ -2028,14 +2096,14 @@ async function fbSaveAllCases(cache, deletedKeys){
 let _lastFbSaveError = "";
 
 // ===== نظام النسخ الاحتياطية — آخر 10 نسخ بغض النظر عن توزيعها الزمني =====
-const BACKUP_MAX_COUNT = 10;
+let BACKUP_MAX_COUNT = 10;
 
 // مفتاح زمني دقيق (تاريخ + وقت) بصيغة "٢٠٢٦٠٧١٨_١٤٢٣٤٥" — يسمح بعدة نسخ في
 // نفس اليوم (كل واحدة بمفتاح فريد)، ويُرتَّب زمنياً بشكل صحيح تلقائياً كنص.
 // ===== سلة المهملات =====
 // أي حذف في النظام (سواء بالخطأ أو مقصوداً) يُنقَل هنا أولاً بدل الاختفاء
 // نهائياً فوراً — يبقى قابلاً للاسترجاع لمدة 30 يوماً، ثم يُنظَّف تلقائياً.
-const TRASH_RETENTION_DAYS = 30;
+let TRASH_RETENTION_DAYS = 30;
 
 function getTrashTimestampKey(){
   const d = getAccurateNow();
@@ -3321,7 +3389,7 @@ async function getMaster(){
 // يُسجِّل تلقائياً "من عدَّل، ماذا، ومتى" — مُدمَج مباشرة داخل saveMaster
 // نفسها (نقطة الحفظ المركزية الوحيدة)، فيُغطّي كل تعديل في النظام تلقائياً
 // بلا استثناء، بلا الحاجة لتعديل عشرات الأزرار يدوياً (وبلا خطر نسيان أحدها).
-const AUDIT_LOG_RETENTION_DAYS = 90;
+let AUDIT_LOG_RETENTION_DAYS = 90;
 
 function getAuditTimestampKey(){
   const d = getAccurateNow();
@@ -4356,6 +4424,7 @@ function renderFuStatsBox(){
 function openLawyerPage(){
   document.getElementById("lwSearchInput").value = "";
   document.getElementById("lwSearchResults").innerHTML = `<div class="fu-search-hint">اكتب حرفين على الأقل للبحث في كل القضايا...</div>`;
+  document.getElementById("lwHideThirdSegment").checked = !!appSettings.defaultHideThirdSegment;
   renderLwActionsBox();
   renderLwStatsBox();
 }
@@ -4366,6 +4435,7 @@ function closeLawyerPage(){
 
 let lwSearchMatches = [];
 let lwSearchPage = 0;
+let lwSearchAllTrackedMatch = false; // هل كل ما طابق البحث قضايا متابَعة بالفعل فقط؟
 const LW_PAGE_SIZE = 5;
 
 function runLwSearch(q){
@@ -4394,9 +4464,22 @@ function runLwSearch(q){
     // لقائمة "بحاجة إلى فصل" — هذه لا يجب أن تظهر في أي بحث أو متابعة بعد الآن.
     if(isCaseRemoved(key)) return false;
     if(isCaseNeedsClosure(key)) return false;
-    // ملاحظة: لا نستبعد القضايا المتابَعة بالفعل (لها إجراء محامي مسجَّل) —
-    // بل نُظهرها في النتائج مع شارة "✓ متابَعة بالفعل" بدل اختفائها بصمت،
-    // حتى لا يظن المستخدم أن البحث لم يجد شيئاً رغم وجود القضية فعلياً.
+    // القضايا المتابَعة بالفعل (لها إجراء محامي مسجَّل) تُستبعَد تماماً من
+    // النتائج — كأنها غير موجودة في صندوق البحث إطلاقاً، بدل عرضها كصفّ ثابت.
+    if(getLawyerAction(key)) return false;
+    return r["حالة الدعوى"] !== "فصل" && (
+        caseNoMatches(r) ||
+        (r["المحكمة"]||"").includes(q) ||
+        (r["وصف الدعوى"]||"").includes(q) ||
+        getDefendantNames(r).some(n => n.includes(q)) ||
+        getPlaintiffForRow(r).includes(q)
+      );
+  });
+  // فحص منفصل: هل كانت هناك مطابقات لولا استبعاد "المتابَعة بالفعل"؟ — يُستخدَم
+  // لعرض رسالة توضيحية دقيقة بدل "لا توجد نتائج" العامة المُضلِّلة
+  lwSearchAllTrackedMatch = !lwSearchMatches.length && unique.some(r=>{
+    const key = caseKey(r);
+    if(isCaseRemoved(key) || isCaseNeedsClosure(key) || !getLawyerAction(key)) return false;
     return r["حالة الدعوى"] !== "فصل" && (
         caseNoMatches(r) ||
         (r["المحكمة"]||"").includes(q) ||
@@ -4414,7 +4497,9 @@ function renderLwSearchPage(){
   const total = lwSearchMatches.length;
 
   if(!total){
-    resultsEl.innerHTML = `<div class="fu-search-hint">لا توجد نتائج مطابقة</div>`;
+    resultsEl.innerHTML = lwSearchAllTrackedMatch
+      ? `<div class="fu-search-hint">✓ هذه القضية متابَعة بالفعل — ستجدها في صندوق المتابعات أدناه</div>`
+      : `<div class="fu-search-hint">لا توجد نتائج مطابقة</div>`;
     return;
   }
 
@@ -4430,10 +4515,7 @@ function renderLwSearchPage(){
     const key = caseKey(r);
     const def = getDefendantForRow(r);
     const caseNoLabel = shortCaseNo(r["رقم الدعوى"]);
-    const tracked = getLawyerAction(key);
-    const caseNoArea = tracked
-      ? `<span class="lw-tracked-only-text">✓ متابَعة بالفعل</span>`
-      : `<button class="lw-case-number" data-key="${escapeAttr(key)}" data-tracked="0">${caseNoLabel}</button>`;
+    const caseNoArea = `<button class="lw-case-number" data-key="${escapeAttr(key)}" data-tracked="0">${caseNoLabel}</button>`;
     return `
       <div class="fu-result-row" data-key="${escapeAttr(key)}">
         <div class="fu-result-info">
@@ -4604,8 +4686,135 @@ async function verifyPassword(pwd, expectedHash){
   }
 }
 
-// بصمة SHA-256 لكلمة السر المعتمدة — محسوبة مسبقاً، النص الأصلي غير موجود في الكود إطلاقاً
-const LW_STEP_PASS_HASH = "b26b9fa1ffb31e0767543bd7908203c29a5fe51c5974a76f1f9ac9cefcfa25a9";
+// بصمة SHA-256 لكلمة السر المعتمدة — القيمة الافتراضية محسوبة مسبقاً (النص
+// الأصلي غير موجود في الكود إطلاقاً)، لكنها الآن "let" قابلة للتحديث من صفحة
+// الإعدادات وقراءتها من Firebase عند بدء التشغيل (بدل ثابت جامد في الكود).
+let LW_STEP_PASS_HASH = "b26b9fa1ffb31e0767543bd7908203c29a5fe51c5974a76f1f9ac9cefcfa25a9";
+
+// ===== نظام الإعدادات العامة — صفحة "⚙️ الإعدادات" =====
+// قيم افتراضية مطابقة تماماً لما كان ثابتاً في الكود سابقاً — أي إعداد لم
+// يُحفَظ بعد في Firebase يستخدم هذه القيمة تلقائياً، فلا يتغيَّر أي سلوك
+// حالي إطلاقاً إلا إن غيَّره المستخدم صراحةً من صفحة الإعدادات.
+const DEFAULT_APP_SETTINGS = {
+  backupMaxCount: 10,
+  trashRetentionDays: 30,
+  auditLogRetentionDays: 90,
+  strictDeadlineWarningDays: 14,
+  defaultGroupsFolded: true,
+  defaultHideThirdSegment: false
+};
+let appSettings = {...DEFAULT_APP_SETTINGS};
+
+async function loadAppSettings(){
+  if(!fbDb) return;
+  try{
+    const fb = window.__fbModular;
+    const snap = await fb.get(fb.ref(fbDb, 'app_settings'));
+    if(snap.exists()){
+      appSettings = {...DEFAULT_APP_SETTINGS, ...snap.val()};
+      if(appSettings.passwordHash) LW_STEP_PASS_HASH = appSettings.passwordHash;
+      // مزامنة الثوابت التشغيلية الأربعة القابلة للتخصيص مع القيم المحفوظة
+      BACKUP_MAX_COUNT = appSettings.backupMaxCount;
+      TRASH_RETENTION_DAYS = appSettings.trashRetentionDays;
+      AUDIT_LOG_RETENTION_DAYS = appSettings.auditLogRetentionDays;
+      STRICT_DEADLINE_WARNING_DAYS = appSettings.strictDeadlineWarningDays;
+    }
+  }catch(e){
+    console.error("فشل تحميل إعدادات النظام (استُخدمت القيم الافتراضية):", e);
+  }
+}
+
+async function saveAppSettingField(key, value){
+  appSettings[key] = value;
+  if(!fbDb) return false;
+  try{
+    const fb = window.__fbModular;
+    await fb.set(fb.ref(fbDb, 'app_settings/' + key), value);
+    return true;
+  }catch(e){
+    console.error("فشل حفظ الإعداد:", e);
+    showToast("⚠️ تعذّر حفظ الإعداد — السبب: " + (e.message || e), "warn");
+    return false;
+  }
+}
+
+function renderSettingsPage(){
+  document.getElementById("settingsCurrentEmail").textContent = getCurrentUserEmail();
+  document.getElementById("settingsBackupMaxCount").value = appSettings.backupMaxCount;
+  document.getElementById("settingsTrashRetention").value = appSettings.trashRetentionDays;
+  document.getElementById("settingsAuditRetention").value = appSettings.auditLogRetentionDays;
+  document.getElementById("settingsDeadlineDays").value = appSettings.strictDeadlineWarningDays;
+  document.getElementById("settingsDefaultFolded").checked = !!appSettings.defaultGroupsFolded;
+  document.getElementById("settingsDefaultHideThird").checked = !!appSettings.defaultHideThirdSegment;
+
+  const totalCases = Object.keys(masterCache).length;
+  const versionEl = document.getElementById("appVersionTag");
+  const version = versionEl ? versionEl.textContent.replace("الإصدار ", "") : "غير معروف";
+  document.getElementById("settingsAboutInfo").innerHTML = `
+    <div>📦 الإصدار: ${escapeAttr(version)}</div>
+    <div>📁 عدد القضايا المحفوظة: ${totalCases}</div>
+  `;
+}
+
+document.getElementById("viewSettingsBtn").onclick = goSettings;
+document.getElementById("settingsPageClose").onclick = goHome;
+document.getElementById("settingsGoBackups").onclick = goBackups;
+document.getElementById("settingsGoTrash").onclick = goTrash;
+document.getElementById("settingsGoAudit").onclick = goAuditLog;
+
+document.getElementById("settingsSaveBtn").onclick = async ()=>{
+  const backupMaxCount = parseInt(document.getElementById("settingsBackupMaxCount").value, 10);
+  const trashRetentionDays = parseInt(document.getElementById("settingsTrashRetention").value, 10);
+  const auditLogRetentionDays = parseInt(document.getElementById("settingsAuditRetention").value, 10);
+  const strictDeadlineWarningDays = parseInt(document.getElementById("settingsDeadlineDays").value, 10);
+  const defaultGroupsFolded = document.getElementById("settingsDefaultFolded").checked;
+  const defaultHideThirdSegment = document.getElementById("settingsDefaultHideThird").checked;
+
+  if([backupMaxCount, trashRetentionDays, auditLogRetentionDays, strictDeadlineWarningDays].some(n=> isNaN(n) || n < 1)){
+    showToast("⚠️ تحقّق من الأرقام المُدخَلة — يجب أن تكون كلها أكبر من صفر", "warn");
+    return;
+  }
+
+  await Promise.all([
+    saveAppSettingField('backupMaxCount', backupMaxCount),
+    saveAppSettingField('trashRetentionDays', trashRetentionDays),
+    saveAppSettingField('auditLogRetentionDays', auditLogRetentionDays),
+    saveAppSettingField('strictDeadlineWarningDays', strictDeadlineWarningDays),
+    saveAppSettingField('defaultGroupsFolded', defaultGroupsFolded),
+    saveAppSettingField('defaultHideThirdSegment', defaultHideThirdSegment)
+  ]);
+  // مزامنة الثوابت التشغيلية فوراً — بلا حاجة لإعادة تحميل الصفحة
+  BACKUP_MAX_COUNT = backupMaxCount;
+  TRASH_RETENTION_DAYS = trashRetentionDays;
+  AUDIT_LOG_RETENTION_DAYS = auditLogRetentionDays;
+  STRICT_DEADLINE_WARNING_DAYS = strictDeadlineWarningDays;
+  showToast("✓ تم حفظ كل الإعدادات بنجاح", "ok");
+};
+
+document.getElementById("settingsChangePwdBtn").onclick = async ()=>{
+  const currentPwd = await askPassword("أدخل كلمة السر الحالية للتأكيد:");
+  if(!(await verifyPassword(currentPwd, LW_STEP_PASS_HASH))){
+    showToast("⚠️ كلمة السر الحالية غير صحيحة", "warn");
+    return;
+  }
+  const newPwd = await askPassword("أدخل كلمة السر الجديدة:");
+  if(!newPwd || newPwd.length < 4){
+    showToast("⚠️ كلمة السر الجديدة قصيرة جداً (4 أحرف على الأقل)", "warn");
+    return;
+  }
+  const confirmPwd = await askPassword("أعد كتابة كلمة السر الجديدة للتأكيد:");
+  if(newPwd !== confirmPwd){
+    showToast("⚠️ كلمتا السر غير متطابقتين — لم يتم التغيير", "warn");
+    return;
+  }
+  const newHash = await sha256Hex(newPwd);
+  const ok = await saveAppSettingField('passwordHash', newHash);
+  if(ok){
+    LW_STEP_PASS_HASH = newHash;
+    showToast("✓ تم تغيير كلمة السر بنجاح — استخدمها من الآن فصاعداً", "ok");
+  }
+};
+
 
 function getLwSteps(key){
   const master = masterCache;
@@ -5117,7 +5326,7 @@ function renderLwActionsBox(){
   let html = "";
   customGroupNames.forEach(groupName=>{
     const groupItems = customGroupsMap[groupName];
-    const isFolded = !unfoldedCustomGroups.has(groupName);
+    const isFolded = appSettings.defaultGroupsFolded ? !unfoldedCustomGroups.has(groupName) : unfoldedCustomGroups.has(groupName);
     const attr = `data-groupname="${escapeAttr(groupName)}"`;
     html += `
       <div class="lw-custom-group-header" ${attr}>
@@ -5140,7 +5349,9 @@ function renderLwActionsBox(){
   // قسم القضايا الصفرية يظهر دائماً في الأسفل (أولوية أقل بصرياً) — قابل للطي
   // — مطوي افتراضياً أيضاً، إلا إن فتحه المستخدم صراحةً
   if(zeroItems.length){
-    const isZeroSectionFolded = localStorage.getItem('lw_zero_section_unfolded') !== '1';
+    const isZeroSectionFolded = appSettings.defaultGroupsFolded
+      ? localStorage.getItem('lw_zero_section_unfolded') !== '1'
+      : localStorage.getItem('lw_zero_section_unfolded') === '1';
     const zAttr = 'data-zerosection="1"';
     html += `
       <div class="lw-zero-section-header" id="lwZeroSectionHeader">
@@ -6688,6 +6899,7 @@ function goHome(){
   document.getElementById("backupsPage").style.display = "none";
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
+  document.getElementById("settingsPage").style.display = "none";
   document.body.style.overflow = "";
   currentSection = null;
   document.body.classList.remove("mode-remittances");
@@ -6704,6 +6916,7 @@ function goTrash(){
   document.getElementById("analysisPage").style.display = "none";
   document.getElementById("backupsPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
+  document.getElementById("settingsPage").style.display = "none";
   document.getElementById("trashPage").style.display = "block";
   document.body.style.overflow = "hidden";
   currentSection = "trash";
@@ -6720,11 +6933,29 @@ function goAuditLog(){
   document.getElementById("analysisPage").style.display = "none";
   document.getElementById("backupsPage").style.display = "none";
   document.getElementById("trashPage").style.display = "none";
+  document.getElementById("settingsPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "block";
   document.body.style.overflow = "hidden";
   currentSection = "auditlog";
   document.body.classList.remove("mode-remittances");
   renderAuditLogList();
+}
+
+function goSettings(){
+  document.getElementById("homePage").style.display = "none";
+  document.getElementById("mainWrap").style.display = "none";
+  document.getElementById("followupPage").style.display = "none";
+  document.getElementById("lawyerPage").style.display = "none";
+  document.getElementById("casesPage").style.display = "none";
+  document.getElementById("analysisPage").style.display = "none";
+  document.getElementById("backupsPage").style.display = "none";
+  document.getElementById("trashPage").style.display = "none";
+  document.getElementById("auditLogPage").style.display = "none";
+  document.getElementById("settingsPage").style.display = "block";
+  document.body.style.overflow = "hidden";
+  currentSection = "settings";
+  document.body.classList.remove("mode-remittances");
+  renderSettingsPage();
 }
 
 function goBackups(){
@@ -6751,6 +6982,7 @@ function goRemittances(){
   document.getElementById("backupsPage").style.display = "none";
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
+  document.getElementById("settingsPage").style.display = "none";
   document.body.style.overflow = "";
   currentSection = "remittances";
   document.body.classList.add("mode-remittances");
@@ -6771,6 +7003,7 @@ function goFollowups(){
   document.getElementById("backupsPage").style.display = "none";
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
+  document.getElementById("settingsPage").style.display = "none";
   document.body.style.overflow = "hidden";
   currentSection = "followups";
   document.body.classList.remove("mode-remittances");
@@ -6785,6 +7018,7 @@ function goLawyer(){
   document.getElementById("lawyerPage").style.display = "block";
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
+  document.getElementById("settingsPage").style.display = "none";
   document.body.style.overflow = "hidden";
   currentSection = "lawyer";
   document.body.classList.remove("mode-remittances");
@@ -6803,7 +7037,6 @@ document.addEventListener('keydown', (e)=>{
 let CASES_PAGE_SIZE = parseInt(localStorage.getItem('cases_page_size') || '25', 10);
 const CASES_MIN_REMAINING = 5; // الحد الأدنى للمبلغ المتبقي للظهور
 // نفس كلمة السر تُستخدم هنا أيضاً — بصمة SHA-256 معرّفة مسبقاً (LW_STEP_PASS_HASH)
-const CASES_REMOVE_PASS_HASH = LW_STEP_PASS_HASH;
 let casesAllRows = [];
 
 // ===== اكتشاف زيادة "المتاح" وتمييزها بصرياً (وميض + تقديم للأعلى) =====
@@ -6989,7 +7222,7 @@ const CASES_FORCE_EDIT_MODE_DURATION_MS = 60 * 1000; // دقيقة كاملة
 
 async function activateCasesForceDeleteMode(){
   const pwd = await askPassword("أدخل كلمة السر لتفعيل الحذف/التعديل القسري:");
-  if(!(await verifyPassword(pwd, CASES_REMOVE_PASS_HASH))){
+  if(!(await verifyPassword(pwd, LW_STEP_PASS_HASH))){
     showToast("⚠️ كلمة السر غير صحيحة", "warn");
     return;
   }
@@ -7014,7 +7247,7 @@ async function activateCasesForceDeleteMode(){
 
 async function forceMoveCaseToClosure(key){
   const pwd = await askPassword("⚠️ حذف قسري بغضّ النظر عن الحالة المالية — سيُنقَل لقائمة بحاجة إلى فصل. أدخل كلمة السر للتأكيد:");
-  if(!(await verifyPassword(pwd, CASES_REMOVE_PASS_HASH))){
+  if(!(await verifyPassword(pwd, LW_STEP_PASS_HASH))){
     showToast("⚠️ كلمة السر غير صحيحة", "warn");
     return;
   }
@@ -7226,6 +7459,7 @@ function openCasesPage(){
   updateCasesSortUI();
   document.getElementById("casesSearch").value = "";
   document.getElementById("casesStatusFilter").value = "";
+  document.getElementById("casesHideThirdSegment").checked = !!appSettings.defaultHideThirdSegment;
   casesCurrentPage = 0;
   renderClosureNeededBox();
   applyCasesFilter();
@@ -7274,7 +7508,7 @@ document.getElementById("closureList").onclick = async (e)=>{
   if(!btn) return;
   const key = btn.getAttribute("data-key");
   const pwd = await askPassword("أدخل كلمة السر لإزالة هذه القضية نهائياً من النظام:");
-  if(!(await verifyPassword(pwd, CASES_REMOVE_PASS_HASH))){
+  if(!(await verifyPassword(pwd, LW_STEP_PASS_HASH))){
     showToast("⚠️ كلمة السر غير صحيحة", "warn");
     return;
   }
@@ -7323,7 +7557,7 @@ function getKnownCourtNames(){
 }
 
 // ===== نظام "المواعيد الصارمة" — تنبيه قسري لا يمكن تجاهله بسهولة =====
-const STRICT_DEADLINE_WARNING_DAYS = 14; // أسبوعان قبل الموعد
+let STRICT_DEADLINE_WARNING_DAYS = 14; // أسبوعان قبل الموعد
 
 // نقطة الدخول الوحيدة: زر واحد في الصفحة يسأل عن رقم القضية أولاً، ثم يُكمل
 // بنفس تدفّق setStrictDeadline (تاريخ + رسالة) بمجرد إيجاد القضية المطابقة
@@ -7838,7 +8072,7 @@ function renderCasesPage(){
         }
 
         const pwd = await askPassword("أدخل كلمة السر لإزالة هذه القضية نهائياً (تسوية خارجية):");
-        if(!(await verifyPassword(pwd, CASES_REMOVE_PASS_HASH))){
+        if(!(await verifyPassword(pwd, LW_STEP_PASS_HASH))){
           showToast("⚠️ كلمة السر غير صحيحة", "warn");
           return;
         }
@@ -8053,6 +8287,7 @@ function goCases(){
   document.getElementById("backupsPage").style.display = "none";
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
+  document.getElementById("settingsPage").style.display = "none";
   document.getElementById("casesPage").style.display = "block";
   document.body.style.overflow = "hidden";
   currentSection = "cases";
@@ -8501,6 +8736,7 @@ function goAnalysis(){
   document.getElementById("backupsPage").style.display = "none";
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
+  document.getElementById("settingsPage").style.display = "none";
   document.getElementById("analysisPage").style.display = "block";
   document.body.style.overflow = "hidden";
   currentSection = "analysis";
@@ -8565,7 +8801,7 @@ function showCasesDblClickMenu(e, key){
 
     if(action === "delete"){
       const pwd = await askPassword("أدخل كلمة السر لحذف هذه القضية نهائياً (تسوية خارجية):");
-      if(!(await verifyPassword(pwd, CASES_REMOVE_PASS_HASH))){
+      if(!(await verifyPassword(pwd, LW_STEP_PASS_HASH))){
         showToast("⚠️ كلمة السر غير صحيحة", "warn");
         return;
       }
@@ -8774,6 +9010,9 @@ async function initApp(){
   // 1) تحميل فوري من IndexedDB (محلي، بلا انتظار شبكة) — يبدأ Firebase تحميله
   //    التدريجي في الخلفية بالتوازي دون حجب أي شيء لاحق في هذه الدالة.
   await bootstrapMasterCache();
+  // تحميل إعدادات النظام مبكراً (كلمة السر المخصَّصة إن وُجدت، مدد الاحتفاظ،
+  // إلخ) — قبل أي تفاعل قد يحتاجها، بلا حجب بقية التحميل (fire-and-forget)
+  loadAppSettings();
 
   // 2) تنظيف الماستر القديم — مرة واحدة فقط (نتحقق من علامة في localStorage)
   const cleanupDone = localStorage.getItem('_cleanupDone');
