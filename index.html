@@ -2161,6 +2161,13 @@ function getTodayDateStr(){
 async function saveBackupNow(showFeedback){
   if(!fbDb) return false;
   const fb = window.__fbModular;
+  // انتظار اكتمال الاتصال الكامل بـFirebase أولاً — بلا هذا، عملية النسخ
+  // الاحتياطي (وتنظيف الزائد عن 10) قد تُنفَّذ مبكراً جداً (مثلاً فور فتح
+  // الصفحة أو بعد تحديث المتصفح مباشرة)، فتقرأ بيانات ناقصة من Firebase قبل
+  // اكتمال المزامنة، فيبدو للتنظيف أن العدد أقل بكثير مما هو عليه فعلاً.
+  if(window._masterCacheFullSyncPromise){
+    try{ await window._masterCacheFullSyncPromise; }catch(e){}
+  }
   const key = getBackupTimestampKey();
   try{
     // تنظيف البيانات (تشفير أسماء الحقول الممنوعة) على دفعات صغيرة مع توقفات
@@ -2196,16 +2203,9 @@ async function saveBackupNow(showFeedback){
 async function cleanupOldBackups(){
   if(!fbDb) return;
   const fb = window.__fbModular;
-  // تأخير أي رسالة تشخيصية هنا 3.5 ثانية — تُستدعى هذه الدالة قبل رسالة "تم
-  // أخذ نسخة احتياطية" الناجحة مباشرة، وكلاهما يستخدمان نفس عنصر التنبيه
-  // الوحيد في الصفحة، فتُستبدَل رسالة التشخيص فوراً بلا أن تُرى إطلاقاً.
-  const delayedToast = (msg, kind)=> setTimeout(()=> showToast(msg, kind), 3500);
   try{
     const snap = await fb.get(fb.ref(fbDb, 'backups_meta'));
-    if(!snap.exists()){
-      delayedToast("🔍 تشخيص: مسار backups_meta فارغ تماماً بالنسبة لـFirebase", "warn");
-      return;
-    }
+    if(!snap.exists()) return;
     const keys = [];
     snap.forEach(child => keys.push(child.key));
     keys.sort(); // الصيغة الزمنية تُرتَّب صحيحاً كنص أبجدي أيضاً
@@ -2217,16 +2217,10 @@ async function cleanupOldBackups(){
         updates['backups_meta/' + k] = null;
       });
       await fb.update(fb.ref(fbDb), updates);
-      // تحقّق مباشر بعد الحذف المُفترَض — هل تغيّر العدد فعلياً في Firebase؟
-      const verifySnap = await fb.get(fb.ref(fbDb, 'backups_meta'));
-      const afterCount = verifySnap.exists() ? Object.keys(verifySnap.val()).length : 0;
-      delayedToast(`🔍 تشخيص: كان ${keys.length} نسخة، حاولت حذف ${toDelete.length}، النتيجة الفعلية بعد التحقق: ${afterCount} نسخة`, "warn");
-    } else {
-      delayedToast(`🔍 تشخيص: العدد الحالي ${keys.length} (لا يتجاوز الحد ${BACKUP_MAX_COUNT}، فلا حاجة لحذف)`, "ok");
     }
   }catch(e){
     console.error("فشل تنظيف النسخ الاحتياطية القديمة:", e);
-    delayedToast("⚠️ تعذّر حذف النسخ الاحتياطية الزائدة عن 10 — السبب: " + (e.message || e), "warn");
+    setTimeout(()=> showToast("⚠️ تعذّر حذف النسخ الاحتياطية الزائدة عن 10 — السبب: " + (e.message || e), "warn"), 3500);
   }
 }
 
@@ -2479,7 +2473,6 @@ async function renderBackupsList(){
   const listEl = document.getElementById("backupsList");
   listEl.innerHTML = `<div class="fu-search-hint">جارٍ التحميل...</div>`;
   const items = await listBackups();
-  showToast(`🔍 تشخيص مباشر: listBackups() وجدت ${items.length} نسخة الآن بالضبط`, "ok");
   if(!items.length){
     listEl.innerHTML = `<div class="fu-tracked-empty">لا توجد نسخ احتياطية بعد — ستُؤخَذ أول نسخة تلقائياً غداً، أو اضغط "نسخة احتياطية الآن" من الصفحة الرئيسية.</div>`;
     return;
