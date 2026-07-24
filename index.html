@@ -2203,24 +2203,38 @@ async function saveBackupNow(showFeedback){
 async function cleanupOldBackups(){
   if(!fbDb) return;
   const fb = window.__fbModular;
+  const step = (msg, kind, delayMs)=> setTimeout(()=> showToast(msg, kind), delayMs);
   try{
     const snap = await fb.get(fb.ref(fbDb, 'backups_meta'));
-    if(!snap.exists()) return;
+    if(!snap.exists()){
+      step("🔍 خطوة1: backups_meta فارغ تماماً!", "warn", 4000);
+      return;
+    }
     const keys = [];
     snap.forEach(child => keys.push(child.key));
     keys.sort(); // الصيغة الزمنية تُرتَّب صحيحاً كنص أبجدي أيضاً
+    step(`🔍 خطوة1: وجدت ${keys.length} مفتاحاً. الحد=${BACKUP_MAX_COUNT}. سأحذف=${keys.length > BACKUP_MAX_COUNT}`, "warn", 4000);
     if(keys.length > BACKUP_MAX_COUNT){
       const toDelete = keys.slice(0, keys.length - BACKUP_MAX_COUNT);
+      step(`🔍 خطوة2: سأحذف ${toDelete.length} — أول مفتاح للحذف: ${toDelete[0]}`, "warn", 8000);
       const updates = {};
       toDelete.forEach(k=>{
         updates['backups/' + k] = null;
         updates['backups_meta/' + k] = null;
       });
-      await fb.update(fb.ref(fbDb), updates);
+      try{
+        await fb.update(fb.ref(fbDb), updates);
+        step(`🔍 خطوة3: fb.update() اكتملت بلا خطأ ظاهر`, "ok", 12000);
+      }catch(updateErr){
+        step(`🔍 خطوة3: فشل fb.update() فعلياً — ${updateErr.message || updateErr}`, "warn", 12000);
+      }
+      const verifySnap = await fb.get(fb.ref(fbDb, 'backups_meta'));
+      const afterCount = verifySnap.exists() ? Object.keys(verifySnap.val()).length : 0;
+      step(`🔍 خطوة4: العدد الفعلي بعد الحذف = ${afterCount}`, "warn", 16000);
     }
   }catch(e){
     console.error("فشل تنظيف النسخ الاحتياطية القديمة:", e);
-    setTimeout(()=> showToast("⚠️ تعذّر حذف النسخ الاحتياطية الزائدة عن 10 — السبب: " + (e.message || e), "warn"), 3500);
+    step("⚠️ تعذّر حذف النسخ الاحتياطية الزائدة عن 10 — السبب: " + (e.message || e), "warn", 4000);
   }
 }
 
