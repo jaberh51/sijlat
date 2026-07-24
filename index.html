@@ -827,17 +827,18 @@
   .lw-folded-card:hover{background:#e2e4ea;}
   .lw-folded-hint{font-size:10.5px;font-weight:400;color:var(--slate);}
   .lw-fold-toggle-pair{display:flex;justify-content:space-between;gap:14px;font-size:11px;font-weight:700;min-width:70px;}
-  .lw-toggle-fold, .lw-toggle-show{cursor:pointer;}
+  .lw-toggle-fold, .lw-toggle-show{cursor:pointer;direction:rtl;}
   .lw-toggle-active{color:var(--brass);opacity:1;}
   .lw-toggle-inactive{color:var(--ink-soft);opacity:0.4;}
+  .lw-group-header-mid{flex:1;direction:rtl;text-align:right;display:flex;align-items:center;justify-content:space-between;gap:10px;}
   .lw-custom-group-header{
-    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    display:flex;align-items:center;justify-content:space-between;gap:10px;direction:ltr;
     background:linear-gradient(135deg,#ede9fe,#f3f0ff);border:1px solid #7c3aed;
     border-radius:10px;padding:10px 16px;margin:16px 0 8px;cursor:pointer;
     font-weight:700;font-size:13px;color:#5b21b6;
   }
   .lw-custom-group-header:hover{filter:brightness(1.03);}
-  .lw-custom-group-disband{font-size:11px;font-weight:700;color:#7c3aed;cursor:pointer;text-decoration:underline dotted;}
+  .lw-custom-group-disband{font-size:11px;font-weight:700;color:#7c3aed;cursor:pointer;text-decoration:underline dotted;flex:none;}
   .lw-custom-group-disband:hover{color:#5b21b6;}
   .lw-custom-group-body{
     display:flex;flex-direction:column;gap:8px;
@@ -857,7 +858,7 @@
   }
   .audit-restore-btn:hover{background:var(--brass-soft);}
   .lw-zero-section-header{
-    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    display:flex;align-items:center;justify-content:space-between;gap:10px;direction:ltr;
     background:#f3f4f6;border:1px solid #9ca3af;border-radius:10px;
     padding:10px 16px;margin:20px 0 8px;cursor:pointer;
     font-weight:700;font-size:13px;color:#4b5563;
@@ -5078,26 +5079,27 @@ function renderLwActionsBox(){
   // المستخدم صراحةً (Set يحتوي أسماء المجموعات "المفتوحة يدوياً" فقط)
   const unfoldedCustomGroups = getUnfoldedCustomGroupsSet();
 
-  // زران بموضعين ثابتين دائماً (طي أقصى اليسار، إظهار أقصى اليمين) — الفعّال
-  // منهما (الذي يُنفِّذ فعلاً عند الضغط) مميَّز بصرياً، والآخر باهت للسياق فقط
-  const foldToggleHtml = (isFolded, dataAttr)=> `
-    <span class="lw-fold-toggle-pair">
-      <span class="lw-toggle-fold ${isFolded ? 'lw-toggle-inactive' : 'lw-toggle-active'}" ${dataAttr}>▾ طي</span>
-      <span class="lw-toggle-show ${isFolded ? 'lw-toggle-active' : 'lw-toggle-inactive'}" ${dataAttr}>▸ إظهار</span>
-    </span>
-  `;
+  // زران بموضعين ثابتين على طرفَي الرأس بالكامل (طي أقصى اليسار فعلياً،
+  // إظهار أقصى اليمين فعلياً) — الفعّال منهما (الذي يُنفِّذ عند الضغط) مميَّز
+  // بصرياً، والآخر باهت للسياق فقط. المحتوى الأوسط (الاسم/العدد/فك) بينهما.
+  const foldBtnHtml = (isFolded, dataAttr)=>
+    `<span class="lw-toggle-fold ${isFolded ? 'lw-toggle-inactive' : 'lw-toggle-active'}" ${dataAttr}>▾ طي</span>`;
+  const showBtnHtml = (isFolded, dataAttr)=>
+    `<span class="lw-toggle-show ${isFolded ? 'lw-toggle-active' : 'lw-toggle-inactive'}" ${dataAttr}>▸ إظهار</span>`;
 
   let html = "";
   customGroupNames.forEach(groupName=>{
     const groupItems = customGroupsMap[groupName];
     const isFolded = !unfoldedCustomGroups.has(groupName);
+    const attr = `data-groupname="${escapeAttr(groupName)}"`;
     html += `
-      <div class="lw-custom-group-header" data-groupname="${escapeAttr(groupName)}">
-        <span>📦 ${escapeAttr(groupName)} (${groupItems.length} قضية)</span>
-        <span style="display:flex;gap:10px;align-items:center;">
-          <span class="lw-custom-group-disband" data-groupname="${escapeAttr(groupName)}" title="فك هذه المجموعة (تُعاد القضايا للقائمة العادية)">↺ فك</span>
-          ${foldToggleHtml(isFolded, `data-groupname="${escapeAttr(groupName)}"`)}
+      <div class="lw-custom-group-header" ${attr}>
+        ${foldBtnHtml(isFolded, attr)}
+        <span class="lw-group-header-mid">
+          📦 ${escapeAttr(groupName)} (${groupItems.length} قضية)
+          <span class="lw-custom-group-disband" ${attr} title="فك هذه المجموعة (تُعاد القضايا للقائمة العادية)">↺ فك</span>
         </span>
+        ${showBtnHtml(isFolded, attr)}
       </div>
     `;
     if(!isFolded){
@@ -5109,10 +5111,12 @@ function renderLwActionsBox(){
   // — مطوي افتراضياً أيضاً، إلا إن فتحه المستخدم صراحةً
   if(zeroItems.length){
     const isZeroSectionFolded = localStorage.getItem('lw_zero_section_unfolded') !== '1';
+    const zAttr = 'data-zerosection="1"';
     html += `
       <div class="lw-zero-section-header" id="lwZeroSectionHeader">
-        <span>🔴 قضايا صفرية — بلا تحصيل وبلا متاح (${zeroItems.length})</span>
-        ${foldToggleHtml(isZeroSectionFolded, 'data-zerosection="1"')}
+        ${foldBtnHtml(isZeroSectionFolded, zAttr)}
+        <span class="lw-group-header-mid">🔴 قضايا صفرية — بلا تحصيل وبلا متاح (${zeroItems.length})</span>
+        ${showBtnHtml(isZeroSectionFolded, zAttr)}
       </div>
     `;
     if(!isZeroSectionFolded){
