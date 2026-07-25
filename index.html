@@ -5493,13 +5493,13 @@ function renderLwActionsBox(){
     let party2ExtraRow = "";
     let addP2InlineBtn = "";
     if(p2 && p2.name){
-      // نفس شبكة الأزرار الخماسية للطرف الأول بالضبط — فقط "لاحق" و"ح.مكافأة"
-      // فعّالتان لهذا الطرف، والباقي يظهر معطَّلاً (باهتاً) للحفاظ على نفس
-      // محاذاة الأعمدة بين صفّي الطرف الأول والثاني.
+      // كل أزرار الخطوات الخمسة فعّالة الآن للطرف الثاني بالكامل، بنفس آلية
+      // الطرف الأول تماماً — القيد المنطقي الوحيد المتبقّي: "كتاب حسم لاحق"
+      // يبقى معطَّلاً إن كان هناك تحصيل فعلي بالفعل لهذه القضية (نفس قاعدة
+      // العمل الأصلية، لا علاقة لها بكونه طرفاً ثانياً تحديداً).
       const p2StepsHtml = LW_STEPS.map(s=>{
-        const isP2Step = (s.id === "step_kitabHasm" || s.id === "step_hajzMukafa");
         const blockedByCollected = s.id === "step_kitabHasm" && hasCollected;
-        const active = isP2Step && !blockedByCollected;
+        const active = !blockedByCollected;
         const stepData = p2.steps && p2.steps[s.id];
         const status = stepData ? (stepData.status || (stepData.done ? "done" : "")) : "";
         const statusClass = status === "done" ? "lw-step-done" : status === "progress" ? "lw-step-progress" : "";
@@ -5509,7 +5509,7 @@ function renderLwActionsBox(){
             data-p2step="${escapeAttr(s.id)}"
             data-status="${status}"
             ${active ? '' : 'disabled'}
-            title="${active ? s.label + '\n(اضغط لاختيار الحالة من القائمة)' : 'غير متاح للطرف الثاني'}"
+            title="${active ? s.label + '\n(اضغط لاختيار الحالة من القائمة)' : 'محصَّلة بالفعل — لا يلزم كتاب حسم لاحق'}"
           >${s.shortLabel}</button>`;
       }).join("");
       party2ExtraRow = `
