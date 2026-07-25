@@ -4573,12 +4573,20 @@ function runLwSearch(q){
     return;
   }
   const unique = getDedupedRAW();
-  // إذا كان البحث رقماً بحتاً، نطابق رقم القضية تحديداً (وليس أي رقم يحتويه
-  // كنص) — يمنع ظهور "1152" أو "52" عند البحث عن "152".
+  // إذا كان البحث رقماً بحتاً: 4 أرقام تُعامَل كسنة (تُطابق سنة القضية)،
+  // وأي طول آخر يُطابق رقم القضية تحديداً (وليس أي رقم يحتويه كنص) — يمنع
+  // ظهور "1152" أو "52" عند البحث عن "152"، ويُظهر كل قضايا سنة معيّنة أيضاً.
   const isNumericQuery = /^\d+$/.test(q);
+  const isYearQuery = /^\d{4}$/.test(q);
   const caseNoMatches = (r)=>{
-    if(isNumericQuery){
+    if(isYearQuery){
       const norm = shortCaseNo(r["رقم الدعوى"]); // صيغة "رقم - سنة"
+      const yearPart = norm.split(" - ")[1];
+      if(yearPart === q) return true;
+      // لا نُرجع false هنا فوراً — قد يكون رقم القضية نفسه 4 أرقام أيضاً بالصدفة
+    }
+    if(isNumericQuery){
+      const norm = shortCaseNo(r["رقم الدعوى"]);
       const numPart = norm.split(" - ")[0];
       return numPart === q;
     }
