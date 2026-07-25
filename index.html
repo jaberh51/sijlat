@@ -869,6 +869,16 @@
     padding:1px 7px;font-size:11px;cursor:pointer;flex:none;
   }
   .audit-restore-btn:hover{background:var(--brass-soft);}
+  .auto-rules-badge{
+    position:absolute;top:-6px;left:-6px;background:#dc2626;color:#fff;
+    border-radius:50%;min-width:18px;height:18px;font-size:10px;font-weight:900;
+    display:flex;align-items:center;justify-content:center;padding:0 3px;
+  }
+  .auto-rules-section-title{font-weight:700;font-size:12.5px;color:var(--brass);margin:10px 0 6px;}
+  .auto-rules-item{
+    background:var(--paper-raised,#f7f5f0);border:1px solid var(--line,#e5e0d5);
+    border-radius:8px;padding:8px 12px;font-size:12px;
+  }
   .lw-zero-section-header{
     display:flex;align-items:center;justify-content:space-between;gap:10px;direction:ltr;
     background:#f3f4f6;border:1px solid #9ca3af;border-radius:10px;
@@ -1065,17 +1075,30 @@
   .ov-card .ov-sub{font-size:10.5px;color:var(--ink-soft);margin-top:2px;}
   .note-area{
     margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);
-    display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    display:flex;flex-direction:column;gap:8px;
   }
-  .note-area .note-label{font-size:12.5px;font-weight:700;color:var(--ink-soft);flex:none;}
-  .note-area input{
+  .note-area .note-label{font-size:12.5px;font-weight:700;color:var(--ink-soft);}
+  .notes-list{display:flex;flex-direction:column;gap:6px;}
+  .notes-empty{font-size:12px;color:var(--ink-soft);opacity:0.7;}
+  .note-item{
+    display:flex;justify-content:space-between;align-items:flex-start;gap:8px;
+    background:var(--paper-raised);border:1px solid var(--line);border-radius:8px;
+    padding:7px 10px;font-size:12.5px;color:var(--ink);
+  }
+  .note-item-text{flex:1;white-space:pre-wrap;word-break:break-word;}
+  .note-item-meta{display:flex;align-items:center;gap:8px;flex:none;}
+  .note-item-date{font-size:10.5px;color:var(--ink-soft);white-space:nowrap;}
+  .note-item-delete{font-size:12px;color:#dc2626;cursor:pointer;font-weight:700;}
+  .note-item-delete:hover{color:#991b1b;}
+  .note-add-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .note-add-row input{
     flex:1;min-width:180px;font-family:'Tajawal',sans-serif;
     background:var(--paper);border:1px solid var(--line);border-radius:8px;
     padding:7px 10px;font-size:13px;color:var(--ink);
   }
-  .note-area .btn{padding:7px 14px;font-size:12.5px;}
+  .note-add-row .btn{padding:7px 14px;font-size:12.5px;}
   .note-saved{font-size:11.5px;color:var(--green);font-weight:700;}
-  .note-flag{font-size:12px;margin-right:6px;}
+  .note-flag{font-size:11px;margin-right:6px;font-weight:700;color:var(--brass);}
   .fin-block{
     margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);
   }
@@ -1310,6 +1333,8 @@
       <button class="btn secondary" id="viewTrashBtn" style="font-size:11.5px;padding:6px 14px;">🗑️ سلة المهملات</button>
       <button class="btn secondary" id="viewAuditLogBtn" style="font-size:11.5px;padding:6px 14px;">📋 سجل التدقيق</button>
       <button class="btn secondary" id="viewSettingsBtn" style="font-size:11.5px;padding:6px 14px;">⚙️ الإعدادات</button>
+      <button class="btn secondary" id="autoRulesBtn" style="font-size:11.5px;padding:6px 14px;position:relative;">🔔 اقتراحات ذكية<span id="autoRulesBadgeCount" class="auto-rules-badge" style="display:none;"></span></button>
+      <button class="btn secondary" id="viewGeneralNotesBtn" style="font-size:11.5px;padding:6px 14px;">📝 ملاحظات عامة</button>
       <button class="btn secondary" id="signOutBtn" style="font-size:11.5px;padding:6px 14px;">🔒 تسجيل الخروج</button>
     </div>
   </div>
@@ -1370,12 +1395,42 @@
   </div>
 </div>
 
+<!-- نافذة الاقتراحات الذكية (محرك القواعد التلقائية) — غير قسرية إطلاقاً،
+     تُفتح فقط بالضغط على الزر، والمستخدم يقرر بنفسه دائماً -->
+<div id="autoRulesModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9998;align-items:center;justify-content:center;">
+  <div style="background:var(--paper,#fff);border-radius:16px;padding:22px 20px;min-width:300px;max-width:480px;width:92%;max-height:75vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25);direction:rtl;font-family:'Tajawal',sans-serif;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div style="font-weight:700;font-size:16px;color:var(--ink,#222);">🔔 اقتراحات ذكية</div>
+      <button id="autoRulesModalClose" class="btn secondary" style="padding:5px 12px;font-size:12px;">✕ إغلاق</button>
+    </div>
+    <div style="font-size:11px;color:var(--ink-soft,#777);margin-bottom:10px;">اقتراحات فقط — أنت من يقرر أي إجراء، بلا أي تنفيذ تلقائي.</div>
+    <div id="autoRulesList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:6px;"></div>
+  </div>
+</div>
+
 <div id="strictDeadlineModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:10000;align-items:center;justify-content:center;">
   <div style="background:#fff;border-radius:16px;padding:22px 20px;min-width:300px;max-width:480px;width:92%;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.35);direction:rtl;font-family:'Tajawal',sans-serif;border:3px solid #dc2626;">
     <div style="font-weight:900;font-size:17px;color:#dc2626;margin-bottom:4px;">⚠️ مواعيد صارمة تحتاج انتباهك</div>
     <div style="font-size:12px;color:#666;margin-bottom:14px;">هذه المواعيد ستستمر بالظهور عند كل فتح للنظام حتى تمرّ أو تُحذَف يدوياً.</div>
     <div id="strictDeadlineList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px;margin-bottom:14px;"></div>
     <button id="strictDeadlineAckBtn" class="btn" style="background:#dc2626;color:#fff;border:none;padding:10px;font-weight:700;">✓ فهمت</button>
+  </div>
+</div>
+
+<div id="generalNotesPage" class="fu-page" style="display:none;">
+  <div class="fu-page-inner">
+    <div class="fu-page-header">
+      <div class="fu-page-title">📝 ملاحظات عامة</div>
+      <button class="btn secondary" id="generalNotesPageClose">✕ إغلاق والعودة</button>
+    </div>
+    <div class="fu-page-section">
+      <div style="font-size:12px;color:var(--ink-soft);margin-bottom:12px;">مذكرة سريعة عامة — غير مرتبطة بأي قضية معيّنة.</div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <input type="text" id="generalNoteInput" class="fu-search-input" placeholder="اكتب ملاحظة جديدة...">
+        <button class="btn" id="generalNoteAddBtn" style="flex:none;">➕ إضافة</button>
+      </div>
+      <div id="generalNotesList" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
   </div>
 </div>
 
@@ -3972,24 +4027,37 @@ function renderYearList(rows){
     row.className = "year-list-row";
     const fin = getFinancialForRow(r);
     const dormantInfo = (state.status === "خاملة") ? dormantInfoHtml(r) : "";
-    const note = getNote(r);
+    const key = caseKey(r);
+    const notes = getCaseNotes(key);
+    const notesListHtml = notes.map((n, i)=>`
+      <div class="note-item">
+        <span class="note-item-text">${escapeAttr(n.text)}</span>
+        <span class="note-item-meta">
+          ${n.date ? `<span class="note-item-date">${escapeAttr(new Date(n.date).toLocaleDateString('ar-EG'))}</span>` : ''}
+          <span class="note-item-delete" data-key="${escapeAttr(key)}" data-idx="${i}" title="حذف هذه الملاحظة">✕</span>
+        </span>
+      </div>
+    `).join("");
     row.innerHTML = `
       <div class="year-list-head">
-        <span class="year-list-num">${finPreviewHtml(fin)}${followupPillHtml(r)}${note ? '<span class="note-flag" title="توجد ملاحظة">📝</span>' : ''}${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}</span>
+        <span class="year-list-num">${finPreviewHtml(fin)}${followupPillHtml(r)}${notes.length ? `<span class="note-flag" title="${notes.length} ملاحظة">📝${notes.length}</span>` : ''}${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}</span>
         <span class="year-list-def">${defendantNameHtml(r)}${getClientBadgeHtml(r)}</span>
       </div>
       <div class="year-list-details">
-        <div><strong>المحكمة:</strong> ${escapeAttr(r["المحكمة"] || (masterCache[caseKey(r)]||{})["المحكمة"] || "—")}</div>
-        <div><strong>تاريخ الورود:</strong> ${escapeAttr(r["تاريخ ورود الدعوى"] || (masterCache[caseKey(r)]||{})["تاريخ الورود"] || "—")}</div>
+        <div><strong>المحكمة:</strong> ${escapeAttr(r["المحكمة"] || (masterCache[key]||{})["المحكمة"] || "—")}</div>
+        <div><strong>تاريخ الورود:</strong> ${escapeAttr(r["تاريخ ورود الدعوى"] || (masterCache[key]||{})["تاريخ الورود"] || "—")}</div>
         <div><strong>الوصف الكامل:</strong> ${getDescForRow(r) || "—"}</div>
         ${dormantInfo}
         ${partiesDetailHtml(r)}
         ${finDetailHtml(fin)}
         <div class="note-area">
-          <span class="note-label">📝 ملاحظة:</span>
-          <input type="text" class="note-input" value="${escapeAttr(note)}" placeholder="اكتب ملاحظتك على هذه القضية...">
-          <button class="btn secondary note-save">حفظ</button>
-          <span class="note-saved"></span>
+          <span class="note-label">📝 ملاحظات (${notes.length})</span>
+          <div class="notes-list">${notesListHtml || '<div class="notes-empty">لا توجد ملاحظات بعد</div>'}</div>
+          <div class="note-add-row">
+            <input type="text" class="note-input" placeholder="أضف ملاحظة جديدة...">
+            <button class="btn secondary note-save">إضافة</button>
+            <span class="note-saved"></span>
+          </div>
         </div>
         ${followupBlockHtml(r)}
       </div>
@@ -3997,8 +4065,23 @@ function renderYearList(rows){
     row.querySelector(".year-list-num").onclick = ()=> row.classList.toggle("expanded");
     const noteInput = row.querySelector(".note-input");
     const noteStatus = row.querySelector(".note-saved");
-    row.querySelector(".note-save").onclick = ()=> saveNote(caseKey(r), noteInput.value, noteStatus);
-    noteInput.addEventListener("keydown", (e)=>{ if(e.key === "Enter") saveNote(caseKey(r), noteInput.value, noteStatus); });
+    const doAddNote = async ()=>{
+      if(!noteInput.value.trim()) return;
+      await addCaseNote(key, noteInput.value);
+      noteInput.value = "";
+      noteStatus.textContent = "✓ أُضيفت";
+      setTimeout(()=>{ noteStatus.textContent = ""; }, 2000);
+      renderYearList(rows); // إعادة رسم القائمة لتحديث عرض الملاحظات فوراً
+    };
+    row.querySelector(".note-save").onclick = doAddNote;
+    noteInput.addEventListener("keydown", (e)=>{ if(e.key === "Enter") doAddNote(); });
+    row.querySelectorAll(".note-item-delete").forEach(delBtn=>{
+      delBtn.onclick = async (e)=>{
+        e.stopPropagation();
+        await deleteCaseNote(delBtn.getAttribute("data-key"), parseInt(delBtn.getAttribute("data-idx"), 10));
+        renderYearList(rows);
+      };
+    });
     wireFollowupBlock(row, r);
     listEl.appendChild(row);
   });
@@ -4178,6 +4261,38 @@ function renderOverview(){
       <div class="ov-sub">قيد التنفيذ دون أي دفعة</div>
     </div>
   `;
+}
+
+// ===== نظام الملاحظات المتعددة لكل قضية — يحلّ محل حقل "ملاحظة" الواحد
+// القديم، مع توافق تلقائي كامل: أي ملاحظة قديمة محفوظة تظهر تلقائياً كأول
+// ملاحظة في القائمة الجديدة، بلا فقدان أي بيانات سابقة إطلاقاً. =====
+function getCaseNotes(key){
+  const rec = masterCache[key];
+  if(!rec) return [];
+  if(Array.isArray(rec["ملاحظات"])) return rec["ملاحظات"];
+  if(rec["ملاحظة"]) return [{text: rec["ملاحظة"], date: null}]; // توافق مع الحقل القديم
+  return [];
+}
+
+async function addCaseNote(key, text){
+  if(!text || !text.trim()) return;
+  const master = masterCache;
+  if(!master[key]) master[key] = {"رقم القضية": key.split("||")[0]};
+  const notes = [...getCaseNotes(key), {text: text.trim(), date: getAccurateNow().toISOString()}];
+  master[key]["ملاحظات"] = notes;
+  delete master[key]["ملاحظة"]; // ترحيل نهائي — تفادي ازدواج الحقلين معاً
+  await saveMaster([key]);
+  masterCache = master; invalidateMasterCaseNoIndex();
+}
+
+async function deleteCaseNote(key, index){
+  const master = masterCache;
+  const notes = getCaseNotes(key);
+  notes.splice(index, 1);
+  if(!master[key]) return;
+  master[key]["ملاحظات"] = notes;
+  await saveMaster([key]);
+  masterCache = master; invalidateMasterCaseNoIndex();
 }
 
 async function saveNote(key, text, statusEl){
@@ -4810,6 +4925,53 @@ function renderSettingsPage(){
 }
 
 document.getElementById("viewSettingsBtn").onclick = goSettings;
+document.getElementById("viewGeneralNotesBtn").onclick = goGeneralNotes;
+document.getElementById("generalNotesPageClose").onclick = goHome;
+document.getElementById("generalNoteAddBtn").onclick = async ()=>{
+  const input = document.getElementById("generalNoteInput");
+  if(!input.value.trim()) return;
+  const ok = await addGeneralNote(input.value);
+  if(ok){
+    input.value = "";
+    renderGeneralNotesList();
+  }
+};
+document.getElementById("generalNoteInput").addEventListener("keydown", (e)=>{
+  if(e.key === "Enter") document.getElementById("generalNoteAddBtn").click();
+});
+
+async function renderGeneralNotesList(){
+  const listEl = document.getElementById("generalNotesList");
+  listEl.innerHTML = `<div class="fu-search-hint">جارٍ التحميل...</div>`;
+  const notes = await getGeneralNotes();
+  if(!notes.length){
+    listEl.innerHTML = `<div class="fu-tracked-empty">لا توجد ملاحظات عامة بعد.</div>`;
+    return;
+  }
+  const fmtDate = (iso)=>{
+    try{ const d = new Date(iso); return d.toLocaleDateString('ar-EG') + ' — ' + d.toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'}); }
+    catch(e){ return iso; }
+  };
+  listEl.innerHTML = notes.map(n=>`
+    <div class="fu-tracked-card lw-action-card" style="padding:10px 14px;">
+      <div style="white-space:pre-wrap;word-break:break-word;font-size:13px;margin-bottom:6px;">${escapeAttr(n.text)}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:10.5px;color:var(--ink-soft);">
+        <span>${escapeAttr(n.author || '')} — ${escapeAttr(fmtDate(n.date))}</span>
+        <span class="general-note-delete" data-key="${escapeAttr(n.key)}" style="color:#dc2626;cursor:pointer;font-weight:700;">🗑️ حذف</span>
+      </div>
+    </div>
+  `).join("");
+  listEl.querySelectorAll(".general-note-delete").forEach(btn=>{
+    btn.onclick = async ()=>{
+      await deleteGeneralNote(btn.getAttribute("data-key"));
+      renderGeneralNotesList();
+    };
+  });
+}
+document.getElementById("autoRulesBtn").onclick = openAutoRulesPanel;
+document.getElementById("autoRulesModalClose").onclick = ()=>{
+  document.getElementById("autoRulesModal").style.display = "none";
+};
 document.getElementById("settingsPageClose").onclick = goHome;
 document.getElementById("settingsGoBackups").onclick = goBackups;
 document.getElementById("settingsGoTrash").onclick = goTrash;
@@ -4913,6 +5075,55 @@ function maskThirdNameSegment(name){
   if(parts.length < 4) return name;
   parts.splice(1, 2); // حذف العنصرين بدءاً من الفهرس 1 (الثاني والثالث)
   return parts.join(" ");
+}
+
+// ===== الملاحظات العامة — مستقلة تماماً عن أي قضية، مثل مذكرة سريعة عامة
+// للنظام كله. مُخزَّنة في مسار Firebase منفصل (general_notes) بنفس نمط
+// trash/audit_log. =====
+async function getGeneralNotes(){
+  if(!fbDb) return [];
+  try{
+    const fb = window.__fbModular;
+    const snap = await fb.get(fb.ref(fbDb, 'general_notes'));
+    if(!snap.exists()) return [];
+    const items = [];
+    snap.forEach(child=> items.push({key: child.key, ...child.val()}));
+    items.sort((a,b)=> b.key.localeCompare(a.key)); // الأحدث أولاً
+    return items;
+  }catch(e){
+    console.error("فشل تحميل الملاحظات العامة:", e);
+    return [];
+  }
+}
+
+async function addGeneralNote(text){
+  if(!text || !text.trim() || !fbDb) return false;
+  try{
+    const fb = window.__fbModular;
+    const key = getAuditTimestampKey(); // نفس نمط المفتاح الزمني الفريد المستخدَم في السجل
+    await fb.set(fb.ref(fbDb, 'general_notes/' + key), {
+      text: text.trim(),
+      date: getAccurateNow().toISOString(),
+      author: getCurrentUserEmail()
+    });
+    return true;
+  }catch(e){
+    console.error("فشل حفظ الملاحظة العامة:", e);
+    showToast("⚠️ تعذّر حفظ الملاحظة — السبب: " + (e.message || e), "warn");
+    return false;
+  }
+}
+
+async function deleteGeneralNote(key){
+  if(!fbDb) return false;
+  try{
+    const fb = window.__fbModular;
+    await fb.set(fb.ref(fbDb, 'general_notes/' + key), null);
+    return true;
+  }catch(e){
+    console.error("فشل حذف الملاحظة العامة:", e);
+    return false;
+  }
 }
 
 function getFoldedCasesSet(){
@@ -6953,11 +7164,13 @@ function goHome(){
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
   document.getElementById("settingsPage").style.display = "none";
+  document.getElementById("generalNotesPage").style.display = "none";
   document.body.style.overflow = "";
   currentSection = null;
   document.body.classList.remove("mode-remittances");
   saveCurrentSection('home');
   checkStrictDeadlines();
+  renderAutoRulesBadge();
 }
 
 function goTrash(){
@@ -6970,6 +7183,7 @@ function goTrash(){
   document.getElementById("backupsPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
   document.getElementById("settingsPage").style.display = "none";
+  document.getElementById("generalNotesPage").style.display = "none";
   document.getElementById("trashPage").style.display = "block";
   document.body.style.overflow = "hidden";
   currentSection = "trash";
@@ -6987,6 +7201,7 @@ function goAuditLog(){
   document.getElementById("backupsPage").style.display = "none";
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("settingsPage").style.display = "none";
+  document.getElementById("generalNotesPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "block";
   document.body.style.overflow = "hidden";
   currentSection = "auditlog";
@@ -7004,11 +7219,30 @@ function goSettings(){
   document.getElementById("backupsPage").style.display = "none";
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
+  document.getElementById("generalNotesPage").style.display = "none";
   document.getElementById("settingsPage").style.display = "block";
   document.body.style.overflow = "hidden";
   currentSection = "settings";
   document.body.classList.remove("mode-remittances");
   renderSettingsPage();
+}
+
+function goGeneralNotes(){
+  document.getElementById("homePage").style.display = "none";
+  document.getElementById("mainWrap").style.display = "none";
+  document.getElementById("followupPage").style.display = "none";
+  document.getElementById("lawyerPage").style.display = "none";
+  document.getElementById("casesPage").style.display = "none";
+  document.getElementById("analysisPage").style.display = "none";
+  document.getElementById("backupsPage").style.display = "none";
+  document.getElementById("trashPage").style.display = "none";
+  document.getElementById("auditLogPage").style.display = "none";
+  document.getElementById("settingsPage").style.display = "none";
+  document.getElementById("generalNotesPage").style.display = "block";
+  document.body.style.overflow = "hidden";
+  currentSection = "generalnotes";
+  document.body.classList.remove("mode-remittances");
+  renderGeneralNotesList();
 }
 
 function goBackups(){
@@ -7036,6 +7270,7 @@ function goRemittances(){
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
   document.getElementById("settingsPage").style.display = "none";
+  document.getElementById("generalNotesPage").style.display = "none";
   document.body.style.overflow = "";
   currentSection = "remittances";
   document.body.classList.add("mode-remittances");
@@ -7057,6 +7292,7 @@ function goFollowups(){
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
   document.getElementById("settingsPage").style.display = "none";
+  document.getElementById("generalNotesPage").style.display = "none";
   document.body.style.overflow = "hidden";
   currentSection = "followups";
   document.body.classList.remove("mode-remittances");
@@ -7072,6 +7308,7 @@ function goLawyer(){
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
   document.getElementById("settingsPage").style.display = "none";
+  document.getElementById("generalNotesPage").style.display = "none";
   document.body.style.overflow = "hidden";
   currentSection = "lawyer";
   document.body.classList.remove("mode-remittances");
@@ -7174,6 +7411,83 @@ async function bulkSetCaseType(type){
 // ===== محرك اكتشاف الأخطاء (فحص اكتمال بيانات القضية) — يعمل خفياً، يُستدعى
 // تلقائياً قبل أي إغلاق/حذف/نقل عادي لقضية (وليس القسري، الذي يبقى متجاوزاً
 // كل الفحوصات عمداً بتصميمه الأصلي). =====
+// ===== محرك القواعد التلقائية — اقتراحات فقط، بلا أي تنفيذ تلقائي إطلاقاً.
+// المستخدم يقرر بنفسه دائماً؛ هذا المحرك فقط يلفت الانتباه لما قد يكون فاته. =====
+const AUTO_RULE_STALE_DAYS = 25;
+
+function runAutoRulesEngine(){
+  const suggestions = {financiallyComplete: [], stale: []};
+  getDedupedRAW().forEach(row=>{
+    const key = caseKey(row);
+    const rec = masterCache[key];
+    const status = (row["حالة الدعوى"]||"").trim();
+    if(status !== "قيد التنفيذ") return;
+    if(rec && (rec["تسوية_خارجية"] || rec["بحاجة_فصل"])) return;
+
+    // القاعدة 1: قضية اكتمل تحصيلها مالياً بالكامل، ولم تُنقَل بعد لبحاجة إلى فصل
+    const fin = getFinancialForRow(row);
+    const avail = getRowAvail(row);
+    const requested = rec ? parseNum(rec["مجموع المبالغ المطلوبة"]) : null;
+    const fullyCollected = requested !== null && requested > 0 && fin.total >= requested && (avail === null || avail === 0);
+    if(fullyCollected){
+      suggestions.financiallyComplete.push({key, row});
+    }
+
+    // القاعدة 2: قضية متابَعة لدى المحامي، بلا أي حركة (تعديل حالة خطوة) منذ
+    // 7 أيام فأكثر — نستخدم أحدث تاريخ بين تسجيل الإجراء وكل خطواته كمؤشر آخر حركة
+    if(rec && rec["محامي_اجراء"]){
+      const dates = [rec["محامي_اجراء"].date];
+      if(rec["محامي_خطوات"]){
+        Object.values(rec["محامي_خطوات"]).forEach(s=>{ if(s && s.date) dates.push(s.date); });
+      }
+      const lastActivity = dates.filter(Boolean).map(d=> new Date(d).getTime()).sort((a,b)=>b-a)[0];
+      if(lastActivity){
+        const daysSince = Math.floor((getAccurateNow().getTime() - lastActivity) / 86400000);
+        if(daysSince >= AUTO_RULE_STALE_DAYS){
+          suggestions.stale.push({key, row, daysSince});
+        }
+      }
+    }
+  });
+  return suggestions;
+}
+
+function renderAutoRulesBadge(){
+  const suggestions = runAutoRulesEngine();
+  const total = suggestions.financiallyComplete.length + suggestions.stale.length;
+  const badge = document.getElementById("autoRulesBadgeCount");
+  const btn = document.getElementById("autoRulesBtn");
+  if(!badge || !btn) return;
+  if(total > 0){
+    badge.textContent = total;
+    badge.style.display = "inline-block";
+  } else {
+    badge.style.display = "none";
+  }
+  window._lastAutoRuleSuggestions = suggestions; // للاستخدام الفوري عند فتح اللوحة، بلا إعادة حساب
+}
+
+function openAutoRulesPanel(){
+  const suggestions = window._lastAutoRuleSuggestions || runAutoRulesEngine();
+  const listEl = document.getElementById("autoRulesList");
+  const parts = [];
+
+  if(suggestions.financiallyComplete.length){
+    parts.push(`<div class="auto-rules-section-title">💰 اكتمل تحصيلها مالياً — قد تحتاج نقلها لـ"بحاجة إلى فصل"</div>`);
+    suggestions.financiallyComplete.forEach(({row})=>{
+      parts.push(`<div class="auto-rules-item">${escapeAttr(shortCaseNo(row["رقم الدعوى"]))} · ${escapeAttr(getDefendantForRow(row))}</div>`);
+    });
+  }
+  if(suggestions.stale.length){
+    parts.push(`<div class="auto-rules-section-title">🐢 بلا حركة منذ ${AUTO_RULE_STALE_DAYS} أيام فأكثر (متابعة المحامي)</div>`);
+    suggestions.stale.forEach(({row, daysSince})=>{
+      parts.push(`<div class="auto-rules-item">${escapeAttr(shortCaseNo(row["رقم الدعوى"]))} · ${escapeAttr(getDefendantForRow(row))} — منذ ${daysSince} يوماً</div>`);
+    });
+  }
+  listEl.innerHTML = parts.length ? parts.join("") : `<div class="fu-tracked-empty">لا توجد أي اقتراحات حالياً — كل شيء يبدو محدَّثاً 👍</div>`;
+  document.getElementById("autoRulesModal").style.display = "flex";
+}
+
 function computeCaseCompleteness(key){
   const row = getRowByKey(key);
   const rec = masterCache[key];
@@ -8381,6 +8695,7 @@ function goCases(){
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
   document.getElementById("settingsPage").style.display = "none";
+  document.getElementById("generalNotesPage").style.display = "none";
   document.getElementById("casesPage").style.display = "block";
   document.body.style.overflow = "hidden";
   currentSection = "cases";
@@ -8830,6 +9145,7 @@ function goAnalysis(){
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
   document.getElementById("settingsPage").style.display = "none";
+  document.getElementById("generalNotesPage").style.display = "none";
   document.getElementById("analysisPage").style.display = "block";
   document.body.style.overflow = "hidden";
   currentSection = "analysis";
@@ -9368,66 +9684,6 @@ document.getElementById("backupExportBtn").onclick = async ()=>{
   XLSX.writeFile(wb, `نسخة_احتياطية_القضايا_${stamp}.xlsx`);
   importStatusEl.textContent = `تم تنزيل نسخة احتياطية تحتوي على ${rows.length} قضية إلى جهازك`;
 };
-
-// ===== Service Worker مضمَّن بالكامل — يُتيح فتح التطبيق نفسه بلا أي اتصال
-// إنترنت إطلاقاً (وليس فقط عرض بيانات محفوظة مسبقاً). مُضمَّن كنص داخل هذا
-// الملف نفسه (تقنية Blob URL) بدل ملف sw.js منفصل، حفاظاً على رفع ملف واحد
-// فقط كالمعتاد تماماً — بلا أي تغيير في طريقة الرفع المعتادة.
-if('serviceWorker' in navigator){
-  const swCode = `
-    const CACHE_NAME = 'sijil-dawa-app-v1';
-    const APP_SHELL_URLS = [
-      self.location.origin + '/',
-      'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
-      'https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js',
-      'https://www.gstatic.com/firebasejs/10.13.0/firebase-database.js',
-      'https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js'
-    ];
-    self.addEventListener('install', (event)=>{
-      event.waitUntil(
-        caches.open(CACHE_NAME).then(cache=>
-          Promise.all(APP_SHELL_URLS.map(url=>
-            cache.add(url).catch(()=>{}) // تجاهل أي مورد فشل تحميله بصمت، بلا إفشال التسجيل كله
-          ))
-        )
-      );
-      self.skipWaiting();
-    });
-    self.addEventListener('activate', (event)=>{
-      event.waitUntil(
-        caches.keys().then(keys=>
-          Promise.all(keys.filter(k=>k!==CACHE_NAME).map(k=>caches.delete(k)))
-        )
-      );
-      self.clients.claim();
-    });
-    self.addEventListener('fetch', (event)=>{
-      if(event.request.method !== 'GET') return; // لا نتدخّل في طلبات الكتابة لـFirebase إطلاقاً
-      event.respondWith(
-        fetch(event.request).then(freshResponse=>{
-          // الشبكة متاحة — نُحدِّث الذاكرة المؤقتة بأحدث نسخة في الخلفية، ونُرجع الطلب الطازج
-          if(freshResponse && freshResponse.ok){
-            const clone = freshResponse.clone();
-            caches.open(CACHE_NAME).then(cache=> cache.put(event.request, clone));
-          }
-          return freshResponse;
-        }).catch(()=>
-          // فشلت الشبكة تماماً (بلا اتصال) — استخدم النسخة المحفوظة إن وُجدت
-          caches.match(event.request)
-        )
-      );
-    });
-  `;
-  try{
-    const blob = new Blob([swCode], {type: 'application/javascript'});
-    const swUrl = URL.createObjectURL(blob);
-    navigator.serviceWorker.register(swUrl).catch(e=>{
-      console.error('فشل تسجيل Service Worker (العمل بلا اتصال قد لا يعمل على هذا المتصفح تحديداً):', e);
-    });
-  }catch(e){
-    console.error('تعذّر إعداد Service Worker:', e);
-  }
-}
 </script>
 </body>
 </html>
