@@ -857,6 +857,14 @@
     background:#faf9ff;border:1px dashed #7c3aed;border-radius:12px;padding:10px;
   }
   .lw-group-select-cb{width:16px;height:16px;cursor:pointer;flex:none;margin-inline-end:4px;}
+  .lw-group-quick-remove, .lw-group-quick-add{
+    background:none;border:1px solid var(--line);border-radius:6px;
+    padding:2px 6px;font-size:12px;cursor:pointer;flex:none;
+  }
+  .lw-group-quick-remove{color:#7c3aed;border-color:#c4b5fd;}
+  .lw-group-quick-remove:hover{background:#ede9fe;}
+  .lw-group-quick-add{color:var(--ink-soft);}
+  .lw-group-quick-add:hover{background:var(--paper-raised);}
   .audit-case-block{margin-top:6px;padding-inline-start:10px;border-inline-start:2px solid var(--line);}
   .audit-field-row{
     display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px;
@@ -1654,6 +1662,7 @@
           <option value="J">جابر</option>
           <option value="H">حنين</option>
         </select>
+        <input type="text" id="lwTrackedBoxSearch" class="fu-search-input" placeholder="🔎 ابحث داخل صندوق المتابعات..." style="min-width:180px;">
         <select id="lwFilterYear" class="cases-select">
           <option value="">كل السنوات</option>
         </select>
@@ -1670,7 +1679,8 @@
       </div>
       <div id="lwGroupBulkBar" style="display:none;align-items:center;gap:10px;margin:10px 0;padding:10px 14px;background:var(--brass-soft);border-radius:10px;flex-wrap:wrap;">
         <span id="lwGroupBulkCount" style="font-weight:700;font-size:12.5px;"></span>
-        <button class="btn secondary" id="lwCreateGroupBtn" style="font-size:11.5px;padding:6px 14px;">📦 تجميع في مجموعة مخصَّصة</button>
+        <button class="btn secondary" id="lwCreateGroupBtn" style="font-size:11.5px;padding:6px 14px;">📦 تجميع (جديدة أو الانضمام لموجودة)</button>
+        <button class="btn secondary" id="lwUngroupSelectedBtn" style="font-size:11.5px;padding:6px 14px;">↺ فك التحديد من مجموعته</button>
       </div>
       <div id="lwActionsBox" class="fu-tracked-list"></div>
     </div>
@@ -5339,11 +5349,12 @@ function renderLwActionsBox(){
   stepSelect.innerHTML = `<option value="">كل الخطوات</option>` + LW_STEPS.map(s=>`<option value="${escapeAttr(s.id)}">${escapeAttr(s.shortLabel)}</option>`).join("");
   stepSelect.value = currentStepVal;
 
-  // تطبيق الفلترة (وكيل + سنة + نوع المالية + خطوة معيّنة قيد المتابعة معاً)
+  // تطبيق الفلترة (وكيل + سنة + نوع المالية + خطوة معيّنة قيد المتابعة + نص بحث معاً)
   const clientFilter = document.getElementById("lwFilterClient").value;
   const yearFilter = yearSelect.value;
   const sectorFilter = sectorSelect.value;
   const stepFilter = stepSelect.value;
+  const searchText = normalizeArabicForSearch(document.getElementById("lwTrackedBoxSearch").value.trim());
   const filteredItems = items.filter(i=>{
     if(clientFilter && i.clientCode !== clientFilter) return false;
     if(yearFilter && String(i.year) !== yearFilter) return false;
@@ -5352,6 +5363,11 @@ function renderLwActionsBox(){
       const s = i.steps && i.steps[stepFilter];
       const isInProgress = s && (s.status === "progress");
       if(!isInProgress) return false;
+    }
+    if(searchText){
+      const caseNoText = i.row ? normalizeArabicForSearch(i.row["رقم الدعوى"]||"") : "";
+      const nameText = i.row ? normalizeArabicForSearch(getDefendantForRow(i.row)) : "";
+      if(!caseNoText.includes(searchText) && !nameText.includes(searchText)) return false;
     }
     return true;
   });
@@ -5529,6 +5545,13 @@ function renderLwActionsBox(){
       ? `<button class="lw-quick-delete-btn" data-key="${escapeAttr(item.key)}" title="حذف هذه القضية من المتابعات">✕</button>`
       : "";
 
+    // زر تحكّم فردي مباشر بعضوية المجموعة — بلا حاجة لتحديد أو شريط جماعي:
+    // "↺" لإزالة هذه القضية تحديداً من مجموعتها الحالية، أو "📦" لإضافتها
+    // مباشرة لمجموعة موجودة (يسأل عن الاسم)، حسب حالتها الحالية.
+    const groupQuickBtnHtml = item.customGroup
+      ? `<button class="lw-group-quick-remove" data-key="${escapeAttr(item.key)}" title="إزالة هذه القضية من مجموعتها \"${escapeAttr(item.customGroup)}\"">↺</button>`
+      : `<button class="lw-group-quick-add" data-key="${escapeAttr(item.key)}" title="إضافة هذه القضية إلى مجموعة موجودة">📦</button>`;
+
     return `
       <div class="fu-tracked-card lw-action-card" data-key="${escapeAttr(item.key)}">
         <div class="lw-card-row">
@@ -5537,6 +5560,7 @@ function renderLwActionsBox(){
           <div class="lw-steps-grid">${stepsHtml}</div>
           ${transferHtml}
           ${addP2InlineBtn}
+          ${groupQuickBtnHtml}
           <button class="lw-fold-btn" data-key="${escapeAttr(item.key)}" title="طي هذه القضية مؤقتاً">▾</button>
           ${deleteBtnHtml}
         </div>
@@ -5662,6 +5686,30 @@ function renderLwActionsBox(){
     const renameBtn = e.target.closest(".lw-custom-group-rename");
     if(renameBtn){
       await renameCustomGroup(renameBtn.getAttribute("data-groupname"));
+      return;
+    }
+    const groupQuickRemoveBtn = e.target.closest(".lw-group-quick-remove");
+    if(groupQuickRemoveBtn){
+      const key = groupQuickRemoveBtn.getAttribute("data-key");
+      if(masterCache[key] && masterCache[key]["محامي_اجراء"]){
+        delete masterCache[key]["محامي_اجراء"].customGroup;
+        await saveMaster([key]);
+        showToast("↺ أُزيلت القضية من مجموعتها", "ok");
+        renderLwActionsBox();
+      }
+      return;
+    }
+    const groupQuickAddBtn = e.target.closest(".lw-group-quick-add");
+    if(groupQuickAddBtn){
+      const key = groupQuickAddBtn.getAttribute("data-key");
+      const groupName = await askInput("اكتب اسم المجموعة المخصَّصة التي تريد إضافة هذه القضية إليها:", {type:"text"});
+      if(!groupName || !groupName.trim()) return;
+      if(masterCache[key] && masterCache[key]["محامي_اجراء"]){
+        masterCache[key]["محامي_اجراء"].customGroup = groupName.trim();
+        await saveMaster([key]);
+        showToast(`✓ أُضيفت القضية إلى مجموعة "${groupName.trim()}"`, "ok");
+        renderLwActionsBox();
+      }
       return;
     }
     const disbandBtn = e.target.closest(".lw-custom-group-disband");
@@ -9621,6 +9669,7 @@ document.getElementById("lwFilterClient").addEventListener("change", renderLwAct
 document.getElementById("lwFilterYear").addEventListener("change", renderLwActionsBox);
 document.getElementById("lwFilterSector").addEventListener("change", renderLwActionsBox);
 document.getElementById("lwFilterStep").addEventListener("change", renderLwActionsBox);
+document.getElementById("lwTrackedBoxSearch").addEventListener("input", renderLwActionsBox);
 document.getElementById("lwHideThirdSegment").checked = localStorage.getItem('lw_hide_third_segment') === '1';
 document.getElementById("lwHideThirdSegment").addEventListener("change", (e)=>{
   localStorage.setItem('lw_hide_third_segment', e.target.checked ? '1' : '0');
