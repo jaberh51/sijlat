@@ -1883,6 +1883,16 @@
     <div class="fu-page-section">
       <div class="analysis-toolbar">
         <input type="text" id="analysisSearch" class="fu-search-input" placeholder="ابحث باسم الطرف، رقم القضية، أو اسم المحكمة...">
+        <select id="analysisHasAvailFilter" class="cases-select">
+          <option value="">كل القضايا</option>
+          <option value="1">لها متاح في آخر شهر فقط</option>
+        </select>
+        <select id="analysisPageSizeSelect" class="cases-select" title="عدد القضايا في الصفحة الواحدة">
+          <option value="25">25 في الصفحة</option>
+          <option value="50">50 في الصفحة</option>
+          <option value="75">75 في الصفحة</option>
+          <option value="100">100 في الصفحة</option>
+        </select>
         <span id="analysisCount" class="cases-count">0 قضية</span>
       </div>
       <div class="analysis-hint">💡 اضغط "⚡ تفعيل" أعلى الصفحة (يتطلّب كلمة السر) للسماح بإضافة شهر تحليل جديد لمدة دقيقة واحدة — أنت من يُقرِّر التوقيت المناسب (بعد وصول كل المبالغ من الجهات). يمكنك تحديث الشهر الأخير في أي وقت عبر 🔄 بلا حاجة لتفعيل.</div>
@@ -8811,7 +8821,7 @@ function goCases(){
 }
 
 // ===== صفحة تحليل الرديات الجديدة (نظام أشهر مفتوح) =====
-const ANALYSIS_PAGE_SIZE = 50;
+let ANALYSIS_PAGE_SIZE = parseInt(localStorage.getItem('analysis_page_size') || '50', 10);
 let analysisAllRows = [];
 let analysisFilteredRows = [];
 let analysisCurrentPage = 0;
@@ -9038,6 +9048,11 @@ async function openAnalysisPage(){
 
 function applyAnalysisFilter(){
   const q = document.getElementById("analysisSearch").value.trim();
+  const hasAvailFilter = document.getElementById("analysisHasAvailFilter").value === "1";
+  // آخر شهر يُحدَّد ديناميكياً دائماً (7 حالياً، سيصبح 8 تلقائياً لاحقاً) —
+  // بلا أي رقم ثابت في الكود، فيبقى الفلتر صحيحاً مهما أضفت أشهراً جديدة.
+  const monthsSorted = getAnalysisMonths().slice().sort((a,b)=> parseInt(a.label,10) - parseInt(b.label,10));
+  const lastMonth = monthsSorted[monthsSorted.length - 1];
 
   analysisFilteredRows = analysisAllRows.filter(r=>{
     const key = caseKey(r);
@@ -9046,6 +9061,10 @@ function applyAnalysisFilter(){
     // لن تصلها أي رديّة جديدة مستقبلاً، فلا داعي لظهورها في هذا التحليل إطلاقاً.
     if(isCaseRemoved(key)) return false;
     if(isCaseNeedsClosure(key)) return false;
+    if(hasAvailFilter && lastMonth){
+      const avail = getMonthRawValue(r, lastMonth.id);
+      if(!(avail > 0)) return false;
+    }
     if(q.length >= 2){
       return (r["رقم الدعوى"]||"").includes(q) ||
              (r["المحكمة"]||"").includes(q) ||
@@ -9143,8 +9162,10 @@ function renderAnalysisPage(){
   const start = analysisCurrentPage * ANALYSIS_PAGE_SIZE;
   const pageRows = analysisFilteredRows.slice(start, start + ANALYSIS_PAGE_SIZE);
 
-  // عرض الشبكة: العمود الأول للمعلومات، والباقي لبطاقات الأشهر
-  const gridCols = `minmax(0,1fr) auto`;
+  // عرض الشبكة: عمود الأشهر أولاً (يظهر أقصى اليمين في اتجاه RTL)، ثم عمود
+  // المعلومات/الاسم بجانبه مباشرة — بدل الترتيب السابق الذي كان يدفع أعمدة
+  // الأشهر لأقصى اليسار (بعيداً عن الاسم) بسبب ترتيب العناصر في الشبكة.
+  const gridCols = `auto minmax(0,1fr)`;
 
   cardsEl.innerHTML = pageRows.map(r=>{
     const def = getDefendantForRow(r);
@@ -9157,6 +9178,7 @@ function renderAnalysisPage(){
       </div>`;
     }).join("");
     return `<div class="analysis-card" style="grid-template-columns:${gridCols};">
+      <div class="analysis-card-months">${monthsHtml}</div>
       <div class="analysis-card-main">
         <div class="analysis-card-party">${escapeAttr(def)}</div>
         <div class="analysis-card-meta">
@@ -9164,7 +9186,6 @@ function renderAnalysisPage(){
           <span>${escapeAttr(displayCourtName(r["المحكمة"]))}</span>
         </div>
       </div>
-      <div class="analysis-card-months">${monthsHtml}</div>
     </div>`;
   }).join("");
 
@@ -9266,6 +9287,14 @@ document.getElementById("analysisPrintBtn").onclick = ()=>{ printAnalysis(); };
 document.getElementById("analysisSearch").addEventListener("input", ()=>{
   clearTimeout(analysisSearchTimer);
   analysisSearchTimer = setTimeout(()=> applyAnalysisFilter(), 250);
+});
+document.getElementById("analysisHasAvailFilter").addEventListener("change", applyAnalysisFilter);
+document.getElementById("analysisPageSizeSelect").value = String(ANALYSIS_PAGE_SIZE);
+document.getElementById("analysisPageSizeSelect").addEventListener("change", (e)=>{
+  ANALYSIS_PAGE_SIZE = parseInt(e.target.value, 10);
+  localStorage.setItem('analysis_page_size', String(ANALYSIS_PAGE_SIZE));
+  analysisCurrentPage = 0;
+  renderAnalysisPage();
 });
 
 document.getElementById("casesPageClose").onclick = ()=>{ goHome(); };
