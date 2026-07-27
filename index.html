@@ -317,6 +317,8 @@
   .cases-table .amt-col{text-align:center;}
   .cases-table td.amt-col{text-align:center;}
   .cases-badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;}
+  .cases-badge-onelines{font-size:9.5px;white-space:nowrap;padding:2px 6px;}
+  .cases-cell-longtext{font-size:11px;}
   .cases-badge-exec{background:#e8f4fd;color:#2f5c8a;}
   .cases-badge-closed{background:#fee2e2;color:#991b1b;}
   .cases-badge-other{background:var(--slate-soft);color:var(--slate);}
@@ -720,6 +722,8 @@
   }
   .client-strip-j{background:#2563eb;box-shadow:0 1px 3px rgba(37,99,235,.4);} /* أزرق — جابر */
   .client-strip-h{background:#ec4899;box-shadow:0 1px 3px rgba(236,72,153,.4);} /* زهري — حنين */
+  .cases-row.client-row-j{border-right:4px solid #2563eb;}
+  .cases-row.client-row-h{border-right:4px solid #ec4899;}
   .lw-action-badge{
     display:inline-block;background:var(--slate-soft);color:var(--slate);border-radius:6px;
     padding:2px 8px;font-size:11.5px;font-weight:700;
@@ -2986,6 +2990,15 @@ function getClientBadgeHtml(r){
   if(!client) return "";
   if(client.includes("جابر")) return `<span class="client-strip client-strip-j" title="الموكل: جابر"></span>`;
   if(client.includes("حنين")) return `<span class="client-strip client-strip-h" title="الموكل: حنين"></span>`;
+  return "";
+}
+// خاص بصفحة القضايا تحديداً — تُرجع اسم كلاس CSS يُضاف على الصف بأكمله (خط
+// حافة ملوَّن على طول الصف)، بدل شارة صغيرة بجانب الاسم فقط.
+function getClientRowClass(r){
+  const client = getPlaintiffForRow(r);
+  if(!client) return "";
+  if(client.includes("جابر")) return "client-row-j";
+  if(client.includes("حنين")) return "client-row-h";
   return "";
 }
 // نسخة نصية بسيطة (بلا HTML) لصفحات الطباعة، التي لا تصلها تنسيقات CSS الرئيسية
@@ -8570,11 +8583,15 @@ function renderCasesPage(){
       const dText = daysLeft < 0 ? `فات ${Math.abs(daysLeft)}ي` : daysLeft === 0 ? "اليوم" : `${daysLeft}ي`;
       deadlineBadge = `<span class="cases-deadline-badge" data-key="${escapeAttr(key)}" style="background:${dColor};" title="${escapeAttr(deadlineRec.label)} — ${escapeAttr(deadlineRec.date)} (اضغط للتعديل/الحذف)">⏰ ${dText}</span>`;
     }
-    return `<tr class="cases-row${selected?' cases-row-selected':''}${rowBgClass}${dblClickClass}" data-key="${escapeAttr(key)}">
+    const courtDisplayName = displayCourtName(r["المحكمة"]);
+    const defNameSmallClass = def.length > 20 ? " cases-cell-longtext" : "";
+    const courtNameSmallClass = courtDisplayName.length > 8 ? " cases-cell-longtext" : "";
+    const statusSmallClass = status === "قيد التنفيذ" ? " cases-badge-onelines" : "";
+    return `<tr class="cases-row${selected?' cases-row-selected':''}${rowBgClass}${dblClickClass} ${getClientRowClass(r)}" data-key="${escapeAttr(key)}">
       <td class="cases-cell-no" data-col="رقم القضية">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${finishedBadge}${caseTypeBadge}${deadlineBadge}</td>
-      <td data-col="الطرف">${escapeAttr(def)}${getClientBadgeHtml(r)}</td>
-      <td data-col="المحكمة">${escapeAttr(displayCourtName(r["المحكمة"]))}</td>
-      <td data-col="الحالة"><span class="cases-badge ${statusClass}">${escapeAttr(status)}</span></td>
+      <td data-col="الطرف" class="${defNameSmallClass}">${escapeAttr(def)}</td>
+      <td data-col="المحكمة" class="${courtNameSmallClass}">${escapeAttr(courtDisplayName)}</td>
+      <td data-col="الحالة"><span class="cases-badge ${statusClass}${statusSmallClass}">${escapeAttr(status)}</span></td>
       <td class="amt-col amt-req" data-col="📋 المطلوب">${fmt(req)}</td>
       <td class="amt-col amt-col-collected" data-col="✓ المحصّل">${fmt(collected)}</td>
       <td class="amt-col ${remClass}" data-col="⏳ المتبقي">${fmt(rem)}${remEditHtml}</td>
