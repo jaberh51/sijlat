@@ -1292,6 +1292,16 @@
 </style>
 </head>
 <body>
+<script>
+// تنظيف تلقائي: إزالة أي Service Worker متبقٍّ من تجربة سابقة — يضمن أن
+// المتصفح يحمِّل النسخة الحقيقية من الخادم دائماً، لا نسخة قديمة محفوظة
+// عند Service Worker متروك.
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.getRegistrations().then(regs=>{
+    regs.forEach(reg=> reg.unregister());
+  }).catch(()=>{});
+}
+</script>
 
 <div id="connectionBadge" class="connection-badge connection-online" style="display:none;">🟢 متصل</div>
 
