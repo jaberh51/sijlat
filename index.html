@@ -2178,6 +2178,40 @@ async function fbSaveAllCases(cache, deletedKeys){
     return false;
   }
 }
+
+// ===== الحل الجذري لمشكلة "الكتابة الكاملة تمحو تعديلات متزامنة من جهاز
+// آخر" — بدل رفع السجل الكامل لكل قضية مُعدَّلة، نرفع فقط الحقول التي
+// تغيَّرت فعلياً (عبر مسارات Firebase منفصلة لكل حقل). هذا يعني أن تعديل
+// جهاز لخطوة معيّنة وتعديل جهاز آخر لـ"المتاح" بالتزامن على نفس القضية
+// يتعايشان معاً بلا أي تعارض إطلاقاً — كل جهاز يكتب فقط ما لمسه بدقة. =====
+async function fbSaveFieldsOnly(fieldChangesByKey, deletedKeys){
+  if(!fbDb) return false;
+  const fb = window.__fbModular;
+  try{
+    const updates = {};
+    const deletedSet = new Set(deletedKeys || []);
+    Object.entries(fieldChangesByKey).forEach(([key, fields])=>{
+      // حماية من تعارض مسارات Firebase المتداخلة: لو كانت هذه القضية أيضاً
+      // ضمن الحذف الكامل في نفس عملية الحفظ، نتجاهل كتابة حقولها الفردية
+      // (حالة نادرة جداً عملياً، لكن الكتابة لمسار أب وابن معاً في تحديث
+      // واحد قد تُسبِّب سلوكاً غير متوقَّع من Firebase).
+      if(deletedSet.has(key)) return;
+      const encodedKey = encodeFbKey(key);
+      fields.forEach(f=>{
+        const path = 'master_cases/' + encodedKey + '/' + encodeFbKey(f.field);
+        updates[path] = (f.after === null || f.after === undefined) ? null : sanitizeForFirebase(f.after);
+      });
+    });
+    deletedSet.forEach(k=>{ updates['master_cases/' + encodeFbKey(k)] = null; });
+    if(Object.keys(updates).length === 0) return true; // لا تغييرات فعلية — نجاح بلا أي كتابة
+    await fb.update(fb.ref(fbDb), updates);
+    return true;
+  }catch(e){
+    console.error("فشل الحفظ الجزئي في Firebase — السبب الحقيقي:", e);
+    _lastFbSaveError = e && e.message ? e.message : String(e);
+    return false;
+  }
+}
 let _lastFbSaveError = "";
 
 // ===== نظام النسخ الاحتياطية — آخر 10 نسخ بغض النظر عن توزيعها الزمني =====
@@ -3391,9 +3425,18 @@ async function cleanupMaster(){
 
     if(changed){
       masterCache = master;
-      // حفظ القضايا المتأثرة فعلياً فقط — إن وُجدت، وإلا حفظ كامل احتياطي
-      // (مثلاً إن كان التغيير الوحيد حذف مفاتيح قديمة بلا مقابل مُحدَّث معروف)
-      await saveMaster(touchedKeys.size ? [...touchedKeys] : undefined);
+      // إصلاح أمان حرج: لا حفظ شامل صامت إطلاقاً بعد الآن — لو لم تكن هناك
+      // قضايا متأثرة محدَّدة بدقة، لا نحفظ شيئاً لـFirebase (التنظيف يبقى
+      // محلياً في IndexedDB فقط، وهذا يكفي). الحفظ الشامل (undefined) كان
+      // خطيراً فعلياً: لو كانت الذاكرة المحلية على هذا الجهاز أقدم من آخر
+      // تعديل حدث على جهاز آخر (مثلاً "تسوية خارجية" حديثة من الهاتف)، كان
+      // سيُستبدَل كل شيء في Firebase بالنسخة المحلية الأقدم، ماحياً تعديلات
+      // حقيقية حديثة — وهذا بالضبط ما حدث فعلياً.
+      if(touchedKeys.size){
+        await saveMaster([...touchedKeys]);
+      } else {
+        try{ await idbSet('master_cases', JSON.stringify(masterCache)); }catch(e){}
+      }
     }
     return changed;
   }catch(e){ return false; }
@@ -3570,13 +3613,16 @@ async function cleanupOldAuditEntries(){
 async function saveMaster(changedKeys){
   invalidateMasterCaseNoIndex();
   try{ await idbSet('master_cases', JSON.stringify(masterCache)); }catch(e){}
+  // إصلاح أمان حرج: التمييز الصريح بين "undefined" (حفظ شامل مقصود تماماً —
+  // يُستخدَم فقط عند استرجاع نسخة احتياطية كاملة) وبين "مصفوفة فارغة []"
+  // (لا توجد قضايا محدَّدة للحفظ — توقّف فوراً بأمان، بلا أي كتابة لـFirebase
+  // إطلاقاً).
+  if(Array.isArray(changedKeys) && changedKeys.length === 0){
+    return {key:'master_cases', value: masterCache};
+  }
   if(fbDb){
     const deletions = [..._pendingFbDeletions];
-    let toSave = masterCache;
-    if(changedKeys && changedKeys.length){
-      toSave = {};
-      changedKeys.forEach(k=>{ if(masterCache[k] !== undefined) toSave[k] = masterCache[k]; });
-    }
+    let ok;
     // حساب الفرق الدقيق (قبل/بعد) لكل قضية متأثرة، بمقارنة محلية بحتة مع
     // "آخر حالة معروفة" — بلا أي قراءة إضافية من الشبكة، فلا تأخير على الحفظ.
     const fieldChangesByKey = {};
@@ -3585,8 +3631,17 @@ async function saveMaster(changedKeys){
         const diff = computeFieldDiff(_lastKnownSnapshot[k], masterCache[k]);
         if(diff.length) fieldChangesByKey[k] = diff;
       });
+      // ===== الحل الجذري لمشكلة التزامن بين الأجهزة: حفظ جزئي على مستوى
+      // الحقل فقط — كل جهاز يكتب فقط الحقول التي لمسها فعلياً هو، بدل رفع
+      // القضية بأكملها. هذا يمنع محو تعديل حقل آخر (مثلاً "متاح_يدوي") تمّ
+      // من جهاز آخر بالتزامن تقريباً على نفس القضية، حتى لو لم تُحدَّث نسخة
+      // هذا الجهاز المحلية بعد لتعكس ذلك التعديل الآخر. =====
+      ok = await fbSaveFieldsOnly(fieldChangesByKey, deletions);
+    } else {
+      // المسار القديم (حفظ شامل كامل) — يبقى فقط لعملية استرجاع نسخة
+      // احتياطية كاملة، حيث "الاستبدال الكامل المقصود" هو الهدف الصحيح فعلياً.
+      ok = await fbSaveAllCases(masterCache, deletions);
     }
-    const ok = await fbSaveAllCases(toSave, deletions);
     if(ok) _pendingFbDeletions.clear();
     else showToast("⚠️ تعذّر الحفظ سحابياً — حُفظ محلياً فقط. السبب: " + (_lastFbSaveError || "غير معروف"), "warn");
     // تسجيل الحدث في سجل التدقيق — بعد الحفظ الفعلي مباشرة، صامت تماماً.
@@ -3601,7 +3656,7 @@ async function saveMaster(changedKeys){
             ? JSON.parse(JSON.stringify(masterCache[k])) : undefined;
         });
       } else {
-        logAuditEntry([`[حفظ كامل شامل: ${Object.keys(toSave).length} قضية]`], deletions, {});
+        logAuditEntry([`[حفظ كامل شامل: ${Object.keys(masterCache).length} قضية]`], deletions, {});
       }
     }
   }
@@ -7075,6 +7130,10 @@ document.getElementById("updateBtn").onclick = async ()=>{
   const combined = {added:0, updated:0, addedTxn:0, skippedDuplicateTxn:0, newTxnDetails:[]};
   const succeeded = [];
   const failed = [];
+
+  // نسخة احتياطية تلقائية صامتة قبل أي استيراد — حماية إضافية: لو حدث خطأ
+  // غير متوقّع أثناء الدمج، تبقى نقطة رجوع كاملة لحالة ما قبل الاستيراد.
+  try{ await saveBackupNow(false); }catch(e){}
 
   // معالجة الملفات بالتسلسل (واحداً بعد الآخر) وليس بالتوازي، لتفادي أي تضارب
   // عند الكتابة المتزامنة على نفس بيانات القضايا من أكثر من ملف في نفس اللحظة.
