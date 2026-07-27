@@ -2789,6 +2789,11 @@ function startRealtimeSync(){
     // (مقارنة مستقرة لا تتأثر بترتيب المفاتيح المختلف الذي يُعيده Firebase)
     if(stableStringify(incoming) === stableStringify(masterCache[key])) return;
     masterCache[key] = incoming;
+    // تحديث "آخر حالة معروفة" أيضاً — ضروري لتكامل صحيح مع نظام الحفظ الجزئي
+    // (حقل بحقل): بلا هذا، أي تعديل لاحق من هذا الجهاز لحقل آخر في نفس
+    // القضية سيُقارَن خطأً بحالة قديمة، فيُعيد كتابة هذا الحقل الوارد حديثاً
+    // بلا داعٍ (غير ضار فعلياً، لكن غير دقيق).
+    _lastKnownSnapshot[key] = JSON.parse(JSON.stringify(incoming));
     scheduleRerender();
   }
   function handleRemove(snap){
@@ -2796,6 +2801,7 @@ function startRealtimeSync(){
     const key = decodeFbKey(snap.key);
     if(masterCache[key] === undefined) return; // صدى حذفنا نحن أنفسنا
     delete masterCache[key];
+    delete _lastKnownSnapshot[key];
     scheduleRerender();
   }
 
