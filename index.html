@@ -1907,6 +1907,8 @@
       <div class="analysis-hint">💡 اضغط "⚡ تفعيل" أعلى الصفحة (يتطلّب كلمة السر) للسماح بإضافة شهر تحليل جديد لمدة دقيقة واحدة — أنت من يُقرِّر التوقيت المناسب (بعد وصول كل المبالغ من الجهات). يمكنك تحديث الشهر الأخير في أي وقت عبر 🔄 بلا حاجة لتفعيل.</div>
       <div class="analysis-months-bar" id="analysisMonthsBar"></div>
       <div class="analysis-cards" id="analysisCards"></div>
+      <button class="btn secondary" id="analysisDebug3662Btn" style="margin-bottom:10px;">🔬 تشخيص خام لقضية 3662</button>
+      <pre id="analysisDebugOutput" style="display:none;background:#1e1e1e;color:#4ade80;padding:14px;border-radius:10px;font-size:11px;white-space:pre-wrap;word-break:break-all;direction:ltr;text-align:left;margin-bottom:14px;max-height:400px;overflow-y:auto;"></pre>
       <div id="analysisEmpty" class="fu-search-hint" style="display:none;">لا توجد قضايا مطابقة</div>
       <div class="cases-pager" id="analysisPager"></div>
     </div>
@@ -9030,6 +9032,7 @@ async function freezeNewMonth(monthId){
   const rows = getDedupedRAW();
   let decreasedCount = 0;
   const touchedKeys = [];
+  let debugMsg = null;
   rows.forEach(r=>{
     const key = caseKey(r);
     const avail = getRowAvail(r);
@@ -9038,6 +9041,10 @@ async function freezeNewMonth(monthId){
     if(!masterCache[key]["تحليل_اشهر"]) masterCache[key]["تحليل_اشهر"] = {};
     const existingRaw = masterCache[key]["تحليل_اشهر"][monthId];
     const existingNum = existingRaw !== undefined ? parseFloat(existingRaw) : null;
+    // تشخيص مؤقت: قضية 3662 تحديداً — نطبع كل التفاصيل الخام
+    if((r["رقم الدعوى"]||"").includes("3662")){
+      debugMsg = `🔍 3662: avail=${avail} | existingRaw=${JSON.stringify(existingRaw)} | existingNum=${existingNum} | newVal=${newVal} | سيُحتفَظ بـ${(existingNum !== null && !isNaN(existingNum) && newVal < existingNum) ? existingNum : newVal}`;
+    }
     // القاعدة: "المتاح" المسجَّل لأي شهر لا يُسمح له بالنقصان أبداً — فقط
     // بالزيادة. النقصان يعني غالباً تحصيلاً (سحباً) فعلياً، وهذا لا يخصّ
     // "كم مبلغ جديد وصل" الذي يقيسه هذا التحليل أصلاً.
@@ -9049,6 +9056,7 @@ async function freezeNewMonth(monthId){
     }
     touchedKeys.push(key);
   });
+  if(debugMsg) setTimeout(()=> showToast(debugMsg, "warn"), 3500);
   // حفظ القضايا التي لمسناها فقط — وليس كل الـ819 قضية دفعة واحدة. هذا يُزيل
   // خطر الكتابة فوق بيانات قضايا أخرى (مثل متابعة المحامي) قد لا تكون قد
   // وصلت بعد من التحميل التدريجي لحظة الضغط على الزر.
@@ -9372,6 +9380,31 @@ function goAnalysis(){
 }
 
 document.getElementById("analysisPageClose").onclick = ()=>{ goCases(); };
+document.getElementById("analysisDebug3662Btn").onclick = ()=>{
+  const outEl = document.getElementById("analysisDebugOutput");
+  outEl.style.display = "block";
+  const months = getAnalysisMonths().slice().sort((a,b)=> parseInt(a.label,10) - parseInt(b.label,10));
+  const rows = getDedupedRAW();
+  const matches = rows.filter(r => (r["رقم الدعوى"]||"").includes("3662"));
+  let report = `=== تشخيص خام لقضية 3662 ===\n\n`;
+  report += `عدد الصفوف المطابقة في getDedupedRAW(): ${matches.length}\n\n`;
+  report += `=== كل الأشهر المُعرَّفة (بالترتيب) ===\n`;
+  months.forEach((m,i)=> report += `[${i}] id="${m.id}" label="${m.label}" updatedAt="${m.updatedAt||'-'}"\n`);
+  report += `\n`;
+  matches.forEach((r, idx)=>{
+    const key = caseKey(r);
+    const rec = masterCache[key];
+    report += `--- صف #${idx+1}: رقم الدعوى = "${r["رقم الدعوى"]}" ---\n`;
+    report += `caseKey المحسوبة: "${key}"\n`;
+    report += `getRowAvail الحالية: ${getRowAvail(r)}\n`;
+    report += `rec موجود في masterCache؟ ${!!rec}\n`;
+    if(rec){
+      report += `rec["تحليل_اشهر"] الكامل (خام تماماً):\n${JSON.stringify(rec["تحليل_اشهر"], null, 2)}\n`;
+    }
+    report += `\n`;
+  });
+  outEl.textContent = report;
+};
 document.getElementById("analysisUnlockBtnTop").onclick = activateAnalysisAddMonthUnlock;
 document.getElementById("casesAnalysisBtn").onclick = ()=>{ goAnalysis(); };
 document.getElementById("analysisPrintBtn").onclick = ()=>{ printAnalysis(); };
