@@ -7245,6 +7245,19 @@ document.getElementById("updateBtn").onclick = async ()=>{
 
   if(succeeded.length) await saveLastImportInfo(succeeded[succeeded.length-1]);
   await refreshMasterCache();
+  // ===== تحديث تلقائي وآمن لآخر شهر في صفحة "تحليل الرديات" فور نجاح أي
+  // استيراد — بدل انتظارك للدخول يدوياً والضغط على "🔄 تحديث". آمن تماماً
+  // بفضل قاعدة "لا نقصان أبداً" الموجودة أصلاً: أي متاح جديد وصل يُضاف فوراً،
+  // ولن يُنقِص أي قيمة مُجمَّدة سابقاً مهما حدث. =====
+  if(succeeded.length){
+    try{
+      const months = getAnalysisMonths();
+      if(months.length){
+        const lastMonth = months.slice().sort((a,b)=> parseInt(a.label,10) - parseInt(b.label,10)).pop();
+        await freezeNewMonth(lastMonth.id);
+      }
+    }catch(e){ console.error("فشل التحديث التلقائي لشهر التحليل بعد الاستيراد:", e); }
+  }
   buildChips();
   buildFilters();
   render();
