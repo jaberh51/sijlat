@@ -3073,9 +3073,24 @@ let _rowIndex = null;
 function getRowByKey(key){
   if(_rowIndex === null){
     _rowIndex = new Map();
-    // البناء بترتيب عكسي حتى يفوز أول صف مطابق (نفس سلوك Array.find الأصلي)
-    for(let i = RAW_DATA.length - 1; i >= 0; i--){
-      _rowIndex.set(caseKey(RAW_DATA[i]), RAW_DATA[i]);
+    // إصلاح جذري: "أول صف يفوز" (حتى بالترتيب العكسي) لم يكن كافياً — قد
+    // يكون هذا الصف "معاملة مالية" بلا حالة دعوى مسجَّلة عليه، بينما صف
+    // معلومات القضية الحقيقي (بحالته الصحيحة) موجود في مكان آخر من RAW_DATA.
+    // نفس فئة الخطر التي أصلحناها في dedupeByCase، لكن هنا أخطر لأن هذه
+    // الدالة تُستخدَم مباشرة في كل مكان تقريباً بالنظام. الحل: تفضيل الصف
+    // الذي يحمل "حالة الدعوى" فعلياً دائماً، بغضّ النظر عن ترتيبه.
+    for(let i = 0; i < RAW_DATA.length; i++){
+      const r = RAW_DATA[i];
+      const k = caseKey(r);
+      if(!k) continue;
+      const existing = _rowIndex.get(k);
+      if(!existing){
+        _rowIndex.set(k, r);
+      } else {
+        const hasStatus = !!(r["حالة الدعوى"] && String(r["حالة الدعوى"]).trim());
+        const existingHasStatus = !!(existing["حالة الدعوى"] && String(existing["حالة الدعوى"]).trim());
+        if(hasStatus && !existingHasStatus) _rowIndex.set(k, r);
+      }
     }
   }
   return _rowIndex.get(key);
