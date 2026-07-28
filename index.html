@@ -1293,6 +1293,37 @@
 </head>
 <body>
 <script>
+// ===== معالج أخطاء عام شامل — يلتقط أي خطأ برمجي غير متوقَّع في أي مكان
+// بالتطبيق (سواء كود متزامن عادي، أو خطأ داخل Promise/async غير مُعالَج)،
+// ويعرض رسالة واضحة للمستخدم بدل التجميد الصامت التام الذي كان يحدث سابقاً
+// بلا أي أثر ظاهر — وهو ما جعل تشخيص عدة مشاكل اليوم بطيئاً وصعباً. =====
+(function(){
+  let lastErrorShownAt = 0;
+  function showGlobalErrorNotice(message){
+    // منع إغراق الشاشة برسائل متكرّرة لو تكرَّر نفس الخطأ عدة مرات خلال ثوانٍ
+    const now = Date.now();
+    if(now - lastErrorShownAt < 5000) return;
+    lastErrorShownAt = now;
+    try{
+      let banner = document.getElementById("globalErrorBanner");
+      if(!banner){
+        banner = document.createElement("div");
+        banner.id = "globalErrorBanner";
+        banner.style.cssText = "position:fixed;bottom:0;left:0;right:0;z-index:999999;background:#7f1d1d;color:#fff;padding:12px 16px;font-family:'Tajawal',sans-serif;font-size:13px;text-align:center;direction:rtl;box-shadow:0 -2px 10px rgba(0,0,0,.3);";
+        document.body.appendChild(banner);
+      }
+      banner.innerHTML = `⚠️ حدث خطأ غير متوقَّع في النظام — إن توقَّف جزء عن العمل، حدِّث الصفحة (اسحب للأسفل أو زر التحديث). <span style="text-decoration:underline;cursor:pointer;font-weight:700;" onclick="this.parentElement.remove()">إخفاء</span>`;
+    }catch(e){}
+  }
+  window.addEventListener("error", function(event){
+    console.error("خطأ عام غير مُعالَج:", event.error || event.message);
+    showGlobalErrorNotice();
+  });
+  window.addEventListener("unhandledrejection", function(event){
+    console.error("خطأ Promise غير مُعالَج:", event.reason);
+    showGlobalErrorNotice();
+  });
+})();
 // تنظيف تلقائي: إزالة أي Service Worker متبقٍّ من تجربة سابقة — يضمن أن
 // المتصفح يحمِّل النسخة الحقيقية من الخادم دائماً، لا نسخة قديمة محفوظة
 // عند Service Worker متروك.
@@ -4043,17 +4074,28 @@ function buildHead(){
 }
 
 function dedupeByCase(rows){
-  const seen = new Set();
-  const result = [];
+  // إصلاح جذري: "أول صف تجده" لم يكن كافياً — قد يكون "صف معاملة مالية"
+  // (بلا حالة دعوى مسجَّلة عليه أصلاً) إن ظهر قبل "صف معلومات القضية"
+  // الحقيقي في ترتيب البيانات المتراكم عبر استيرادات متعددة بمرور الوقت.
+  // النتيجة: قضايا تظهر بحالة فارغة/خاطئة رغم وجود حالتها الصحيحة في صف
+  // آخر لنفس القضية. الحل: تفضيل الصف الذي يحمل "حالة الدعوى" فعلياً دائماً.
+  const byKey = new Map();
+  const order = [];
   rows.forEach(r=>{
     const key = caseKey(r);
-    if(key){
-      if(seen.has(key)) return;
-      seen.add(key);
+    if(!key){ order.push(r); return; } // بلا مفتاح صالح — لا يمكن تكراره أصلاً، يُضاف كما هو
+    const hasStatus = !!(r["حالة الدعوى"] && String(r["حالة الدعوى"]).trim());
+    if(!byKey.has(key)){
+      byKey.set(key, r);
+      order.push(key);
+    } else {
+      const existing = byKey.get(key);
+      const existingHasStatus = !!(existing["حالة الدعوى"] && String(existing["حالة الدعوى"]).trim());
+      // استبدال الصف المُختار فقط لو كان الجديد يحمل حالة والقديم لا يحملها
+      if(hasStatus && !existingHasStatus) byKey.set(key, r);
     }
-    result.push(r);
   });
-  return result;
+  return order.map(item => typeof item === "string" ? byKey.get(item) : item);
 }
 
 function getFiltered(){
@@ -6827,38 +6869,45 @@ function mergeRowsIntoRawData(newRows){
       const sig = txnSig(nr);
       const existingSigs = sigIndex.get(key);
       const isDuplicateTxn = existingSigs ? existingSigs.has(sig) : false;
-      if(isDuplicateTxn){
+      if(!isDuplicateTxn){
+        RAW_DATA.push(nr);
+        addedTxn++;
+        newTxnDetails.push({
+          caseNo: shortCaseNo(nr["رقم الدعوى"]),
+          defendant: getDefendantForRow(nr),
+          amount: parseNum(nr["المبلغ المحول"]),
+          date: nr["تاريخ الشيك/الحوالة"] || ""
+        });
+        // تحديث الفهرس مباشرة بدل إبطاله بالكامل — أسرع بكثير
+        if(!sigIndex.has(key)) sigIndex.set(key, new Set());
+        sigIndex.get(key).add(sig);
+      } else {
         skippedDuplicateTxn++;
-        return;
       }
-      RAW_DATA.push(nr);
-      addedTxn++;
-      newTxnDetails.push({
-        caseNo: shortCaseNo(nr["رقم الدعوى"]),
-        defendant: getDefendantForRow(nr),
-        amount: parseNum(nr["المبلغ المحول"]),
-        date: nr["تاريخ الشيك/الحوالة"] || ""
-      });
-      // تحديث الفهرس مباشرة بدل إبطاله بالكامل — أسرع بكثير
-      if(!sigIndex.has(key)) sigIndex.set(key, new Set());
-      sigIndex.get(key).add(sig);
-      return;
     }
 
-    // Non-financial rows describe the case itself — update the existing case
-    // entry (by case number + court) instead of adding a duplicate row.
+    // ===== إصلاح جذري: تحديث حقول معلومات القضية (مثل "حالة الدعوى") يحدث
+    // دائماً بلا شرط، بغضّ النظر عن وجود بيانات مالية في نفس الصف أم لا.
+    // سابقاً، أي صف يحمل حقلاً مالياً (كإشعار صرف مرفق بتحديث حالة "فصل" في
+    // نفس السطر) كان يُتجاهَل تحديث حالته تماماً بسبب توقّف مبكر — فتبقى
+    // القضية "قيد التنفيذ" في النظام رغم إغلاقها فعلياً حسب أحدث ملف. =====
     const existingRow = getRowByKey(key);
+    const nonFinFields = Object.keys(nr).filter(f => !FINANCIAL_FIELDS.includes(f));
+    const hasNonFinData = nonFinFields.some(f => nr[f] !== undefined && String(nr[f]).trim() !== "");
     if(!existingRow){
-      RAW_DATA.push(nr);
-      added++;
-    } else {
+      if(!hasFin){ RAW_DATA.push(nr); added++; } // صف معلومات جديد بالكامل (بلا بيانات مالية)
+    } else if(hasNonFinData){
       // تحديث الصف الموجود مباشرة في مكانه (in-place) — نفس المرجع المخزَّن في
       // RAW_DATA بالفعل، فلا حاجة للبحث عن فهرسه بـ indexOf (كان O(n) أيضاً).
-      Object.keys(nr).forEach(field=>{
+      let changed = false;
+      nonFinFields.forEach(field=>{
         const val = nr[field];
-        if(val !== undefined && String(val).trim() !== "") existingRow[field] = val;
+        if(val !== undefined && String(val).trim() !== "" && existingRow[field] !== val){
+          existingRow[field] = val;
+          changed = true;
+        }
       });
-      updated++;
+      if(changed) updated++;
     }
   });
 
