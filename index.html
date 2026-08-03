@@ -1898,7 +1898,13 @@ if('serviceWorker' in navigator){
               <th>المحكمة</th>
               <th>الحالة</th>
               <th class="amt-col">📋 المطلوب</th>
-              <th class="amt-col">✓ المحصّل</th>
+              <th class="amt-col cases-sort-th" id="casesCollectedSortTh" style="cursor:pointer;position:relative;" title="اضغط للترتيب حسب المحصّل">
+                ✓ المحصّل <span id="casesCollectedSortArrow"></span>
+                <div id="casesCollectedSortMenu" class="cases-sort-menu" style="display:none;">
+                  <button data-dir="asc">⬆️ الأقل أولاً</button>
+                  <button data-dir="desc">⬇️ الأعلى أولاً</button>
+                </div>
+              </th>
               <th class="amt-col cases-sort-th" id="casesRemSortTh" style="cursor:pointer;position:relative;" title="اضغط للترتيب حسب المتبقي">
                 ⏳ المتبقي <span id="casesRemSortArrow"></span>
                 <div id="casesRemSortMenu" class="cases-sort-menu" style="display:none;">
@@ -8198,6 +8204,7 @@ function getClosureNeededRows(){
 
 let casesRemSortDir = null; // null = بدون ترتيب خاص، "asc" أو "desc"
 let casesAvailSortDir = null;
+let casesCollectedSortDir = null;
 let casesNoSortDir = null;
 
 function getRowRemaining(r){
@@ -8216,6 +8223,12 @@ function getRowAvail(r){
   if(manualOverride !== null) return manualOverride;
   return parseNum(r["مجموع المبالغ المتاحة للقبض"]) ??
          (rec ? parseNum(rec["مجموع المبالغ المتاحة للقبض"]) : null);
+}
+
+function getRowCollected(r){
+  const rec = masterCache[caseKey(r)];
+  const fin = getFinancialForRow(r);
+  return fin.total > 0 ? fin.total : (rec ? parseNum(rec["مجموع المبالغ المقبوضة فعليا"]) : null);
 }
 
 // استخراج {year, num} من رقم الدعوى الموحّد "رقم - سنة" للترتيب حسب السنة ثم الرقم
@@ -8322,6 +8335,7 @@ function openCasesPage(){
   }
   casesRemSortDir = null;
   casesAvailSortDir = null;
+  casesCollectedSortDir = null;
   casesNoSortDir = null;
   updateCasesSortUI();
   document.getElementById("casesSearch").value = "";
@@ -8401,6 +8415,12 @@ function updateCasesSortUI(){
   if(availArrow) availArrow.textContent = casesAvailSortDir === "asc" ? "▲" : casesAvailSortDir === "desc" ? "▼" : "";
   document.querySelectorAll("#casesAvailSortMenu button").forEach(btn=>{
     btn.classList.toggle("active", btn.getAttribute("data-dir") === casesAvailSortDir);
+  });
+
+  const collectedArrow = document.getElementById("casesCollectedSortArrow");
+  if(collectedArrow) collectedArrow.textContent = casesCollectedSortDir === "asc" ? "▲" : casesCollectedSortDir === "desc" ? "▼" : "";
+  document.querySelectorAll("#casesCollectedSortMenu button").forEach(btn=>{
+    btn.classList.toggle("active", btn.getAttribute("data-dir") === casesCollectedSortDir);
   });
 
   const noArrow = document.getElementById("casesNoSortArrow");
@@ -8647,6 +8667,13 @@ function applyCasesFilter(keepPage){
       const na = va === null ? -Infinity : va;
       const nb = vb === null ? -Infinity : vb;
       return casesAvailSortDir === "asc" ? na - nb : nb - na;
+    });
+  } else if(casesCollectedSortDir){
+    casesFilteredRows.sort((a,b)=>{
+      const va = getRowCollected(a), vb = getRowCollected(b);
+      const na = va === null ? -Infinity : va;
+      const nb = vb === null ? -Infinity : vb;
+      return casesCollectedSortDir === "asc" ? na - nb : nb - na;
     });
   } else if(casesNoSortDir){
     casesFilteredRows.sort((a,b)=>{
@@ -9811,7 +9838,7 @@ function showCasesDblClickMenu(e, key){
 
 // قوائم ترتيب الأعمدة الثلاث (المتبقي، المتاح، رقم القضية) — اختيار عمود يلغي ترتيب الآخرين
 function closeAllCasesSortMenus(){
-  ["casesRemSortMenu","casesAvailSortMenu","casesNoSortMenu"].forEach(id=>{
+  ["casesRemSortMenu","casesAvailSortMenu","casesCollectedSortMenu","casesNoSortMenu"].forEach(id=>{
     const el = document.getElementById(id);
     if(el) el.style.display = "none";
   });
@@ -9841,13 +9868,16 @@ function wireCasesSortColumn(thId, menuId, getVar, setVar, resetOthers){
 }
 wireCasesSortColumn("casesRemSortTh", "casesRemSortMenu",
   ()=>casesRemSortDir, (v)=>{ casesRemSortDir = v; },
-  ()=>{ casesAvailSortDir = null; casesNoSortDir = null; });
+  ()=>{ casesAvailSortDir = null; casesCollectedSortDir = null; casesNoSortDir = null; });
 wireCasesSortColumn("casesAvailSortTh", "casesAvailSortMenu",
   ()=>casesAvailSortDir, (v)=>{ casesAvailSortDir = v; },
-  ()=>{ casesRemSortDir = null; casesNoSortDir = null; });
+  ()=>{ casesRemSortDir = null; casesCollectedSortDir = null; casesNoSortDir = null; });
+wireCasesSortColumn("casesCollectedSortTh", "casesCollectedSortMenu",
+  ()=>casesCollectedSortDir, (v)=>{ casesCollectedSortDir = v; },
+  ()=>{ casesRemSortDir = null; casesAvailSortDir = null; casesNoSortDir = null; });
 wireCasesSortColumn("casesNoSortTh", "casesNoSortMenu",
   ()=>casesNoSortDir, (v)=>{ casesNoSortDir = v; },
-  ()=>{ casesRemSortDir = null; casesAvailSortDir = null; });
+  ()=>{ casesRemSortDir = null; casesAvailSortDir = null; casesCollectedSortDir = null; });
 document.addEventListener("click", closeAllCasesSortMenus);
 document.getElementById("casesSearch").addEventListener("input", ()=>{
   clearTimeout(casesSearchTimer);
