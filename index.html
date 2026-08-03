@@ -1368,6 +1368,16 @@ if('serviceWorker' in navigator){
       <h1>سجل الدعاوى</h1>
       <div class="subtitle">اختر القسم الذي تريد الدخول إليه</div>
     </div>
+
+    <div class="fu-page-section" id="closureSection" style="display:none;max-width:520px;margin:0 auto 20px;">
+      <div class="closure-header" id="closureToggle">
+        <span>⚖️ قضايا بحاجة إلى فصل (<span id="closureCount">0</span>)</span>
+        <span class="closure-arrow" id="closureArrow">▾</span>
+      </div>
+      <button class="btn secondary" id="closureRestoreModeBtn" style="font-size:11px;padding:5px 12px;margin:8px 0 0;" title="يُظهر زر استرجاع بجانب كل قضية لمدة 30 ثانية">↩️ تفعيل الاسترجاع (30 ثانية)</button>
+      <div id="closureList" class="closure-list" style="display:none;"></div>
+    </div>
+
     <div class="home-buttons">
       <div class="home-btn home-btn-gold" data-target="remittances">
         <div class="hb-icon">💰</div>
@@ -1826,15 +1836,6 @@ if('serviceWorker' in navigator){
         </div>
       </div>
 
-      <div class="fu-page-section" id="closureSection" style="display:none;">
-        <div class="closure-header" id="closureToggle">
-          <span>⚖️ قضايا بحاجة إلى فصل (<span id="closureCount">0</span>)</span>
-          <span class="closure-arrow" id="closureArrow">▾</span>
-        </div>
-        <button class="btn secondary" id="closureRestoreModeBtn" style="font-size:11px;padding:5px 12px;margin:8px 0 0;" title="يُظهر زر استرجاع بجانب كل قضية لمدة 30 ثانية">↩️ تفعيل الاسترجاع (30 ثانية)</button>
-        <div id="closureList" class="closure-list" style="display:none;"></div>
-      </div>
-
       <div class="fu-page-section" id="casesSearchSection">
         <div class="cases-controls">
           <input type="text" id="casesSearch" class="fu-search-input" placeholder="بحث ذكي مُدمَج — اسم، محكمة، سنة، شخصي/محامي معاً (مثال: علي 2024 شخصي اربد)">
@@ -1866,6 +1867,7 @@ if('serviceWorker' in navigator){
             <option value="999999">عرض الكل</option>
           </select>
           <span id="casesCount" class="cases-count">0 قضية</span>
+          <button id="casesSelectModeToggle" class="btn secondary" style="font-size:11.5px;padding:6px 14px;">☑️ تحديد</button>
           <label class="closure-checkbox-label" title="إخفاء المقطعين الثاني والثالث من الأسماء">
             <input type="checkbox" id="casesHideThirdSegment">
             🙈
@@ -7621,6 +7623,7 @@ function goHome(){
   saveCurrentSection('home');
   checkStrictDeadlines();
   renderAutoRulesBadge();
+  renderClosureNeededBox();
 }
 
 function goTrash(){
@@ -7827,6 +7830,7 @@ let casesFilteredRows = [];
 let casesCurrentPage = 0;
 let casesSearchTimer = null;
 let casesSelected = new Set(); // مفاتيح القضايا المحددة للطباعة أو التصنيف الجماعي
+let casesSelectModeActive = false; // التحديد بالضغط على الصف يعمل فقط عند تفعيل هذا الوضع صراحةً
 
 // تحديث ظهور/عدد شريط التصنيف الجماعي — يُستدعى في كل مرة يتغيّر فيها التحديد
 function updateCasesTypeBulkBar(){
@@ -8309,6 +8313,13 @@ function renderClosureNeededBox(){
 function openCasesPage(){
   casesAllRows = getCasesRows();
   casesSelected.clear();
+  casesSelectModeActive = false;
+  const selectBtn = document.getElementById("casesSelectModeToggle");
+  if(selectBtn){
+    selectBtn.textContent = "☑️ تحديد";
+    selectBtn.style.background = "";
+    selectBtn.style.color = "";
+  }
   casesRemSortDir = null;
   casesAvailSortDir = null;
   casesNoSortDir = null;
@@ -8957,7 +8968,8 @@ function renderCasesPage(){
     // إظهار تلميح باسم العمود بجانب موضع الضغط
     const cell = e.target.closest("td[data-col]");
     if(cell) showColTooltip(e, cell.getAttribute("data-col"));
-    // تحديد/إلغاء تحديد الصف
+    // تحديد/إلغاء تحديد الصف — فقط إن كان وضع التحديد مُفعَّلاً صراحةً
+    if(!casesSelectModeActive) return;
     if(casesSelected.has(key)) casesSelected.delete(key);
     else casesSelected.add(key);
     row.classList.toggle("cases-row-selected", casesSelected.has(key));
@@ -9851,6 +9863,27 @@ document.getElementById("casesMarkLawyerBtn").onclick = ()=> bulkSetCaseType("م
 document.getElementById("casesClearTypeBtn").onclick = ()=> bulkSetCaseType(null);
 
 document.getElementById("casesPageSizeSelect").value = String(CASES_PAGE_SIZE);
+document.getElementById("casesSelectModeToggle").onclick = ()=>{
+  casesSelectModeActive = !casesSelectModeActive;
+  const btn = document.getElementById("casesSelectModeToggle");
+  if(casesSelectModeActive){
+    btn.textContent = "☑️ وضع التحديد مُفعَّل (اضغط لإيقافه)";
+    btn.style.background = "var(--brass)";
+    btn.style.color = "#fff";
+  } else {
+    btn.textContent = "☑️ تحديد";
+    btn.style.background = "";
+    btn.style.color = "";
+    // تنظيف أي تحديد سابق عند إيقاف الوضع — بداية نظيفة في كل مرة
+    casesSelected.forEach(key=>{
+      const row = document.querySelector(`.cases-row[data-key="${CSS.escape(key)}"]`);
+      if(row) row.classList.remove("cases-row-selected");
+    });
+    casesSelected.clear();
+    renderCasesPrintBtn();
+    updateCasesTypeBulkBar();
+  }
+};
 document.getElementById("casesPageSizeSelect").addEventListener("change", (e)=>{
   CASES_PAGE_SIZE = parseInt(e.target.value, 10);
   localStorage.setItem('cases_page_size', String(CASES_PAGE_SIZE));
