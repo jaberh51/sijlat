@@ -1498,6 +1498,10 @@ if('serviceWorker' in navigator){
       <div class="fu-page-subtitle">🔒 الأمان</div>
       <div style="font-size:12px;color:var(--ink-soft);margin-bottom:10px;">مسجَّل دخولك حالياً باسم: <strong id="settingsCurrentEmail">—</strong></div>
       <button class="btn secondary" id="settingsChangePwdBtn">🔑 تغيير كلمة السر (المستخدَمة في كل النظام)</button>
+      <div class="settings-row" style="margin-top:14px;">
+        <label>بريد "المدير" (يُقيِّد تغيير كلمة السر والحذف الجماعي القسري به فقط — اتركه فارغاً لعدم التقييد)</label>
+        <input type="text" id="settingsAdminEmail" class="cases-select" style="width:220px;" placeholder="مثلاً: you@email.com">
+      </div>
     </div>
 
     <div class="fu-page-section">
@@ -4976,11 +4980,33 @@ async function sha256Hex(text){
   const hashBuffer = await crypto.subtle.digest("SHA-256", data);
   return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2,"0")).join("");
 }
+// حماية ضد محاولات التخمين السريعة المتكرِّرة — بعد 5 محاولات خاطئة، قفل
+// مؤقّت لدقيقة كاملة قبل السماح بأي محاولة جديدة. مُطبَّقة مركزياً هنا، فتحمي
+// كل الأماكن الـ17 التي تستخدم هذه الدالة دفعة واحدة بلا أي تعديل إضافي فيها.
+let _pwdFailCount = 0;
+let _pwdLockedUntil = 0;
 async function verifyPassword(pwd, expectedHash){
+  const now = Date.now();
+  if(now < _pwdLockedUntil){
+    const secondsLeft = Math.ceil((_pwdLockedUntil - now) / 1000);
+    showToast(`⚠️ محاولات كثيرة خاطئة — انتظر ${secondsLeft} ثانية قبل المحاولة مجدداً`, "warn");
+    return false;
+  }
   if(!pwd) return false;
   try{
     const hash = await sha256Hex(pwd);
-    return hash === expectedHash;
+    const ok = hash === expectedHash;
+    if(ok){
+      _pwdFailCount = 0;
+    } else {
+      _pwdFailCount++;
+      if(_pwdFailCount >= 5){
+        _pwdLockedUntil = now + 60000;
+        _pwdFailCount = 0;
+        showToast("⚠️ 5 محاولات خاطئة متتالية — قُفل الدخول لمدة دقيقة كاملة", "warn");
+      }
+    }
+    return ok;
   }catch(e){
     return false; // بيئة لا تدعم Web Crypto — نرفض بأمان بدل السماح
   }
@@ -5001,9 +5027,17 @@ const DEFAULT_APP_SETTINGS = {
   auditLogRetentionDays: 90,
   strictDeadlineWarningDays: 14,
   defaultGroupsFolded: true,
-  defaultHideThirdSegment: false
+  defaultHideThirdSegment: false,
+  adminEmail: "" // فارغ = لا تقييد بعد (لن يُحظَر أحد قبل تحديده صراحةً)
 };
 let appSettings = {...DEFAULT_APP_SETTINGS};
+
+// يتحقّق هل المستخدم الحالي هو "المدير" المُحدَّد — لو الحقل فارغ (لم يُحدَّد
+// مدير بعد)، لا تقييد إطلاقاً حتى لا يُحظَر أحد بالخطأ قبل ضبط هذا الإعداد.
+function isCurrentUserAdmin(){
+  if(!appSettings.adminEmail || !appSettings.adminEmail.trim()) return true;
+  return getCurrentUserEmail() === appSettings.adminEmail.trim();
+}
 
 // ===== مراقبة حالة الاتصال الحقيقي بـFirebase — عبر المسار الخاص
 // ".info/connected" الذي توفّره كل قاعدة بيانات Firebase تلقائياً، وهو أدق
@@ -5088,6 +5122,7 @@ function renderSettingsPage(){
   document.getElementById("settingsDeadlineDays").value = appSettings.strictDeadlineWarningDays;
   document.getElementById("settingsDefaultFolded").checked = !!appSettings.defaultGroupsFolded;
   document.getElementById("settingsDefaultHideThird").checked = !!appSettings.defaultHideThirdSegment;
+  document.getElementById("settingsAdminEmail").value = appSettings.adminEmail || "";
 
   const totalCases = Object.keys(masterCache).length;
   const versionEl = document.getElementById("appVersionTag");
@@ -5158,9 +5193,17 @@ document.getElementById("settingsSaveBtn").onclick = async ()=>{
   const strictDeadlineWarningDays = parseInt(document.getElementById("settingsDeadlineDays").value, 10);
   const defaultGroupsFolded = document.getElementById("settingsDefaultFolded").checked;
   const defaultHideThirdSegment = document.getElementById("settingsDefaultHideThird").checked;
+  const adminEmailInput = document.getElementById("settingsAdminEmail").value.trim();
 
   if([backupMaxCount, trashRetentionDays, auditLogRetentionDays, strictDeadlineWarningDays].some(n=> isNaN(n) || n < 1)){
     showToast("⚠️ تحقّق من الأرقام المُدخَلة — يجب أن تكون كلها أكبر من صفر", "warn");
+    return;
+  }
+  // لو مديراً مُحدَّداً بالفعل، وحاول شخص آخر تغيير هذا الحقل تحديداً — يُرفَض
+  // (يمنع أي شخص من تجاوز القيد بمسح المدير الحالي أو استبداله ببريده هو)
+  const currentAdmin = (appSettings.adminEmail || "").trim();
+  if(currentAdmin && currentAdmin !== adminEmailInput && !isCurrentUserAdmin()){
+    showToast("⚠️ فقط المدير الحالي يستطيع تغيير هذا الحقل", "warn");
     return;
   }
 
@@ -5170,7 +5213,8 @@ document.getElementById("settingsSaveBtn").onclick = async ()=>{
     saveAppSettingField('auditLogRetentionDays', auditLogRetentionDays),
     saveAppSettingField('strictDeadlineWarningDays', strictDeadlineWarningDays),
     saveAppSettingField('defaultGroupsFolded', defaultGroupsFolded),
-    saveAppSettingField('defaultHideThirdSegment', defaultHideThirdSegment)
+    saveAppSettingField('defaultHideThirdSegment', defaultHideThirdSegment),
+    saveAppSettingField('adminEmail', adminEmailInput)
   ]);
   // مزامنة الثوابت التشغيلية فوراً — بلا حاجة لإعادة تحميل الصفحة
   BACKUP_MAX_COUNT = backupMaxCount;
@@ -5181,6 +5225,10 @@ document.getElementById("settingsSaveBtn").onclick = async ()=>{
 };
 
 document.getElementById("settingsChangePwdBtn").onclick = async ()=>{
+  if(!isCurrentUserAdmin()){
+    showToast("⚠️ فقط المدير المُحدَّد يستطيع تغيير كلمة السر", "warn");
+    return;
+  }
   const currentPwd = await askPassword("أدخل كلمة السر الحالية للتأكيد:");
   if(!(await verifyPassword(currentPwd, LW_STEP_PASS_HASH))){
     showToast("⚠️ كلمة السر الحالية غير صحيحة", "warn");
@@ -7908,6 +7956,10 @@ let _casesForceEditModeUntil = 0;
 const CASES_FORCE_EDIT_MODE_DURATION_MS = 60 * 1000; // دقيقة كاملة
 
 async function activateCasesForceDeleteMode(){
+  if(!isCurrentUserAdmin()){
+    showToast("⚠️ فقط المدير المُحدَّد يستطيع تفعيل الحذف/التعديل القسري", "warn");
+    return;
+  }
   const pwd = await askPassword("أدخل كلمة السر لتفعيل الحذف/التعديل القسري:");
   if(!(await verifyPassword(pwd, LW_STEP_PASS_HASH))){
     showToast("⚠️ كلمة السر غير صحيحة", "warn");
@@ -8445,7 +8497,7 @@ function applyCasesFilter(keepPage){
       const caseTypeForSearch = (recForSearch && recForSearch["نوع_القضية"]) || "";
       const caseYearForSearch = getCaseYearNum(r).year;
       return tokens.every(token=>{
-        if(/^\d{4}$/.test(token)) return String(caseYearForSearch) === token;
+        if(/^\d{4}$/.test(token)) return String(caseYearForSearch) === token || caseNoText.includes(token);
         if(token === "شخصي" || token === "محامي") return caseTypeForSearch === token;
         if(KNOWN_COURT_NAMES.includes(token)) return courtNameText.includes(token);
         return caseNoText.includes(token) || courtNameText.includes(token) || allNamesText.includes(token);
