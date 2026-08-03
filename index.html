@@ -1336,6 +1336,17 @@ if('serviceWorker' in navigator){
 
 <div id="connectionBadge" class="connection-badge connection-online" style="display:none;">🟢 متصل</div>
 
+<!-- زر عائم للقضايا المُثبَّتة مؤقتاً — يظهر فقط عند وجود قضية واحدة على الأقل مُثبَّتة -->
+<button id="pinnedCasesBadge" style="display:none;position:fixed;bottom:16px;left:16px;z-index:99998;background:var(--brass,#a5793a);color:#fff;border:none;border-radius:999px;padding:10px 16px;font-size:13px;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,.25);font-family:'Tajawal',sans-serif;cursor:pointer;">📌 0</button>
+
+<div id="pinnedCasesPanel" style="display:none;position:fixed;bottom:70px;left:16px;z-index:99998;background:#fff;border-radius:14px;box-shadow:0 8px 28px rgba(0,0,0,.3);padding:14px;width:280px;max-height:60vh;overflow-y:auto;direction:rtl;font-family:'Tajawal',sans-serif;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+    <div style="font-weight:700;font-size:13.5px;">📌 قضايا مُثبَّتة مؤقتاً</div>
+    <span id="pinnedCasesPanelClose" style="cursor:pointer;font-weight:700;">✕</span>
+  </div>
+  <div id="pinnedCasesPanelList" style="display:flex;flex-direction:column;gap:6px;"></div>
+</div>
+
 <div id="authScreen" style="position:fixed;inset:0;z-index:99999;background:var(--paper);display:flex;align-items:center;justify-content:center;padding:20px;">
   <div style="background:var(--paper-raised);border:1px solid var(--line);border-radius:16px;padding:36px 32px;max-width:360px;width:100%;box-shadow:var(--shadow);text-align:center;">
     <div class="seal" style="margin:0 auto 16px;">د</div>
@@ -5135,6 +5146,15 @@ function renderSettingsPage(){
 
 document.getElementById("viewSettingsBtn").onclick = goSettings;
 document.getElementById("viewGeneralNotesBtn").onclick = goGeneralNotes;
+document.getElementById("pinnedCasesBadge").onclick = ()=>{
+  const panel = document.getElementById("pinnedCasesPanel");
+  const isOpen = panel.style.display === "block";
+  if(isOpen){ panel.style.display = "none"; }
+  else { renderPinnedCasesPanel(); panel.style.display = "block"; }
+};
+document.getElementById("pinnedCasesPanelClose").onclick = ()=>{
+  document.getElementById("pinnedCasesPanel").style.display = "none";
+};
 document.getElementById("generalNotesPageClose").onclick = goHome;
 document.getElementById("generalNoteAddBtn").onclick = async ()=>{
   const input = document.getElementById("generalNoteInput");
@@ -5346,6 +5366,99 @@ async function deleteGeneralNote(key){
     console.error("فشل حذف الملاحظة العامة:", e);
     return false;
   }
+}
+
+// ===== تثبيت مؤقت للقضايا (24 ساعة) — قائمة سريعة شخصية على هذا الجهاز،
+// لا علاقة لها ببيانات القضية نفسها، فقط اختصار وصول مؤقّت يُنظَّف تلقائياً. =====
+const PIN_DURATION_MS = 24 * 60 * 60 * 1000;
+
+function getPinnedCasesRaw(){
+  try{ return JSON.parse(localStorage.getItem('cases_pinned_temp') || '{}'); }
+  catch(e){ return {}; }
+}
+
+function savePinnedCasesRaw(obj){
+  try{ localStorage.setItem('cases_pinned_temp', JSON.stringify(obj)); }catch(e){}
+}
+
+// يُزيل أي تثبيت انتهت مدته (أكثر من 24 ساعة) قبل أي استخدام — تنظيف ذاتي
+function getActivePinnedCases(){
+  const raw = getPinnedCasesRaw();
+  const now = Date.now();
+  let changed = false;
+  Object.keys(raw).forEach(key=>{
+    if(now - raw[key] > PIN_DURATION_MS){ delete raw[key]; changed = true; }
+  });
+  if(changed) savePinnedCasesRaw(raw);
+  return raw;
+}
+
+function pinCaseTemporarily(key){
+  const raw = getActivePinnedCases();
+  raw[key] = Date.now();
+  savePinnedCasesRaw(raw);
+  renderPinnedCasesBadge();
+}
+
+function unpinCase(key){
+  const raw = getActivePinnedCases();
+  delete raw[key];
+  savePinnedCasesRaw(raw);
+  renderPinnedCasesBadge();
+  renderPinnedCasesPanel();
+}
+
+function renderPinnedCasesBadge(){
+  const raw = getActivePinnedCases();
+  const count = Object.keys(raw).length;
+  const badge = document.getElementById("pinnedCasesBadge");
+  if(!badge) return;
+  if(count > 0){
+    badge.style.display = "block";
+    badge.textContent = `📌 ${count}`;
+  } else {
+    badge.style.display = "none";
+    document.getElementById("pinnedCasesPanel").style.display = "none";
+  }
+}
+
+function renderPinnedCasesPanel(){
+  const raw = getActivePinnedCases();
+  const listEl = document.getElementById("pinnedCasesPanelList");
+  const keys = Object.keys(raw).sort((a,b)=> raw[b] - raw[a]); // الأحدث تثبيتاً أولاً
+  if(!keys.length){
+    listEl.innerHTML = `<div style="font-size:12px;color:#888;">لا توجد قضايا مُثبَّتة حالياً</div>`;
+    return;
+  }
+  const now = Date.now();
+  listEl.innerHTML = keys.map(key=>{
+    const row = getRowByKey(key);
+    const label = row ? `${escapeAttr(shortCaseNo(row["رقم الدعوى"]))} · ${escapeAttr(getDefendantForRow(row))}` : "(قضية غير موجودة)";
+    const hoursLeft = Math.max(0, Math.ceil((PIN_DURATION_MS - (now - raw[key])) / 3600000));
+    return `
+      <div style="display:flex;justify-content:space-between;align-items:center;background:var(--paper-raised,#f7f5f0);border-radius:8px;padding:8px 10px;font-size:12px;">
+        <span class="pinned-case-goto" data-key="${escapeAttr(key)}" style="cursor:pointer;text-decoration:underline;flex:1;">${label}</span>
+        <span style="color:#888;font-size:10.5px;margin-inline:8px;">${hoursLeft} س</span>
+        <span class="pinned-case-remove" data-key="${escapeAttr(key)}" style="cursor:pointer;color:#dc2626;font-weight:700;">✕</span>
+      </div>
+    `;
+  }).join("");
+  listEl.querySelectorAll(".pinned-case-remove").forEach(btn=>{
+    btn.onclick = ()=> unpinCase(btn.getAttribute("data-key"));
+  });
+  listEl.querySelectorAll(".pinned-case-goto").forEach(btn=>{
+    btn.onclick = ()=>{
+      const key = btn.getAttribute("data-key");
+      const row = getRowByKey(key);
+      if(!row) return;
+      document.getElementById("pinnedCasesPanel").style.display = "none";
+      goCases();
+      setTimeout(()=>{
+        document.getElementById("casesSearch").value = shortCaseNo(row["رقم الدعوى"]);
+        applyCasesFilter();
+      }, 100);
+    };
+  });
 }
 
 function getFoldedCasesSet(){
@@ -8711,7 +8824,8 @@ function renderCasesPage(){
     const hasRemaining = rem !== null && rem > 0;
     const hasAvailAmount = avail !== null && avail > 0;
     const isProtectedFromDelete = !hasRemaining && hasAvailAmount;
-    const isDblClickEligible = status === "فصل";
+    const isClosedCase = status === "فصل";
+    const isDblClickEligible = true; // النقر المزدوج متاح الآن لأي قضية (كانت مقصورة على المفصولة فقط)
 
     const showRemoveBtn = !hasRemaining && !isProtectedFromDelete && (status !== "قيد التنفيذ" || rem === 0);
     const forceDeleteModeActive = getAccurateNow().getTime() < _casesForceDeleteModeUntil;
@@ -9566,17 +9680,22 @@ function showCasesDblClickMenu(e, key){
   closeCasesDblClickMenu();
   const row = getDedupedRAW().find(r => caseKey(r) === key);
   if(!row) return;
+  const isClosedCase = (row["حالة الدعوى"]||"").trim() === "فصل";
 
   const menu = document.createElement("div");
   menu.id = "casesDblClickMenu";
   menu.className = "cases-dblclick-menu";
+  const isPinned = !!getActivePinnedCases()[key];
   menu.innerHTML = `
-    <div class="cases-dblclick-menu-title">${escapeAttr(shortCaseNo(row["رقم الدعوى"]))}${getClientBadgeHtml(row)} — قضية مفصولة</div>
-    <button data-action="edit-requested">✏️ تعديل المطلوب</button>
-    <button data-action="edit-collected">✏️ تعديل المحصّل</button>
-    <button data-action="edit-remaining">✏️ تعديل المتبقي</button>
-    <button data-action="edit-avail">✏️ تعديل المتاح</button>
-    <button data-action="delete" class="danger">🗑️ حذف القضية نهائياً</button>
+    <div class="cases-dblclick-menu-title">${escapeAttr(shortCaseNo(row["رقم الدعوى"]))}${getClientBadgeHtml(row)}${isClosedCase ? ' — قضية مفصولة' : ''}</div>
+    <button data-action="pin-temp">${isPinned ? '📌 مُثبَّتة بالفعل (مدَّد 24 ساعة)' : '📌 تثبيت مؤقت ليوم'}</button>
+    ${isClosedCase ? `
+      <button data-action="edit-requested">✏️ تعديل المطلوب</button>
+      <button data-action="edit-collected">✏️ تعديل المحصّل</button>
+      <button data-action="edit-remaining">✏️ تعديل المتبقي</button>
+      <button data-action="edit-avail">✏️ تعديل المتاح</button>
+      <button data-action="delete" class="danger">🗑️ حذف القضية نهائياً</button>
+    ` : ''}
   `;
   document.body.appendChild(menu);
 
@@ -9591,6 +9710,12 @@ function showCasesDblClickMenu(e, key){
     if(!btn) return;
     const action = btn.getAttribute("data-action");
     closeCasesDblClickMenu();
+
+    if(action === "pin-temp"){
+      pinCaseTemporarily(key);
+      showToast("📌 ثُبِّتت القضية مؤقتاً لمدة 24 ساعة", "ok");
+      return;
+    }
 
     if(action === "delete"){
       const pwd = await askPassword("أدخل كلمة السر لحذف هذه القضية نهائياً (تسوية خارجية):");
@@ -9866,6 +9991,7 @@ async function initApp(){
   // 7) تفعيل المزامنة السحابية اللحظية — من الآن فصاعداً، أي تعديل من جهاز آخر
   // يصل هنا تلقائياً ويُحدَّث العرض دون الحاجة لإعادة تحميل الصفحة يدوياً.
   window._appFullyLoaded = true;
+  renderPinnedCasesBadge();
   startRealtimeSync();
 
   // 8) فحص/أخذ النسخة الاحتياطية اليومية — في الخلفية تماماً، لا يحجب شيئاً
