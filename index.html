@@ -7314,6 +7314,10 @@ document.getElementById("updateBtn").onclick = async ()=>{
   // ولن يُنقِص أي قيمة مُجمَّدة سابقاً مهما حدث. =====
   if(succeeded.length){
     try{
+      // تحميل صريح من Firebase أولاً — بدل الاعتماد على الذاكرة المحلية التي
+      // قد تكون فارغة إن لم يفتح المستخدم صفحة التحليل بعد في هذه الجلسة
+      // (كانت هذه بالضبط الفجوة التي جعلت التحديث التلقائي السابق لا يعمل).
+      await loadAnalysisMonthsFromFirebase();
       const months = getAnalysisMonths();
       if(months.length){
         const lastMonth = months.slice().sort((a,b)=> parseInt(a.label,10) - parseInt(b.label,10)).pop();
