@@ -1892,6 +1892,7 @@ if('serviceWorker' in navigator){
                   <button data-dir="asc">⬆️ الأقل أولاً</button>
                   <button data-dir="desc">⬇️ الأعلى أولاً</button>
                   <button id="casesZeroCollected30Btn" data-filter="zero30" style="border-top:1px solid var(--line);margin-top:4px;padding-top:8px;">🔴 صفرية (30+ يوم منذ الورود)</button>
+                  <button id="casesZeroCollected45Btn" data-filter="zero45">🔴 صفرية (45+ يوم منذ الورود)</button>
                   <button id="casesUnder30DinarBtn" data-filter="under30">💰 أقل من 30 د (آخر شهر رديات)</button>
                   <button id="casesUnder30LastMonthBtn" data-filter="under30lastmonth">🔵 أقل من 30 دينار (رديّة آخر شهر)</button>
                 </div>
@@ -8272,6 +8273,7 @@ let casesRemSortDir = null; // null = بدون ترتيب خاص، "asc" أو "d
 let casesAvailSortDir = null;
 let casesCollectedSortDir = null;
 let casesZeroCollected30Active = false;
+let casesZeroCollected45Active = false;
 let casesUnder30DinarActive = false;
 let casesUnder30LastMonthActive = false;
 let casesNoSortDir = null;
@@ -8401,6 +8403,7 @@ function openCasesPage(){
   casesAvailSortDir = null;
   casesCollectedSortDir = null;
   casesZeroCollected30Active = false;
+  casesZeroCollected45Active = false;
   casesUnder30DinarActive = false;
   casesNoSortDir = null;
   updateCasesSortUI();
@@ -8473,9 +8476,11 @@ function updateCasesSortUI(){
     btn.classList.toggle("active", btn.getAttribute("data-dir") === casesCollectedSortDir);
   });
   const collectedTh = document.getElementById("casesCollectedSortTh");
-  if(collectedTh) collectedTh.style.background = (casesZeroCollected30Active || casesUnder30DinarActive) ? "#fee2e2" : "";
+  if(collectedTh) collectedTh.style.background = (casesZeroCollected30Active || casesZeroCollected45Active || casesUnder30DinarActive) ? "#fee2e2" : "";
   const zero30Btn = document.getElementById("casesZeroCollected30Btn");
   if(zero30Btn) zero30Btn.classList.toggle("active", casesZeroCollected30Active);
+  const zero45Btn = document.getElementById("casesZeroCollected45Btn");
+  if(zero45Btn) zero45Btn.classList.toggle("active", casesZeroCollected45Active);
   const under30Btn = document.getElementById("casesUnder30DinarBtn");
   if(under30Btn) under30Btn.classList.toggle("active", casesUnder30DinarActive);
 
@@ -8730,6 +8735,16 @@ function applyCasesFilter(keepPage){
       if(!arrivalDate) return false; // بلا تاريخ ورود معروف — لا يمكن التأكّد من مرور 30 يوماً
       const daysSince = (getAccurateNow().getTime() - arrivalDate.getTime()) / 86400000;
       if(daysSince < 30) return false;
+    }
+    if(casesZeroCollected45Active){
+      const collected = getRowCollected(r);
+      const isZero = !collected || collected <= 0;
+      if(!isZero) return false;
+      const arrivalRaw = r["تاريخ ورود الدعوى"] || (masterCache[caseKey(r)]||{})["تاريخ الورود"] || "";
+      const arrivalDate = parseDate(arrivalRaw);
+      if(!arrivalDate) return false; // بلا تاريخ ورود معروف — لا يمكن التأكّد من مرور 45 يوماً
+      const daysSince = (getAccurateNow().getTime() - arrivalDate.getTime()) / 86400000;
+      if(daysSince < 45) return false;
     }
     if(casesUnder30DinarActive){
       if(!lastAnalysisMonth) return false; // لا يوجد أي شهر تحليل بعد — لا معنى للفلتر
@@ -10009,6 +10024,14 @@ document.getElementById("casesZeroCollected30Btn").addEventListener("click", (e)
   casesZeroCollected30Active = !casesZeroCollected30Active;
   const btn = e.currentTarget;
   btn.classList.toggle("active", casesZeroCollected30Active);
+  closeAllCasesSortMenus();
+  applyCasesFilter();
+});
+document.getElementById("casesZeroCollected45Btn").addEventListener("click", (e)=>{
+  e.stopPropagation();
+  casesZeroCollected45Active = !casesZeroCollected45Active;
+  const btn = e.currentTarget;
+  btn.classList.toggle("active", casesZeroCollected45Active);
   closeAllCasesSortMenus();
   applyCasesFilter();
 });
