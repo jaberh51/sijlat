@@ -400,39 +400,18 @@
     border-radius:10px;padding:8px 14px;margin-top:10px;
   }
 
-  /* ===== الهيكل الجديد: بطاقات تحليل أنيقة بدل جدول تقليدي ===== */
-  .analysis-months-bar{
-    display:flex;align-items:stretch;gap:8px;flex-wrap:wrap;margin:16px 0 6px;
-  }
-  .analysis-month-pill{
-    display:flex;flex-direction:column;align-items:center;gap:2px;
-    background:var(--paper-raised);border:1.5px solid var(--line);border-radius:12px;
-    padding:8px 16px;min-width:76px;position:relative;
-  }
-  .analysis-month-pill.is-last{border-color:var(--brass);background:linear-gradient(135deg,#fdf6e9,var(--paper-raised));}
-  .analysis-month-pill-label{font-family:'Amiri',serif;font-size:19px;font-weight:700;color:var(--ink);line-height:1;}
-  .analysis-month-pill-hint{font-size:9.5px;color:var(--ink-soft);}
-  .analysis-month-pill .analysis-month-refresh{position:absolute;top:-8px;left:-8px;background:var(--brass);color:#fff;border-radius:50%;width:22px;height:22px;font-size:11px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 5px rgba(0,0,0,.2);}
-  .analysis-month-pill .analysis-month-refresh:hover{filter:brightness(1.1);}
-  .analysis-add-pill{
-    display:flex;align-items:center;justify-content:center;
-    border:1.5px dashed var(--brass);border-radius:12px;background:transparent;
-    color:var(--brass);font-size:24px;font-weight:700;cursor:pointer;min-width:52px;padding:0 14px;
-  }
-  .analysis-add-pill:hover:not(:disabled){background:#fdf6e9;}
-  .analysis-add-pill:disabled{border-color:var(--line);color:var(--line);cursor:not-allowed;}
-
-  /* جدول تحليل الرديات — استُبدلت البطاقات بجدول تقليدي بطلب المستخدم */
+  /* جدول تحليل الرديات — جدول تقليدي، بلا شريط أشهر منفصل بالأعلى (بطلب
+     المستخدم) — زر تحديث الشهر الأخير الآن أعلى عمود ذلك الشهر مباشرة */
   .analysis-table-wrap{overflow-x:auto;margin-top:12px;border:1px solid var(--line);border-radius:12px;background:var(--paper-raised);box-shadow:0 1px 3px rgba(0,0,0,.04);}
   .analysis-table{width:100%;border-collapse:collapse;font-size:13px;}
   .analysis-table thead th{
-    background:var(--paper-raised);padding:10px 12px;font-weight:700;color:var(--ink);
+    background:var(--paper-raised);padding:8px 12px;font-weight:700;color:var(--ink);
     border-bottom:2px solid var(--line);white-space:nowrap;position:sticky;top:0;z-index:1;
   }
   .analysis-table th.al-th-party{text-align:right;min-width:160px;}
-  .analysis-table th.al-th-info{text-align:center;}
   .analysis-table th.al-th-month{text-align:center;min-width:78px;}
   .analysis-table th.al-th-month.is-last{color:var(--brass);background:#fdf6e9;}
+  .analysis-table th.al-th-month .analysis-month-refresh{display:block;margin:0 auto 2px;}
   .analysis-table tbody td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle;}
   .analysis-table tbody tr:last-child td{border-bottom:none;}
   .analysis-table tbody tr:hover td{background:var(--paper);}
@@ -440,8 +419,6 @@
     text-align:right;font-weight:700;color:var(--ink);
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;
   }
-  .analysis-table td.al-info{text-align:center;font-size:11.5px;color:var(--ink-soft);white-space:nowrap;}
-  .analysis-table .al-caseno{background:var(--slate-soft);color:var(--slate);border-radius:6px;padding:1px 8px;font-weight:700;}
   .analysis-table td.al-month{
     text-align:center;font-family:'Amiri',serif;font-size:15px;font-weight:700;
   }
@@ -449,8 +426,6 @@
   .analysis-table td.al-month.positive{color:#059669;background:linear-gradient(135deg,#ecfdf5,#d1fae5);}
   @media(max-width:640px){
     .analysis-table td.al-party{max-width:120px;}
-    .analysis-table td.al-info{display:none;}
-    .analysis-table th.al-th-info{display:none;}
   }
   .cases-finished-box{
     background:linear-gradient(135deg,#f0fdf4,#dcfce7);
@@ -1954,6 +1929,7 @@ if('serviceWorker' in navigator){
       <div style="display:flex;gap:8px;align-items:center;">
         <button class="btn secondary" id="analysisPrintBtn">🖨️ طباعة</button>
         <button class="btn secondary" id="analysisUnlockBtnTop" title="يسمح بإضافة شهر جديد لمدة دقيقة واحدة — يتطلّب كلمة السر">⚡ تفعيل</button>
+        <button class="btn secondary" id="analysisAddMonthBtn" title="إضافة شهر جديد">+ شهر</button>
         <button class="btn secondary" id="analysisPageClose">✕ إغلاق والعودة</button>
       </div>
     </div>
@@ -1985,7 +1961,6 @@ if('serviceWorker' in navigator){
         <span id="analysisCount" class="cases-count">0 قضية</span>
       </div>
       <div class="analysis-hint">💡 اضغط "⚡ تفعيل" أعلى الصفحة (يتطلّب كلمة السر) للسماح بإضافة شهر تحليل جديد لمدة دقيقة واحدة — أنت من يُقرِّر التوقيت المناسب (بعد وصول كل المبالغ من الجهات). يمكنك تحديث الشهر الأخير في أي وقت عبر 🔄 بلا حاجة لتفعيل.</div>
-      <div class="analysis-months-bar" id="analysisMonthsBar"></div>
       <div class="analysis-table-wrap" id="analysisCards"></div>
       <div id="analysisEmpty" class="fu-search-hint" style="display:none;">لا توجد قضايا مطابقة</div>
       <div class="cases-pager" id="analysisPager"></div>
@@ -9629,41 +9604,15 @@ function computeAnalysisColWidths(monthsCount){
   return {no:"14%", party:"24%", court:"14%", addBtn:"3%", perMonth: perMonth + "%"};
 }
 
-// تصيير شريط الأشهر العلوي الأنيق (بدل رأس الجدول القديم)
-function renderAnalysisMonthsBar(months){
-  const bar = document.getElementById("analysisMonthsBar");
-  const fmtUpdateDate = (iso)=>{
-    if(!iso) return "";
-    try{ return new Date(iso).toLocaleDateString('ar-EG',{day:'2-digit',month:'2-digit'}); }
-    catch(e){ return ""; }
-  };
-  const pills = months.map((m,i)=>{
-    const isLast = i === months.length - 1;
-    const refreshBtn = isLast
-      ? `<button class="analysis-month-refresh" id="analysisRefreshLastBtn" title="تحديث هذا الشهر بأحدث الأرقام">🔄</button>`
-      : "";
-    const updated = (isLast && m.updatedAt)
-      ? `<span class="analysis-month-pill-hint" data-updated="1">${escapeAttr(fmtUpdateDate(m.updatedAt))}</span>`
-      : "";
-    return `<div class="analysis-month-pill${isLast ? " is-last" : ""}">
-      ${refreshBtn}
-      <span class="analysis-month-pill-label">${escapeAttr(m.label)}</span>
-      ${updated}
-    </div>`;
-  }).join("");
+// يحدِّث زر "+ شهر" الموجود أعلى الصفحة (الحالة/التلميح فقط) — الزر نفسه ثابت
+// في مكانه بالـHTML، لا يُعاد بناؤه، فقط نُحدِّث تفعيله وعنوانه حسب حالة القفل.
+function updateAnalysisAddMonthBtn(){
+  const btn = document.getElementById("analysisAddMonthBtn");
+  if(!btn) return;
   const canAdd = canAddNewAnalysisMonth();
-  const addBtnTitle = canAdd ? "إضافة شهر جديد" : "اضغط \"⚡ تفعيل\" أعلى الصفحة أولاً للسماح بالإضافة";
-  bar.innerHTML = pills +
-    `<button class="analysis-add-pill" id="analysisAddMonthBtn" title="${addBtnTitle}" ${canAdd ? "" : "disabled"}>+</button>`;
-
-  document.getElementById("analysisAddMonthBtn").onclick = ()=>{ addAnalysisMonth(); };
-  const refreshBtnEl = document.getElementById("analysisRefreshLastBtn");
-  if(refreshBtnEl){
-    refreshBtnEl.onclick = (e)=>{ e.stopPropagation(); refreshLastAnalysisMonth(); };
-  }
-  setTimeout(()=>{
-    bar.querySelectorAll('[data-updated="1"]').forEach(el=>{ el.style.transition="opacity .6s"; el.style.opacity="0"; });
-  }, 2800);
+  btn.disabled = !canAdd;
+  btn.title = canAdd ? "إضافة شهر جديد" : "اضغط \"⚡ تفعيل\" أولاً للسماح بالإضافة";
+  btn.onclick = ()=>{ addAnalysisMonth(); };
 }
 
 function renderAnalysisPage(){
@@ -9671,7 +9620,7 @@ function renderAnalysisPage(){
   // الشهر الأصغر رقماً (مثلاً 6) دائماً في أقصى اليمين (بداية القراءة RTL)،
   // والأشهر التالية بجانبه بالترتيب الصحيح — بنفس الترتيب في الشريط والأعمدة معاً.
   const months = getAnalysisMonths().slice().sort((a,b)=> parseInt(a.label,10) - parseInt(b.label,10));
-  renderAnalysisMonthsBar(months);
+  updateAnalysisAddMonthBtn();
 
   // ترتيب القضايا: الأعلى قيمة في آخر شهر (الحالي) أولاً — أي قضية وصلها
   // مبلغ جديد لهذا الشهر تقفز للمقدمة تلقائياً، بغضّ النظر عن أي صفحة كانت
@@ -9706,13 +9655,18 @@ function renderAnalysisPage(){
   const start = analysisCurrentPage * ANALYSIS_PAGE_SIZE;
   const pageRows = analysisFilteredRows.slice(start, start + ANALYSIS_PAGE_SIZE);
 
-  // جدول تقليدي بدل البطاقات (بطلب المستخدم) — عمود الاسم أولاً فيظهر أقصى
-  // اليمين باتجاه RTL، تليه المعلومات (رقم الدعوى/المحكمة)، ثم عمود لكل شهر
-  // بترتيب تصاعدي (الأشهر الأقدم يميناً، الأحدث يساراً — نفس منطق الشريط أعلاه).
+  // جدول تقليدي (بطلب المستخدم) — عمود الاسم فقط أولاً فيظهر أقصى اليمين
+  // باتجاه RTL (رقم الدعوى واسم المحكمة أُزيلا)، ثم عمود لكل شهر بترتيب
+  // تصاعدي. زر تحديث الشهر الأخير (🔄) أصبح فوق عمود ذلك الشهر مباشرة بدل
+  // شريط منفصل أعلى الصفحة (أُزيل الشريط بالكامل، لا داعي له بعد الآن).
   const lastMonthLabel = months.length ? months[months.length-1].label : null;
-  const monthHeadersHtml = months.map(m=>
-    `<th class="al-th-month${m.label===lastMonthLabel?" is-last":""}">${escapeAttr(m.label)}</th>`
-  ).join("");
+  const monthHeadersHtml = months.map(m=>{
+    const isLast = m.label === lastMonthLabel;
+    const refreshBtn = isLast
+      ? `<button class="analysis-month-refresh" id="analysisRefreshLastBtn" title="تحديث هذا الشهر بأحدث الأرقام">🔄</button>`
+      : "";
+    return `<th class="al-th-month${isLast ? " is-last" : ""}">${refreshBtn}<div>${escapeAttr(m.label)}</div></th>`;
+  }).join("");
 
   const rowsHtml = pageRows.map(r=>{
     const def = getDefendantForRow(r);
@@ -9723,10 +9677,6 @@ function renderAnalysisPage(){
     }).join("");
     return `<tr>
       <td class="al-party">${escapeAttr(def)}</td>
-      <td class="al-info">
-        <span class="al-caseno">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}</span>
-        <span>${escapeAttr(displayCourtName(r["المحكمة"]))}</span>
-      </td>
       ${monthCellsHtml}
     </tr>`;
   }).join("");
@@ -9734,11 +9684,14 @@ function renderAnalysisPage(){
   cardsEl.innerHTML = `<table class="analysis-table">
     <thead><tr>
       <th class="al-th-party">الطرف</th>
-      <th class="al-th-info">القضية / المحكمة</th>
       ${monthHeadersHtml}
     </tr></thead>
     <tbody>${rowsHtml}</tbody>
   </table>`;
+  const refreshBtnEl = document.getElementById("analysisRefreshLastBtn");
+  if(refreshBtnEl){
+    refreshBtnEl.onclick = (e)=>{ e.stopPropagation(); refreshLastAnalysisMonth(); };
+  }
 
   if(totalPages > 1){
     pagerEl.innerHTML = `
