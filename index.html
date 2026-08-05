@@ -1903,6 +1903,7 @@ if('serviceWorker' in navigator){
                 <div id="casesCollectedSortMenu" class="cases-sort-menu" style="display:none;">
                   <button data-dir="asc">⬆️ الأقل أولاً</button>
                   <button data-dir="desc">⬇️ الأعلى أولاً</button>
+                  <button id="casesZeroCollected30Btn" data-filter="zero30" style="border-top:1px solid var(--line);margin-top:4px;padding-top:8px;">🔴 صفرية (30+ يوم منذ الورود)</button>
                 </div>
               </th>
               <th class="amt-col cases-sort-th" id="casesRemSortTh" style="cursor:pointer;position:relative;" title="اضغط للترتيب حسب المتبقي">
@@ -2236,14 +2237,46 @@ function restoreFromFirebase(val){
 // العقد المتغيّرة، بدل استبدال الكتلة الكاملة كنص JSON كما في السابق)
 // deletedKeys: مفاتيح حُذفت محلياً ويجب حذف عقدتها من Firebase أيضاً (تعيين
 // المسار إلى null في Multi-path Update يحذف تلك العقدة تحديداً في Firebase)
+// ===== حل احتياطي لمشكلة شبكات تحظر اتصال Firebase اللحظي (WebSocket)
+// تحديداً بينما تسمح بتصفّح عادي — بعض أجهزة الراوتر/الشبكات تفعل هذا. بدل
+// الفشل التام، نُحاول الاتصال اللحظي أولاً (سريع في الحالة الطبيعية)، ولو
+// تأخَّر أكثر من 4 ثوانٍ (مؤشر قوي على حظر الشبكة له)، نتحوَّل فوراً لطلب
+// REST عبر HTTPS القياسي (نفس البروتوكول المستخدَم لتصفّح أي موقع عادي —
+// نادراً ما يُحظَر حتى في الشبكات المقيَّدة). =====
+async function fbUpdateViaREST(updates){
+  const token = fbAuth && fbAuth.currentUser ? await fbAuth.currentUser.getIdToken() : null;
+  const dbUrl = fbDb.app.options.databaseURL;
+  const url = `${dbUrl}/.json` + (token ? `?auth=${token}` : "");
+  const res = await fetch(url, {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(updates)
+  });
+  if(!res.ok) throw new Error(`REST update failed: ${res.status} ${res.statusText}`);
+  return true;
+}
+
+async function fbUpdateWithFallback(updates){
+  const fb = window.__fbModular;
+  const realtimeAttempt = fb.update(fb.ref(fbDb), updates);
+  const timeout = new Promise((_, reject)=> setTimeout(()=> reject(new Error("realtime_timeout")), 4000));
+  try{
+    await Promise.race([realtimeAttempt, timeout]);
+    return true;
+  }catch(e){
+    // الاتصال اللحظي فشل أو تأخَّر — نتحوَّل فوراً للحل الاحتياطي عبر REST
+    console.error("تعذَّر الاتصال اللحظي بـFirebase، جارٍ المحاولة عبر REST:", e);
+    return await fbUpdateViaREST(updates);
+  }
+}
+
 async function fbSaveAllCases(cache, deletedKeys){
   if(!fbDb) return false;
-  const fb = window.__fbModular;
   try{
     const updates = {};
     Object.keys(cache).forEach(k=>{ updates['master_cases/' + encodeFbKey(k)] = sanitizeForFirebase(cache[k]); });
     (deletedKeys||[]).forEach(k=>{ updates['master_cases/' + encodeFbKey(k)] = null; });
-    await fb.update(fb.ref(fbDb), updates);
+    await fbUpdateWithFallback(updates);
     return true;
   }catch(e){
     console.error("فشل الحفظ في Firebase — السبب الحقيقي:", e);
@@ -2259,7 +2292,6 @@ async function fbSaveAllCases(cache, deletedKeys){
 // يتعايشان معاً بلا أي تعارض إطلاقاً — كل جهاز يكتب فقط ما لمسه بدقة. =====
 async function fbSaveFieldsOnly(fieldChangesByKey, deletedKeys){
   if(!fbDb) return false;
-  const fb = window.__fbModular;
   try{
     const updates = {};
     const deletedSet = new Set(deletedKeys || []);
@@ -2277,7 +2309,7 @@ async function fbSaveFieldsOnly(fieldChangesByKey, deletedKeys){
     });
     deletedSet.forEach(k=>{ updates['master_cases/' + encodeFbKey(k)] = null; });
     if(Object.keys(updates).length === 0) return true; // لا تغييرات فعلية — نجاح بلا أي كتابة
-    await fb.update(fb.ref(fbDb), updates);
+    await fbUpdateWithFallback(updates);
     return true;
   }catch(e){
     console.error("فشل الحفظ الجزئي في Firebase — السبب الحقيقي:", e);
@@ -5085,7 +5117,7 @@ function updateConnectionBadge(){
     updateConnectionBadge._hideTimer = setTimeout(()=>{ badge.style.display = "none"; }, 2000);
   } else {
     clearTimeout(updateConnectionBadge._hideTimer);
-    badge.textContent = "🔴 غير متصل — التعديلات لن تُحفَظ حتى تعود الشبكة";
+    badge.textContent = "🟡 اتصال بطيء — جارٍ الحفظ عبر مسار احتياطي أبطأ قليلاً";
     badge.className = "connection-badge connection-offline";
   }
 }
@@ -8205,6 +8237,7 @@ function getClosureNeededRows(){
 let casesRemSortDir = null; // null = بدون ترتيب خاص، "asc" أو "desc"
 let casesAvailSortDir = null;
 let casesCollectedSortDir = null;
+let casesZeroCollected30Active = false;
 let casesNoSortDir = null;
 
 function getRowRemaining(r){
@@ -8336,6 +8369,7 @@ function openCasesPage(){
   casesRemSortDir = null;
   casesAvailSortDir = null;
   casesCollectedSortDir = null;
+  casesZeroCollected30Active = false;
   casesNoSortDir = null;
   updateCasesSortUI();
   document.getElementById("casesSearch").value = "";
@@ -8419,9 +8453,13 @@ function updateCasesSortUI(){
 
   const collectedArrow = document.getElementById("casesCollectedSortArrow");
   if(collectedArrow) collectedArrow.textContent = casesCollectedSortDir === "asc" ? "▲" : casesCollectedSortDir === "desc" ? "▼" : "";
-  document.querySelectorAll("#casesCollectedSortMenu button").forEach(btn=>{
+  document.querySelectorAll("#casesCollectedSortMenu button[data-dir]").forEach(btn=>{
     btn.classList.toggle("active", btn.getAttribute("data-dir") === casesCollectedSortDir);
   });
+  const collectedTh = document.getElementById("casesCollectedSortTh");
+  if(collectedTh) collectedTh.style.background = casesZeroCollected30Active ? "#fee2e2" : "";
+  const zero30Btn = document.getElementById("casesZeroCollected30Btn");
+  if(zero30Btn) zero30Btn.classList.toggle("active", casesZeroCollected30Active);
 
   const noArrow = document.getElementById("casesNoSortArrow");
   if(noArrow) noArrow.textContent = casesNoSortDir === "asc" ? "▲" : casesNoSortDir === "desc" ? "▼" : "";
@@ -8628,6 +8666,16 @@ function applyCasesFilter(keepPage){
     }
     if(clientFilter && !getPlaintiffForRow(r).includes(clientFilter)) return false;
     if(courtCityFilter && !normalizeArabicForSearch(r["المحكمة"]||"").includes(normalizeArabicForSearch(courtCityFilter))) return false;
+    if(casesZeroCollected30Active){
+      const collected = getRowCollected(r);
+      const isZero = !collected || collected <= 0;
+      if(!isZero) return false;
+      const arrivalRaw = r["تاريخ ورود الدعوى"] || (masterCache[caseKey(r)]||{})["تاريخ الورود"] || "";
+      const arrivalDate = parseDate(arrivalRaw);
+      if(!arrivalDate) return false; // بلا تاريخ ورود معروف — لا يمكن التأكّد من مرور 30 يوماً
+      const daysSince = (getAccurateNow().getTime() - arrivalDate.getTime()) / 86400000;
+      if(daysSince < 30) return false;
+    }
     if(q.length >= 2){
       // بحث ذكي مُدمَج: كل كلمة مفصولة بمسافة في مربّع البحث تُفحَص بذكاء —
       // سنة (4 أرقام)، تصنيف (شخصي/محامي)، اسم محكمة معروف (من قائمة ديناميكية
@@ -9875,6 +9923,14 @@ wireCasesSortColumn("casesAvailSortTh", "casesAvailSortMenu",
 wireCasesSortColumn("casesCollectedSortTh", "casesCollectedSortMenu",
   ()=>casesCollectedSortDir, (v)=>{ casesCollectedSortDir = v; },
   ()=>{ casesRemSortDir = null; casesAvailSortDir = null; casesNoSortDir = null; });
+document.getElementById("casesZeroCollected30Btn").addEventListener("click", (e)=>{
+  e.stopPropagation();
+  casesZeroCollected30Active = !casesZeroCollected30Active;
+  const btn = e.currentTarget;
+  btn.classList.toggle("active", casesZeroCollected30Active);
+  closeAllCasesSortMenus();
+  applyCasesFilter();
+});
 wireCasesSortColumn("casesNoSortTh", "casesNoSortMenu",
   ()=>casesNoSortDir, (v)=>{ casesNoSortDir = v; },
   ()=>{ casesRemSortDir = null; casesAvailSortDir = null; casesCollectedSortDir = null; });
