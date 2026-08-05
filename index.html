@@ -319,6 +319,7 @@
   .cases-badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700;}
   .cases-badge-onelines{font-size:9.5px;white-space:nowrap;padding:2px 6px;}
   .cases-cell-longtext{font-size:11px;}
+  .cases-cell-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;}
   .cases-badge-exec{background:#e8f4fd;color:#2f5c8a;}
   .cases-badge-closed{background:#fee2e2;color:#991b1b;}
   .cases-badge-other{background:var(--slate-soft);color:var(--slate);}
@@ -722,8 +723,6 @@
   }
   .client-strip-j{background:#2563eb;box-shadow:0 1px 3px rgba(37,99,235,.4);} /* أزرق — جابر */
   .client-strip-h{background:#ec4899;box-shadow:0 1px 3px rgba(236,72,153,.4);} /* زهري — حنين */
-  .cases-row.client-row-j{border-right:4px solid #2563eb;}
-  .cases-row.client-row-h{border-right:4px solid #ec4899;}
   .lw-action-badge{
     display:inline-block;background:var(--slate-soft);color:var(--slate);border-radius:6px;
     padding:2px 8px;font-size:11.5px;font-weight:700;
@@ -1910,6 +1909,8 @@ if('serviceWorker' in navigator){
                   <button data-dir="asc">⬆️ الأقل أولاً</button>
                   <button data-dir="desc">⬇️ الأعلى أولاً</button>
                   <button id="casesZeroCollected30Btn" data-filter="zero30" style="border-top:1px solid var(--line);margin-top:4px;padding-top:8px;">🔴 صفرية (30+ يوم منذ الورود)</button>
+                  <button id="casesUnder30DinarBtn" data-filter="under30">💰 أقل من 30 د (آخر شهر رديات)</button>
+                  <button id="casesUnder30LastMonthBtn" data-filter="under30lastmonth">🔵 أقل من 30 دينار (رديّة آخر شهر)</button>
                 </div>
               </th>
               <th class="amt-col cases-sort-th" id="casesRemSortTh" style="cursor:pointer;position:relative;" title="اضغط للترتيب حسب المتبقي">
@@ -3097,15 +3098,6 @@ function getClientBadgeHtml(r){
   if(!client) return "";
   if(client.includes("جابر")) return `<span class="client-strip client-strip-j" title="الموكل: جابر"></span>`;
   if(client.includes("حنين")) return `<span class="client-strip client-strip-h" title="الموكل: حنين"></span>`;
-  return "";
-}
-// خاص بصفحة القضايا تحديداً — تُرجع اسم كلاس CSS يُضاف على الصف بأكمله (خط
-// حافة ملوَّن على طول الصف)، بدل شارة صغيرة بجانب الاسم فقط.
-function getClientRowClass(r){
-  const client = getPlaintiffForRow(r);
-  if(!client) return "";
-  if(client.includes("جابر")) return "client-row-j";
-  if(client.includes("حنين")) return "client-row-h";
   return "";
 }
 // نسخة نصية بسيطة (بلا HTML) لصفحات الطباعة، التي لا تصلها تنسيقات CSS الرئيسية
@@ -8259,6 +8251,8 @@ let casesRemSortDir = null; // null = بدون ترتيب خاص، "asc" أو "d
 let casesAvailSortDir = null;
 let casesCollectedSortDir = null;
 let casesZeroCollected30Active = false;
+let casesUnder30DinarActive = false;
+let casesUnder30LastMonthActive = false;
 let casesNoSortDir = null;
 
 function getRowRemaining(r){
@@ -8354,7 +8348,7 @@ function renderClosureNeededBox(){
     return `
       <div class="closure-card" data-key="${escapeAttr(key)}">
         <div>
-          <div class="closure-card-info">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))} · ${escapeAttr(def)}${getClientBadgeHtml(r)} ${removeBtnHtml}${restoreBtnHtml}</div>
+          <div class="closure-card-info" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))} · ${escapeAttr(def)} ${removeBtnHtml}${restoreBtnHtml}</div>
           <div class="closure-card-sub">${escapeAttr(displayCourtName(r["المحكمة"]))} — ${subText}</div>
         </div>
       </div>
@@ -8386,6 +8380,7 @@ function openCasesPage(){
   casesAvailSortDir = null;
   casesCollectedSortDir = null;
   casesZeroCollected30Active = false;
+  casesUnder30DinarActive = false;
   casesNoSortDir = null;
   updateCasesSortUI();
   document.getElementById("casesSearch").value = "";
@@ -8457,9 +8452,11 @@ function updateCasesSortUI(){
     btn.classList.toggle("active", btn.getAttribute("data-dir") === casesCollectedSortDir);
   });
   const collectedTh = document.getElementById("casesCollectedSortTh");
-  if(collectedTh) collectedTh.style.background = casesZeroCollected30Active ? "#fee2e2" : "";
+  if(collectedTh) collectedTh.style.background = (casesZeroCollected30Active || casesUnder30DinarActive) ? "#fee2e2" : "";
   const zero30Btn = document.getElementById("casesZeroCollected30Btn");
   if(zero30Btn) zero30Btn.classList.toggle("active", casesZeroCollected30Active);
+  const under30Btn = document.getElementById("casesUnder30DinarBtn");
+  if(under30Btn) under30Btn.classList.toggle("active", casesUnder30DinarActive);
 
   const noArrow = document.getElementById("casesNoSortArrow");
   if(noArrow) noArrow.textContent = casesNoSortDir === "asc" ? "▲" : casesNoSortDir === "desc" ? "▼" : "";
@@ -8675,6 +8672,15 @@ function applyCasesFilter(keepPage){
       if(!arrivalDate) return false; // بلا تاريخ ورود معروف — لا يمكن التأكّد من مرور 30 يوماً
       const daysSince = (getAccurateNow().getTime() - arrivalDate.getTime()) / 86400000;
       if(daysSince < 30) return false;
+    }
+    if(casesUnder30DinarActive){
+      // آخر شهر تحليل رديات دائماً — ديناميكياً (7 الآن، 8 لاحقاً تلقائياً،
+      // بلا أي تعديل يدوي مطلوب مستقبلاً)، وليس رقماً ثابتاً في الكود.
+      const monthsSorted = getAnalysisMonths().slice().sort((a,b)=> parseInt(a.label,10) - parseInt(b.label,10));
+      const lastMonth = monthsSorted[monthsSorted.length - 1];
+      if(!lastMonth) return false; // لا يوجد أي شهر تحليل بعد — لا معنى للفلتر
+      const val = getMonthRawValue(r, lastMonth.id);
+      if(!(val < 30)) return false;
     }
     if(q.length >= 2){
       // بحث ذكي مُدمَج: كل كلمة مفصولة بمسافة في مربّع البحث تُفحَص بذكاء —
@@ -8939,9 +8945,9 @@ function renderCasesPage(){
     const defNameSmallClass = def.length > 20 ? " cases-cell-longtext" : "";
     const courtNameSmallClass = courtDisplayName.length > 8 ? " cases-cell-longtext" : "";
     const statusSmallClass = status === "قيد التنفيذ" ? " cases-badge-onelines" : "";
-    return `<tr class="cases-row${selected?' cases-row-selected':''}${rowBgClass}${dblClickClass} ${getClientRowClass(r)}" data-key="${escapeAttr(key)}">
+    return `<tr class="cases-row${selected?' cases-row-selected':''}${rowBgClass}${dblClickClass}" data-key="${escapeAttr(key)}">
       <td class="cases-cell-no" data-col="رقم القضية">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${finishedBadge}${caseTypeBadge}${deadlineBadge}</td>
-      <td data-col="الطرف" class="${defNameSmallClass}">${escapeAttr(def)}</td>
+      <td data-col="الطرف" class="cases-cell-name ${defNameSmallClass}" title="${escapeAttr(def)}">${escapeAttr(def)}</td>
       <td data-col="المحكمة" class="${courtNameSmallClass}">${escapeAttr(courtDisplayName)}</td>
       <td data-col="الحالة"><span class="cases-badge ${statusClass}${statusSmallClass}">${escapeAttr(status)}</span></td>
       <td class="amt-col amt-req" data-col="📋 المطلوب">${fmt(req)}</td>
@@ -9931,6 +9937,17 @@ document.getElementById("casesZeroCollected30Btn").addEventListener("click", (e)
   const btn = e.currentTarget;
   btn.classList.toggle("active", casesZeroCollected30Active);
   closeAllCasesSortMenus();
+  applyCasesFilter();
+});
+document.getElementById("casesUnder30DinarBtn").addEventListener("click", async (e)=>{
+  e.stopPropagation();
+  closeAllCasesSortMenus();
+  // تحميل صريح لقائمة أشهر التحليل أولاً — بلا هذا، قد تكون فارغة محلياً إن
+  // لم تُزَر صفحة التحليل بعد في هذه الجلسة، فيُخطئ الفلتر النتيجة صامتاً.
+  await loadAnalysisMonthsFromFirebase();
+  casesUnder30DinarActive = !casesUnder30DinarActive;
+  const btn = e.currentTarget;
+  btn.classList.toggle("active", casesUnder30DinarActive);
   applyCasesFilter();
 });
 wireCasesSortColumn("casesNoSortTh", "casesNoSortMenu",
