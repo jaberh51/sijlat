@@ -9958,17 +9958,30 @@ document.getElementById("casesZeroCollected30Btn").addEventListener("click", (e)
 document.getElementById("casesUnder30DinarBtn").addEventListener("click", async (e)=>{
   e.stopPropagation();
   closeAllCasesSortMenus();
+  // التقاط الزر نفسه الآن — قبل أي await — لأن e.currentTarget يُصبح null
+  // تلقائياً بمجرد انتهاء المرحلة المتزامنة من معالجة الحدث (خاصية موثَّقة
+  // في أحداث DOM الأصلية، وليست خطأً في هذا الكود تحديداً).
+  const btn = e.currentTarget;
   try{
-    // تحميل صريح لقائمة أشهر التحليل أولاً — بلا هذا، قد تكون فارغة محلياً إن
-    // لم تُزَر صفحة التحليل بعد في هذه الجلسة، فيُخطئ الفلتر النتيجة صامتاً.
     await loadAnalysisMonthsFromFirebase();
+  }catch(err){
+    showToast("⚠️ فشل في: تحميل الأشهر — " + (err.message || err), "warn");
+    console.error("فشل تحميل الأشهر:", err);
+    return;
+  }
+  try{
     casesUnder30DinarActive = !casesUnder30DinarActive;
-    const btn = e.currentTarget;
     btn.classList.toggle("active", casesUnder30DinarActive);
+  }catch(err){
+    showToast("⚠️ فشل في: تبديل حالة الزر — " + (err.message || err), "warn");
+    console.error("فشل تبديل الزر:", err);
+    return;
+  }
+  try{
     applyCasesFilter();
   }catch(err){
-    console.error("فشل تفعيل فلتر أقل من 30 دينار:", err);
-    showToast("⚠️ تعذّر تفعيل هذا الفلتر — السبب: " + (err.message || err), "warn");
+    showToast("⚠️ فشل في: تطبيق الفلتر — " + (err.message || err) + " | " + (err.stack||"").slice(0,150), "warn");
+    console.error("فشل تطبيق الفلتر:", err);
   }
 });
 wireCasesSortColumn("casesNoSortTh", "casesNoSortMenu",
