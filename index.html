@@ -8730,6 +8730,8 @@ function applyCasesFilter(keepPage){
       const collected = getRowCollected(r);
       const isZero = !collected || collected <= 0;
       if(!isZero) return false;
+      const avail = getRowAvail(r);
+      if(avail && avail > 0) return false; // فيها متاح فعلياً — لا تُعتبر "صفرية" رغم أن المحصّل صفر
       const arrivalRaw = r["تاريخ ورود الدعوى"] || (masterCache[caseKey(r)]||{})["تاريخ الورود"] || "";
       const arrivalDate = parseDate(arrivalRaw);
       if(!arrivalDate) return false; // بلا تاريخ ورود معروف — لا يمكن التأكّد من مرور 30 يوماً
@@ -8740,6 +8742,8 @@ function applyCasesFilter(keepPage){
       const collected = getRowCollected(r);
       const isZero = !collected || collected <= 0;
       if(!isZero) return false;
+      const avail = getRowAvail(r);
+      if(avail && avail > 0) return false; // فيها متاح فعلياً — لا تُعتبر "صفرية" رغم أن المحصّل صفر
       const arrivalRaw = r["تاريخ ورود الدعوى"] || (masterCache[caseKey(r)]||{})["تاريخ الورود"] || "";
       const arrivalDate = parseDate(arrivalRaw);
       if(!arrivalDate) return false; // بلا تاريخ ورود معروف — لا يمكن التأكّد من مرور 45 يوماً
