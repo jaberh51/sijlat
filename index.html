@@ -8650,6 +8650,21 @@ function applyCasesFilter(keepPage){
   }
   const courtCityFilter = courtSelect.value;
   detectAvailIncreases(casesAllRows);
+  // حساب آخر شهر تحليل مرة واحدة فقط (وليس لكل قضية داخل الفلترة) — محميّاً
+  // بالكامل بحيث أي خطأ غير متوقَّع هنا يُعطِّل هذا الفلتر تحديداً بأمان
+  // (صامتاً) بدل إيقاف الصفحة بأكملها.
+  let lastAnalysisMonth = null;
+  if(casesUnder30DinarActive){
+    try{
+      const monthsRaw = getAnalysisMonths();
+      const monthsArr = Array.isArray(monthsRaw) ? monthsRaw : Object.values(monthsRaw || {});
+      const monthsSorted = monthsArr.filter(m => m && m.label != null).sort((a,b)=> parseInt(a.label,10) - parseInt(b.label,10));
+      lastAnalysisMonth = monthsSorted.length ? monthsSorted[monthsSorted.length - 1] : null;
+    }catch(e){
+      console.error("فشل تحديد آخر شهر تحليل للفلتر:", e);
+      lastAnalysisMonth = null;
+    }
+  }
   casesFilteredRows = casesAllRows.filter(r=>{
     if(status){
       const s = (r["حالة الدعوى"]||"").trim();
@@ -8674,12 +8689,9 @@ function applyCasesFilter(keepPage){
       if(daysSince < 30) return false;
     }
     if(casesUnder30DinarActive){
-      // آخر شهر تحليل رديات دائماً — ديناميكياً (7 الآن، 8 لاحقاً تلقائياً،
-      // بلا أي تعديل يدوي مطلوب مستقبلاً)، وليس رقماً ثابتاً في الكود.
-      const monthsSorted = getAnalysisMonths().slice().sort((a,b)=> parseInt(a.label,10) - parseInt(b.label,10));
-      const lastMonth = monthsSorted[monthsSorted.length - 1];
-      if(!lastMonth) return false; // لا يوجد أي شهر تحليل بعد — لا معنى للفلتر
-      const val = getMonthRawValue(r, lastMonth.id);
+      if(!lastAnalysisMonth) return false; // لا يوجد أي شهر تحليل بعد — لا معنى للفلتر
+      let val = 0;
+      try{ val = getMonthRawValue(r, lastAnalysisMonth.id); }catch(e){ return false; }
       if(!(val < 30)) return false;
     }
     if(q.length >= 2){
@@ -9946,13 +9958,18 @@ document.getElementById("casesZeroCollected30Btn").addEventListener("click", (e)
 document.getElementById("casesUnder30DinarBtn").addEventListener("click", async (e)=>{
   e.stopPropagation();
   closeAllCasesSortMenus();
-  // تحميل صريح لقائمة أشهر التحليل أولاً — بلا هذا، قد تكون فارغة محلياً إن
-  // لم تُزَر صفحة التحليل بعد في هذه الجلسة، فيُخطئ الفلتر النتيجة صامتاً.
-  await loadAnalysisMonthsFromFirebase();
-  casesUnder30DinarActive = !casesUnder30DinarActive;
-  const btn = e.currentTarget;
-  btn.classList.toggle("active", casesUnder30DinarActive);
-  applyCasesFilter();
+  try{
+    // تحميل صريح لقائمة أشهر التحليل أولاً — بلا هذا، قد تكون فارغة محلياً إن
+    // لم تُزَر صفحة التحليل بعد في هذه الجلسة، فيُخطئ الفلتر النتيجة صامتاً.
+    await loadAnalysisMonthsFromFirebase();
+    casesUnder30DinarActive = !casesUnder30DinarActive;
+    const btn = e.currentTarget;
+    btn.classList.toggle("active", casesUnder30DinarActive);
+    applyCasesFilter();
+  }catch(err){
+    console.error("فشل تفعيل فلتر أقل من 30 دينار:", err);
+    showToast("⚠️ تعذّر تفعيل هذا الفلتر — السبب: " + (err.message || err), "warn");
+  }
 });
 wireCasesSortColumn("casesNoSortTh", "casesNoSortMenu",
   ()=>casesNoSortDir, (v)=>{ casesNoSortDir = v; },
