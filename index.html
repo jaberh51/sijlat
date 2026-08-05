@@ -3594,9 +3594,11 @@ async function refreshMasterCache(){
 }
 
 function getDefendantForRow(r){
+  const key = caseKey(r);
+  const recOverride = masterCache[key];
+  if(recOverride && recOverride["اسم_طرف_يدوي"]) return recOverride["اسم_طرف_يدوي"];
   const desc = r["وصف الدعوى"];
   if(desc && String(desc).trim()) return getDefendant(desc);
-  const key = caseKey(r);
   const orig = ORIGINAL_LOOKUP[key];
   if(orig && orig.defendants.length) return formatPartyList(orig.defendants);
   const rec = masterCache[key];
@@ -8114,6 +8116,33 @@ async function setManualAvailOverride(key, value){
   masterCache = master; invalidateMasterCaseNoIndex();
 }
 
+// تعديل يدوي لاسم الطرف/المحكمة — يُخزَّن في حقل منفصل عن البيانات الخام،
+// فيبقى محفوظاً دائماً بغضّ النظر عمّا يحمله أي استيراد إكسيل مستقبلي (لا
+// يُعاد استيراد هذين الحقلين إطلاقاً فوق هذا التعديل).
+async function setManualDefendantOverride(key, value){
+  const master = masterCache;
+  if(!master[key]) master[key] = {};
+  if(value && value.trim()) master[key]["اسم_طرف_يدوي"] = value.trim();
+  else delete master[key]["اسم_طرف_يدوي"]; // فارغ = رجوع للاسم الأصلي من الملف
+  await saveMaster([key]);
+  masterCache = master; invalidateMasterCaseNoIndex();
+}
+async function setManualCourtOverride(key, value){
+  const master = masterCache;
+  if(!master[key]) master[key] = {};
+  if(value && value.trim()) master[key]["محكمة_يدوية"] = value.trim();
+  else delete master[key]["محكمة_يدوية"]; // فارغ = رجوع للمحكمة الأصلية من الملف
+  await saveMaster([key]);
+  masterCache = master; invalidateMasterCaseNoIndex();
+}
+// تُرجع اسم المحكمة الفعلي المعروض — التعديل اليدوي أولاً إن وُجد، وإلا
+// المحكمة الأصلية من الملف. نفس مبدأ "متاح_يدوي" الموجود مسبقاً بالضبط.
+function getCourtForRow(r){
+  const rec = masterCache[caseKey(r)];
+  if(rec && rec["محكمة_يدوية"]) return rec["محكمة_يدوية"];
+  return r["المحكمة"] || "";
+}
+
 // ترحيل صريح لقضية من صفحة المحامي إلى صفحة المتابعات — لا تظهر تلك القضية
 // في صفحة المتابعات إطلاقاً حتى يُضغط هذا الزر تحديداً (وليس تلقائياً).
 async function setCaseTransferredToFollowups(key, value){
@@ -8702,7 +8731,7 @@ function applyCasesFilter(keepPage){
       if(caseType !== typeFilter) return false;
     }
     if(clientFilter && !getPlaintiffForRow(r).includes(clientFilter)) return false;
-    if(courtCityFilter && !normalizeArabicForSearch(r["المحكمة"]||"").includes(normalizeArabicForSearch(courtCityFilter))) return false;
+    if(courtCityFilter && !normalizeArabicForSearch(getCourtForRow(r)||"").includes(normalizeArabicForSearch(courtCityFilter))) return false;
     if(yearFilter && String(getCaseYearNum(r).year) !== yearFilter) return false;
     if(casesZeroCollected30Active){
       const collected = getRowCollected(r);
@@ -8731,7 +8760,7 @@ function applyCasesFilter(keepPage){
       const tokens = q.split(/\s+/).filter(t=>t.length).map(normalizeArabicForSearch);
       const KNOWN_COURT_NAMES = getKnownCourtNames().map(normalizeArabicForSearch);
       const allNamesText = normalizeArabicForSearch([...getDefendantNames(r), getPlaintiffForRow(r)].join(" "));
-      const courtNameText = normalizeArabicForSearch(r["المحكمة"]||"");
+      const courtNameText = normalizeArabicForSearch(getCourtForRow(r)||"");
       const caseNoText = r["رقم الدعوى"]||"";
       const recForSearch = masterCache[caseKey(r)];
       const caseTypeForSearch = (recForSearch && recForSearch["نوع_القضية"]) || "";
@@ -8981,7 +9010,7 @@ function renderCasesPage(){
       const dText = daysLeft < 0 ? `فات ${Math.abs(daysLeft)}ي` : daysLeft === 0 ? "اليوم" : `${daysLeft}ي`;
       deadlineBadge = `<span class="cases-deadline-badge" data-key="${escapeAttr(key)}" style="background:${dColor};" title="${escapeAttr(deadlineRec.label)} — ${escapeAttr(deadlineRec.date)} (اضغط للتعديل/الحذف)">⏰ ${dText}</span>`;
     }
-    const courtDisplayName = displayCourtName(r["المحكمة"]);
+    const courtDisplayName = displayCourtName(getCourtForRow(r));
     const defNameSmallClass = def.length > 20 ? " cases-cell-longtext" : "";
     const courtNameSmallClass = courtDisplayName.length > 8 ? " cases-cell-longtext" : "";
     const statusSmallClass = status === "قيد التنفيذ" ? " cases-badge-onelines" : "";
@@ -9820,6 +9849,7 @@ function showCasesDblClickMenu(e, key){
   const row = getDedupedRAW().find(r => caseKey(r) === key);
   if(!row) return;
   const isClosedCase = (row["حالة الدعوى"]||"").trim() === "فصل";
+  const forceEditActive = getAccurateNow().getTime() < _casesForceEditModeUntil;
 
   const menu = document.createElement("div");
   menu.id = "casesDblClickMenu";
@@ -9828,6 +9858,10 @@ function showCasesDblClickMenu(e, key){
   menu.innerHTML = `
     <div class="cases-dblclick-menu-title">${escapeAttr(shortCaseNo(row["رقم الدعوى"]))}${getClientBadgeHtml(row)}${isClosedCase ? ' — قضية مفصولة' : ''}</div>
     <button data-action="pin-temp">${isPinned ? '📌 مُثبَّتة بالفعل (مدَّد 24 ساعة)' : '📌 تثبيت مؤقت ليوم'}</button>
+    ${forceEditActive ? `
+      <button data-action="edit-defendant">✏️ تعديل اسم الطرف</button>
+      <button data-action="edit-court">✏️ تعديل اسم المحكمة</button>
+    ` : ''}
     ${isClosedCase ? `
       <button data-action="edit-requested">✏️ تعديل المطلوب</button>
       <button data-action="edit-collected">✏️ تعديل المحصّل</button>
@@ -9869,6 +9903,28 @@ function showCasesDblClickMenu(e, key){
         applyCasesFilter(true);
         showToast("✓ تمت إزالة القضية نهائياً", "ok");
       }
+      return;
+    }
+
+    if(action === "edit-defendant"){
+      const current = getDefendantForRow(row);
+      const input = await askInput("أدخل اسم الطرف الصحيح — سيبقى محفوظاً حتى لو استوردت ملف إكسيل جديداً لاحقاً (اتركه فارغاً للرجوع للاسم الأصلي من الملف):", {type:"text", defaultValue: current === "—" ? "" : current});
+      if(input === null) return;
+      await setManualDefendantOverride(key, input);
+      casesAllRows = getCasesRows();
+      applyCasesFilter(true);
+      showToast(input && input.trim() ? "✓ تم تعديل اسم الطرف يدوياً — سيبقى محفوظاً عند أي استيراد لاحق" : "✓ رجع الاسم للأصلي من الملف", "ok");
+      return;
+    }
+
+    if(action === "edit-court"){
+      const current = getCourtForRow(row);
+      const input = await askInput("أدخل اسم المحكمة الصحيح — سيبقى محفوظاً حتى لو استوردت ملف إكسيل جديداً لاحقاً (اتركه فارغاً للرجوع للاسم الأصلي من الملف):", {type:"text", defaultValue: current});
+      if(input === null) return;
+      await setManualCourtOverride(key, input);
+      casesAllRows = getCasesRows();
+      applyCasesFilter(true);
+      showToast(input && input.trim() ? "✓ تم تعديل اسم المحكمة يدوياً — سيبقى محفوظاً عند أي استيراد لاحق" : "✓ رجعت المحكمة للأصلية من الملف", "ok");
       return;
     }
 
