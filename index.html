@@ -1369,14 +1369,7 @@ if('serviceWorker' in navigator){
       <div class="subtitle">اختر القسم الذي تريد الدخول إليه</div>
     </div>
 
-    <div class="fu-page-section" id="closureSection" style="display:none;max-width:520px;margin:0 auto 20px;">
-      <div class="closure-header" id="closureToggle">
-        <span>⚖️ قضايا بحاجة إلى فصل (<span id="closureCount">0</span>)</span>
-        <span class="closure-arrow" id="closureArrow">▾</span>
-      </div>
-      <button class="btn secondary" id="closureRestoreModeBtn" style="font-size:11px;padding:5px 12px;margin:8px 0 0;" title="يُظهر زر استرجاع بجانب كل قضية لمدة 30 ثانية">↩️ تفعيل الاسترجاع (30 ثانية)</button>
-      <div id="closureList" class="closure-list" style="display:none;"></div>
-    </div>
+    <button id="closureSection" class="btn secondary" style="display:none;max-width:320px;margin:0 auto 20px;width:100%;padding:12px;font-size:13.5px;font-weight:700;background:#fef3c7;border-color:#d97706;color:#92400e;">⚖️ قضايا بحاجة إلى فصل (<span id="closureCount">0</span>)</button>
 
     <div class="home-buttons">
       <div class="home-btn home-btn-gold" data-target="remittances">
@@ -1504,6 +1497,19 @@ if('serviceWorker' in navigator){
         <button class="btn" id="generalNoteAddBtn" style="flex:none;">➕ إضافة</button>
       </div>
       <div id="generalNotesList" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+  </div>
+</div>
+
+<div id="closureNeededPage" class="fu-page" style="display:none;">
+  <div class="fu-page-inner">
+    <div class="fu-page-header">
+      <div class="fu-page-title">⚖️ قضايا بحاجة إلى فصل</div>
+      <button class="btn secondary" id="closureNeededPageClose">✕ إغلاق والعودة</button>
+    </div>
+    <div class="fu-page-section">
+      <button class="btn secondary" id="closureRestoreModeBtn" style="font-size:11px;padding:6px 14px;margin-bottom:14px;" title="يُظهر زر استرجاع بجانب كل قضية لمدة 30 ثانية">↩️ تفعيل الاسترجاع (30 ثانية)</button>
+      <div id="closureList" class="closure-list"></div>
     </div>
   </div>
 </div>
@@ -5186,6 +5192,8 @@ function renderSettingsPage(){
 
 document.getElementById("viewSettingsBtn").onclick = goSettings;
 document.getElementById("viewGeneralNotesBtn").onclick = goGeneralNotes;
+document.getElementById("closureSection").onclick = goClosureNeeded;
+document.getElementById("closureNeededPageClose").onclick = goHome;
 document.getElementById("pinnedCasesBadge").onclick = ()=>{
   const panel = document.getElementById("pinnedCasesPanel");
   const isOpen = panel.style.display === "block";
@@ -7654,6 +7662,7 @@ function goHome(){
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
   document.getElementById("settingsPage").style.display = "none";
+  document.getElementById("closureNeededPage").style.display = "none";
   document.getElementById("generalNotesPage").style.display = "none";
   document.body.style.overflow = "";
   currentSection = null;
@@ -7674,6 +7683,7 @@ function goTrash(){
   document.getElementById("backupsPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
   document.getElementById("settingsPage").style.display = "none";
+  document.getElementById("closureNeededPage").style.display = "none";
   document.getElementById("generalNotesPage").style.display = "none";
   document.getElementById("trashPage").style.display = "block";
   document.body.style.overflow = "hidden";
@@ -7692,6 +7702,7 @@ function goAuditLog(){
   document.getElementById("backupsPage").style.display = "none";
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("settingsPage").style.display = "none";
+  document.getElementById("closureNeededPage").style.display = "none";
   document.getElementById("generalNotesPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "block";
   document.body.style.overflow = "hidden";
@@ -7711,11 +7722,31 @@ function goSettings(){
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
   document.getElementById("generalNotesPage").style.display = "none";
+  document.getElementById("closureNeededPage").style.display = "none";
   document.getElementById("settingsPage").style.display = "block";
   document.body.style.overflow = "hidden";
   currentSection = "settings";
   document.body.classList.remove("mode-remittances");
   renderSettingsPage();
+}
+
+function goClosureNeeded(){
+  document.getElementById("homePage").style.display = "none";
+  document.getElementById("mainWrap").style.display = "none";
+  document.getElementById("followupPage").style.display = "none";
+  document.getElementById("lawyerPage").style.display = "none";
+  document.getElementById("casesPage").style.display = "none";
+  document.getElementById("analysisPage").style.display = "none";
+  document.getElementById("backupsPage").style.display = "none";
+  document.getElementById("trashPage").style.display = "none";
+  document.getElementById("auditLogPage").style.display = "none";
+  document.getElementById("generalNotesPage").style.display = "none";
+  document.getElementById("settingsPage").style.display = "none";
+  document.getElementById("closureNeededPage").style.display = "block";
+  document.body.style.overflow = "hidden";
+  currentSection = "closureneeded";
+  document.body.classList.remove("mode-remittances");
+  renderClosureNeededBox();
 }
 
 function goGeneralNotes(){
@@ -7729,6 +7760,7 @@ function goGeneralNotes(){
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
   document.getElementById("settingsPage").style.display = "none";
+  document.getElementById("closureNeededPage").style.display = "none";
   document.getElementById("generalNotesPage").style.display = "block";
   document.body.style.overflow = "hidden";
   currentSection = "generalnotes";
@@ -7761,6 +7793,7 @@ function goRemittances(){
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
   document.getElementById("settingsPage").style.display = "none";
+  document.getElementById("closureNeededPage").style.display = "none";
   document.getElementById("generalNotesPage").style.display = "none";
   document.body.style.overflow = "";
   currentSection = "remittances";
@@ -7783,6 +7816,7 @@ function goFollowups(){
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
   document.getElementById("settingsPage").style.display = "none";
+  document.getElementById("closureNeededPage").style.display = "none";
   document.getElementById("generalNotesPage").style.display = "none";
   document.body.style.overflow = "hidden";
   currentSection = "followups";
@@ -7799,6 +7833,7 @@ function goLawyer(){
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
   document.getElementById("settingsPage").style.display = "none";
+  document.getElementById("closureNeededPage").style.display = "none";
   document.getElementById("generalNotesPage").style.display = "none";
   document.body.style.overflow = "hidden";
   currentSection = "lawyer";
@@ -8185,20 +8220,6 @@ async function activateClosureRestoreMode(){
   }, 2000);
 }
 
-// علامة توثيقية: تم محاسبة المحامي على أتعابه لهذه القضية (لا تُخفي القضية، فقط تُسجَّل)
-async function toggleLawyerFeeSettled(key, value){
-  const master = masterCache;
-  if(!master[key]) master[key] = {};
-  master[key]["اتعاب_محامي_محاسبة"] = !!value;
-  await saveMaster([key]);
-  masterCache = master; invalidateMasterCaseNoIndex();
-}
-
-function isLawyerFeeSettled(key){
-  const rec = masterCache[key];
-  return !!(rec && rec["اتعاب_محامي_محاسبة"]);
-}
-
 function getCasesRows(){
   const unique = getDedupedRAW();
   return unique.filter(r=>{
@@ -8313,7 +8334,6 @@ function renderClosureNeededBox(){
   listEl.innerHTML = rows.map(r=>{
     const key = caseKey(r);
     const def = getDefendantForRow(r);
-    const settled = isLawyerFeeSettled(key);
     const status = (r["حالة الدعوى"]||"").trim();
     // إذا تحدّثت حالة القضية فعلياً إلى "فصل" (عبر استيراد جديد)، يظهر ✕
     // لإزالتها نهائياً من النظام. طالما لا تزال "قيد التنفيذ" أو غيرها، لا يظهر الزر.
@@ -8337,10 +8357,6 @@ function renderClosureNeededBox(){
           <div class="closure-card-info">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))} · ${escapeAttr(def)}${getClientBadgeHtml(r)} ${removeBtnHtml}${restoreBtnHtml}</div>
           <div class="closure-card-sub">${escapeAttr(displayCourtName(r["المحكمة"]))} — ${subText}</div>
         </div>
-        <label class="closure-checkbox-label">
-          <input type="checkbox" class="closure-fee-checkbox" data-key="${escapeAttr(key)}" ${settled ? "checked" : ""}>
-          ✅ تم محاسبة المحامي على أتعابه
-        </label>
       </div>
     `;
   }).join("");
@@ -8391,22 +8407,6 @@ function openCasesPage(){
   }, 15000);
 }
 let _casesIncreaseRefreshTimer = null;
-
-// فتح/طي قسم "قضايا بحاجة إلى فصل" + معالجة Checkbox محاسبة المحامي (Event delegation)
-document.getElementById("closureToggle").onclick = ()=>{
-  const listEl = document.getElementById("closureList");
-  const arrow = document.getElementById("closureArrow");
-  const isOpen = listEl.style.display !== "none";
-  listEl.style.display = isOpen ? "none" : "flex";
-  arrow.classList.toggle("open", !isOpen);
-};
-document.getElementById("closureList").onchange = async (e)=>{
-  const cb = e.target.closest(".closure-fee-checkbox");
-  if(!cb) return;
-  const key = cb.getAttribute("data-key");
-  await toggleLawyerFeeSettled(key, cb.checked);
-  showToast(cb.checked ? "✓ تم تسجيل محاسبة المحامي" : "تم إلغاء تسجيل المحاسبة", "ok");
-};
 
 document.getElementById("closureList").onclick = async (e)=>{
   const restoreBtn = e.target.closest(".closure-restore-btn");
@@ -9245,6 +9245,7 @@ function goCases(){
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
   document.getElementById("settingsPage").style.display = "none";
+  document.getElementById("closureNeededPage").style.display = "none";
   document.getElementById("generalNotesPage").style.display = "none";
   document.getElementById("casesPage").style.display = "block";
   document.body.style.overflow = "hidden";
@@ -9722,6 +9723,7 @@ function goAnalysis(){
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
   document.getElementById("settingsPage").style.display = "none";
+  document.getElementById("closureNeededPage").style.display = "none";
   document.getElementById("generalNotesPage").style.display = "none";
   document.getElementById("analysisPage").style.display = "block";
   document.body.style.overflow = "hidden";
