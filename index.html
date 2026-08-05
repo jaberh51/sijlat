@@ -9308,11 +9308,15 @@ async function loadAnalysisMonthsFromFirebase(){
       months = raw ? JSON.parse(raw) : [];
     }catch(e){ months = []; }
   }
-  analysisMonthsCache = months;
+  // ضمان أن الناتج مصفوفة حقيقية دائماً — Firebase قد يُخزِّن المصفوفة كـ
+  // "كائن" (Object) بدل Array في حالات معيّنة (خاصية معروفة فيها)، ما كان
+  // يُفشِل أي استخدام لاحق لدوال المصفوفات (.slice، .sort، إلخ) بخطأ غير متوقَّع.
+  analysisMonthsCache = Array.isArray(months) ? months : Object.values(months || {});
 }
 
 function getAnalysisMonths(){
-  return analysisMonthsCache || [];
+  const m = analysisMonthsCache || [];
+  return Array.isArray(m) ? m : Object.values(m);
 }
 
 async function saveAnalysisMonths(months){
@@ -9329,7 +9333,7 @@ async function saveAnalysisMonths(months){
       const remoteSnap = await fb.get(fb.ref(fbDb, 'analysis_months'));
       const remoteMonths = remoteSnap.exists() ? remoteSnap.val() : [];
       const mergedById = {};
-      (Array.isArray(remoteMonths) ? remoteMonths : []).forEach(m=>{ if(m && m.id) mergedById[m.id] = m; });
+      (Array.isArray(remoteMonths) ? remoteMonths : Object.values(remoteMonths || {})).forEach(m=>{ if(m && m.id) mergedById[m.id] = m; });
       months.forEach(m=>{ if(m && m.id) mergedById[m.id] = m; }); // المحلي يفوز فقط لنفس المعرِّف تحديداً (تحديث حقيقي)
       const merged = Object.values(mergedById).sort((a,b)=> parseInt(a.label,10) - parseInt(b.label,10));
       analysisMonthsCache = merged;
