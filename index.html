@@ -422,32 +422,35 @@
   .analysis-add-pill:hover:not(:disabled){background:#fdf6e9;}
   .analysis-add-pill:disabled{border-color:var(--line);color:var(--line);cursor:not-allowed;}
 
-  .analysis-cards{display:flex;flex-direction:column;gap:8px;margin-top:12px;}
-  .analysis-card{
-    display:grid;align-items:center;gap:10px;
-    background:var(--paper-raised);border:1px solid var(--line);border-radius:12px;
-    padding:11px 16px;box-shadow:0 1px 3px rgba(0,0,0,.04);
-    transition:transform .12s ease, box-shadow .12s ease;
+  /* جدول تحليل الرديات — استُبدلت البطاقات بجدول تقليدي بطلب المستخدم */
+  .analysis-table-wrap{overflow-x:auto;margin-top:12px;border:1px solid var(--line);border-radius:12px;background:var(--paper-raised);box-shadow:0 1px 3px rgba(0,0,0,.04);}
+  .analysis-table{width:100%;border-collapse:collapse;font-size:13px;}
+  .analysis-table thead th{
+    background:var(--paper-raised);padding:10px 12px;font-weight:700;color:var(--ink);
+    border-bottom:2px solid var(--line);white-space:nowrap;position:sticky;top:0;z-index:1;
   }
-  .analysis-card:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.08);}
-  .analysis-card-main{display:flex;flex-direction:column;gap:3px;min-width:0;}
-  .analysis-card-party{font-weight:700;font-size:14px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-  .analysis-card-meta{display:flex;gap:8px;align-items:center;font-size:11.5px;color:var(--ink-soft);flex-wrap:wrap;}
-  .analysis-card-caseno{background:var(--slate-soft);color:var(--slate);border-radius:6px;padding:1px 8px;font-weight:700;}
-  .analysis-card-months{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;}
-  .analysis-card-month{
-    display:flex;flex-direction:column;align-items:center;gap:1px;
-    border-radius:9px;padding:6px 12px;min-width:62px;
+  .analysis-table th.al-th-party{text-align:right;min-width:160px;}
+  .analysis-table th.al-th-info{text-align:center;}
+  .analysis-table th.al-th-month{text-align:center;min-width:78px;}
+  .analysis-table th.al-th-month.is-last{color:var(--brass);background:#fdf6e9;}
+  .analysis-table tbody td{padding:9px 12px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  .analysis-table tbody tr:last-child td{border-bottom:none;}
+  .analysis-table tbody tr:hover td{background:var(--paper);}
+  .analysis-table td.al-party{
+    text-align:right;font-weight:700;color:var(--ink);
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;
   }
-  .analysis-card-month-val{font-family:'Amiri',serif;font-size:17px;font-weight:700;line-height:1;}
-  .analysis-card-month-name{font-size:9px;color:var(--ink-soft);}
-  .analysis-card-month.zero{background:var(--paper);}
-  .analysis-card-month.zero .analysis-card-month-val{color:var(--ink-soft);}
-  .analysis-card-month.positive{background:linear-gradient(135deg,#ecfdf5,#d1fae5);}
-  .analysis-card-month.positive .analysis-card-month-val{color:#059669;}
+  .analysis-table td.al-info{text-align:center;font-size:11.5px;color:var(--ink-soft);white-space:nowrap;}
+  .analysis-table .al-caseno{background:var(--slate-soft);color:var(--slate);border-radius:6px;padding:1px 8px;font-weight:700;}
+  .analysis-table td.al-month{
+    text-align:center;font-family:'Amiri',serif;font-size:15px;font-weight:700;
+  }
+  .analysis-table td.al-month.zero{color:var(--ink-soft);}
+  .analysis-table td.al-month.positive{color:#059669;background:linear-gradient(135deg,#ecfdf5,#d1fae5);}
   @media(max-width:640px){
-    .analysis-card{grid-template-columns:1fr !important;}
-    .analysis-card-months{justify-content:flex-start;}
+    .analysis-table td.al-party{max-width:120px;}
+    .analysis-table td.al-info{display:none;}
+    .analysis-table th.al-th-info{display:none;}
   }
   .cases-finished-box{
     background:linear-gradient(135deg,#f0fdf4,#dcfce7);
@@ -1983,7 +1986,7 @@ if('serviceWorker' in navigator){
       </div>
       <div class="analysis-hint">💡 اضغط "⚡ تفعيل" أعلى الصفحة (يتطلّب كلمة السر) للسماح بإضافة شهر تحليل جديد لمدة دقيقة واحدة — أنت من يُقرِّر التوقيت المناسب (بعد وصول كل المبالغ من الجهات). يمكنك تحديث الشهر الأخير في أي وقت عبر 🔄 بلا حاجة لتفعيل.</div>
       <div class="analysis-months-bar" id="analysisMonthsBar"></div>
-      <div class="analysis-cards" id="analysisCards"></div>
+      <div class="analysis-table-wrap" id="analysisCards"></div>
       <div id="analysisEmpty" class="fu-search-hint" style="display:none;">لا توجد قضايا مطابقة</div>
       <div class="cases-pager" id="analysisPager"></div>
     </div>
@@ -9703,32 +9706,39 @@ function renderAnalysisPage(){
   const start = analysisCurrentPage * ANALYSIS_PAGE_SIZE;
   const pageRows = analysisFilteredRows.slice(start, start + ANALYSIS_PAGE_SIZE);
 
-  // عرض الشبكة: عمود الأشهر أولاً (يظهر أقصى اليمين في اتجاه RTL)، ثم عمود
-  // المعلومات/الاسم بجانبه مباشرة — بدل الترتيب السابق الذي كان يدفع أعمدة
-  // الأشهر لأقصى اليسار (بعيداً عن الاسم) بسبب ترتيب العناصر في الشبكة.
-  const gridCols = `auto minmax(0,1fr)`;
+  // جدول تقليدي بدل البطاقات (بطلب المستخدم) — عمود الاسم أولاً فيظهر أقصى
+  // اليمين باتجاه RTL، تليه المعلومات (رقم الدعوى/المحكمة)، ثم عمود لكل شهر
+  // بترتيب تصاعدي (الأشهر الأقدم يميناً، الأحدث يساراً — نفس منطق الشريط أعلاه).
+  const lastMonthLabel = months.length ? months[months.length-1].label : null;
+  const monthHeadersHtml = months.map(m=>
+    `<th class="al-th-month${m.label===lastMonthLabel?" is-last":""}">${escapeAttr(m.label)}</th>`
+  ).join("");
 
-  cardsEl.innerHTML = pageRows.map(r=>{
+  const rowsHtml = pageRows.map(r=>{
     const def = getDefendantForRow(r);
-    const monthsHtml = months.map((m,i)=>{
+    const monthCellsHtml = months.map((m,i)=>{
       const val = getMonthColumnValue(r, i, months);
       const cls = val > 0 ? "positive" : "zero";
-      return `<div class="analysis-card-month ${cls}">
-        <span class="analysis-card-month-val">${fmtAmt(val)}</span>
-        <span class="analysis-card-month-name">${escapeAttr(m.label)}</span>
-      </div>`;
+      return `<td class="al-month ${cls}">${fmtAmt(val)}</td>`;
     }).join("");
-    return `<div class="analysis-card" style="grid-template-columns:${gridCols};">
-      <div class="analysis-card-months">${monthsHtml}</div>
-      <div class="analysis-card-main">
-        <div class="analysis-card-party">${escapeAttr(def)}</div>
-        <div class="analysis-card-meta">
-          <span class="analysis-card-caseno">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}</span>
-          <span>${escapeAttr(displayCourtName(r["المحكمة"]))}</span>
-        </div>
-      </div>
-    </div>`;
+    return `<tr>
+      <td class="al-party">${escapeAttr(def)}</td>
+      <td class="al-info">
+        <span class="al-caseno">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}</span>
+        <span>${escapeAttr(displayCourtName(r["المحكمة"]))}</span>
+      </td>
+      ${monthCellsHtml}
+    </tr>`;
   }).join("");
+
+  cardsEl.innerHTML = `<table class="analysis-table">
+    <thead><tr>
+      <th class="al-th-party">الطرف</th>
+      <th class="al-th-info">القضية / المحكمة</th>
+      ${monthHeadersHtml}
+    </tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>`;
 
   if(totalPages > 1){
     pagerEl.innerHTML = `
