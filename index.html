@@ -1865,6 +1865,9 @@ if('serviceWorker' in navigator){
           <select id="casesCourtCityFilter" class="cases-select">
             <option value="">كل المحاكم</option>
           </select>
+          <select id="casesYearFilter" class="cases-select">
+            <option value="">كل السنوات</option>
+          </select>
           <select id="casesPageSizeSelect" class="cases-select" title="عدد القضايا في الصفحة الواحدة">
             <option value="25">25 في الصفحة</option>
             <option value="50">50 في الصفحة</option>
@@ -8649,6 +8652,17 @@ function applyCasesFilter(keepPage){
     courtSelect.value = courts.includes(currentVal) ? currentVal : "";
   }
   const courtCityFilter = courtSelect.value;
+  const yearSelect = document.getElementById("casesYearFilter");
+  // تعبئة قائمة السنوات ديناميكياً من البيانات الفعلية — أي سنة موجودة فعلاً
+  // في أرقام قضاياك (2025، 2026، وأي سنة لاحقة مستقبلاً) تظهر تلقائياً، بلا
+  // أي رقم ثابت في الكود يحتاج تحديثاً يدوياً كل عام.
+  if(yearSelect.options.length <= 1){
+    const currentVal = yearSelect.value;
+    const years = [...new Set(casesAllRows.map(r => getCaseYearNum(r).year).filter(y => y > 0))].sort((a,b)=> b - a);
+    yearSelect.innerHTML = `<option value="">كل السنوات</option>` + years.map(y=>`<option value="${y}">${y}</option>`).join("");
+    yearSelect.value = years.includes(parseInt(currentVal,10)) ? currentVal : "";
+  }
+  const yearFilter = yearSelect.value;
   detectAvailIncreases(casesAllRows);
   // حساب آخر شهر تحليل مرة واحدة فقط (وليس لكل قضية داخل الفلترة) — محميّاً
   // بالكامل بحيث أي خطأ غير متوقَّع هنا يُعطِّل هذا الفلتر تحديداً بأمان
@@ -8678,6 +8692,7 @@ function applyCasesFilter(keepPage){
     }
     if(clientFilter && !getPlaintiffForRow(r).includes(clientFilter)) return false;
     if(courtCityFilter && !normalizeArabicForSearch(r["المحكمة"]||"").includes(normalizeArabicForSearch(courtCityFilter))) return false;
+    if(yearFilter && String(getCaseYearNum(r).year) !== yearFilter) return false;
     if(casesZeroCollected30Active){
       const collected = getRowCollected(r);
       const isZero = !collected || collected <= 0;
@@ -8851,11 +8866,13 @@ function renderCasesPage(){
     const typeVal = document.getElementById("casesTypeFilter").value;
     const clientVal = document.getElementById("casesClientFilter").value;
     const courtVal = document.getElementById("casesCourtCityFilter").value;
+    const yearVal = document.getElementById("casesYearFilter").value;
     if(q) activeFilters.push(`بحث: "${q}"`);
     if(statusVal) activeFilters.push(`الحالة: ${statusVal}`);
     if(typeVal) activeFilters.push(`التصنيف: ${typeVal}`);
     if(clientVal) activeFilters.push(`الموكل: ${clientVal}`);
     if(courtVal) activeFilters.push(`المحكمة: ${courtVal}`);
+    if(yearVal) activeFilters.push(`السنة: ${yearVal}`);
     emptyEl.innerHTML = activeFilters.length
       ? `لا توجد نتائج مطابقة لـ(${activeFilters.join(' + ')}) — جرّب تضييق أو إزالة أحد هذه الشروط`
       : `لا توجد قضايا مطابقة`;
@@ -9995,6 +10012,7 @@ document.getElementById("casesSearch").addEventListener("input", ()=>{
 document.getElementById("casesStatusFilter").addEventListener("change", ()=> applyCasesFilter());
 document.getElementById("casesTypeFilter").addEventListener("change", ()=> applyCasesFilter());
 document.getElementById("casesClientFilter").addEventListener("change", ()=> applyCasesFilter());
+document.getElementById("casesYearFilter").addEventListener("change", ()=> applyCasesFilter());
 document.getElementById("casesCourtCityFilter").addEventListener("change", ()=> applyCasesFilter());
 document.getElementById("casesHideThirdSegment").addEventListener("change", ()=> renderCasesPage());
 document.getElementById("casesMarkPersonalBtn").onclick = ()=> bulkSetCaseType("شخصي");
