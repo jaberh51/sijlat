@@ -8512,12 +8512,22 @@ function updateCasesSortUI(){
 // قد تصبح ناقصة (كما حدث فعلياً)، هذه الدالة تكتشف تلقائياً كل قيمة موجودة
 // حقاً في عمود "المحكمة"، فتبقى محدَّثة دائماً بلا أي تدخّل يدوي مستقبلاً.
 let _dynamicCourtNamesCache = null;
+// أسماء محاكم مُستبعَدة عمداً من قائمة التصنيف الديناميكية — بطلب صريح، لا
+// تظهر في أي فلتر أو قائمة محاكم بعد الآن (القضايا نفسها تبقى موجودة، فقط
+// اسم محكمتها لا يُصنَّف كـ"محكمة معروفة" منفصلة في الفلاتر).
+const EXCLUDED_COURT_NAMES = new Set([
+  "المدعي العام عجلون",
+  "صلح جزاء عمان",
+  "صلح جزاء عجلون",
+  "عمان قسم جنوب عمان"
+]);
+
 function getKnownCourtNames(){
   if(_dynamicCourtNamesCache) return _dynamicCourtNamesCache;
   const set = new Set();
   getDedupedRAW().forEach(r=>{
     const displayed = displayCourtName(r["المحكمة"]); // يُزيل بادئة "تنفيذ" الثابتة
-    if(displayed) set.add(displayed.trim());
+    if(displayed && !EXCLUDED_COURT_NAMES.has(displayed.trim())) set.add(displayed.trim());
   });
   _dynamicCourtNamesCache = [...set].sort((a,b)=>a.localeCompare(b,'ar'));
   return _dynamicCourtNamesCache;
