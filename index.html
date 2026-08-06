@@ -982,6 +982,11 @@
   .lw-pager{display:flex;align-items:center;justify-content:center;gap:14px;padding:12px 4px 4px;}
   .lw-pager .btn{padding:6px 14px;font-size:12.5px;}
   .lw-pager-info{font-size:13px;color:var(--ink-soft);font-weight:700;}
+  /* نفس تنسيق lw-pager أعلاه لكن لأزرار الترقيم في صفحات القضايا/التحليل/الرديات
+     (.cases-pager كانت تُستخدَم بلا أي تنسيق فعلي — إصلاح عام) */
+  .cases-pager{display:flex;align-items:center;justify-content:center;gap:14px;padding:14px 4px 4px;}
+  .cases-pager .btn{padding:7px 16px;font-size:12.5px;}
+  .cases-pager-info{font-size:13px;color:var(--ink-soft);font-weight:700;}
 
   /* Hide status chips and defendant banner in remittances mode */
   body.mode-remittances #chips{display:none;}
@@ -1304,6 +1309,9 @@
   .desc-cell.expanded .fin-block{display:block;}
   .desc-cell .parties-block{display:none;}
   .desc-cell.expanded .parties-block{display:block;}
+  /* صفحة الرديات: خلية وصف بسيطة، غير قابلة للضغط، بلا سطر مقتطَع ولا تفاصيل إضافية */
+  .desc-cell-plain{cursor:default;}
+  .desc-cell-plain .desc-text{-webkit-line-clamp:unset;}
   .muted{color:var(--ink-soft);}
   .empty-state{padding:60px 20px;text-align:center;color:var(--ink-soft);}
   .empty-state .big{font-family:'Amiri',serif;font-size:20px;color:var(--ink);margin-bottom:6px;}
@@ -1790,6 +1798,11 @@ if('serviceWorker' in navigator){
   <div class="result-count" id="masterBadge" style="margin-bottom:16px;"></div>
 
   <div class="result-count" id="resultCount"></div>
+  <select id="mainPageSizeSelect" class="cases-select" title="عدد النتائج في الصفحة الواحدة" style="display:none;margin-bottom:10px;">
+    <option value="25">25 في الصفحة</option>
+    <option value="50">50 في الصفحة</option>
+    <option value="999999">عرض الكل</option>
+  </select>
 
   <div class="year-list" id="yearList" style="display:none;"></div>
 
@@ -1805,6 +1818,7 @@ if('serviceWorker' in navigator){
       <div>جرّب تعديل البحث أو الفلاتر</div>
     </div>
   </div>
+  <div class="cases-pager" id="mainPager"></div>
 
   <footer>سجل الدعاوى — يعرض البيانات المرفوعة من ملف الإكسل الأصلي فقط</footer>
 </div>
@@ -7381,6 +7395,9 @@ function mergeRowsIntoRawData(newRows){
   return {added, updated, skippedDuplicateTxn, addedTxn, newTxnDetails};
 }
 
+let mainCurrentPage = 0;
+let MAIN_PAGE_SIZE = 25; // بطلب المستخدم: صفحة الرديات فقط — الصفحة العادية تعرض الكل دائماً
+
 function render(){
   renderOverviewCached();
   rebuildDefendantIndexIfNeeded();
@@ -7391,15 +7408,47 @@ function render(){
   });
   buildYearChips();
 
+  const isRemittancesMode = document.body.classList.contains("mode-remittances");
   const rows = getFiltered();
   renderYearList(rows);
   const tbody = document.getElementById("tbody");
   tbody.innerHTML = "";
-  document.getElementById("resultCount").textContent = `عرض ${rows.length} من أصل ${RAW_DATA_UNIQUE_COUNT} دعوى`;
   document.getElementById("emptyState").style.display = rows.length ? "none":"block";
 
-  const isRemittancesMode = document.body.classList.contains("mode-remittances");
-  rows.forEach(r=>{
+  // ===== ترقيم الصفحات (صفحة الرديات فقط، بطلب المستخدم) =====
+  const pageSizeSelect = document.getElementById("mainPageSizeSelect");
+  const pagerEl = document.getElementById("mainPager");
+  let pageRows = rows;
+  if(isRemittancesMode){
+    pageSizeSelect.style.display = "inline-block";
+    const totalPages = Math.max(1, Math.ceil(rows.length / MAIN_PAGE_SIZE));
+    if(mainCurrentPage >= totalPages) mainCurrentPage = totalPages - 1;
+    if(mainCurrentPage < 0) mainCurrentPage = 0;
+    const start = mainCurrentPage * MAIN_PAGE_SIZE;
+    pageRows = rows.slice(start, start + MAIN_PAGE_SIZE);
+    document.getElementById("resultCount").textContent =
+      `عرض ${pageRows.length} من ${rows.length} نتيجة مطابقة (أصل ${RAW_DATA_UNIQUE_COUNT} دعوى)`;
+    if(totalPages > 1){
+      pagerEl.style.display = "flex";
+      pagerEl.innerHTML = `
+        <button class="btn secondary" id="mainPrev" ${mainCurrentPage===0?"disabled":""}>‹ السابق</button>
+        <span class="cases-pager-info">صفحة ${mainCurrentPage+1} من ${totalPages}</span>
+        <button class="btn secondary" id="mainNext" ${mainCurrentPage>=totalPages-1?"disabled":""}>التالي ›</button>
+      `;
+      document.getElementById("mainPrev").onclick = ()=>{ mainCurrentPage--; render(); };
+      document.getElementById("mainNext").onclick = ()=>{ mainCurrentPage++; render(); };
+    } else {
+      pagerEl.style.display = "none";
+      pagerEl.innerHTML = "";
+    }
+  } else {
+    pageSizeSelect.style.display = "none";
+    pagerEl.style.display = "none";
+    pagerEl.innerHTML = "";
+    document.getElementById("resultCount").textContent = `عرض ${rows.length} من أصل ${RAW_DATA_UNIQUE_COUNT} دعوى`;
+  }
+
+  pageRows.forEach(r=>{
     const tr = document.createElement("tr");
     const fin = getFinancialForRow(r);
     COLS.forEach(col=>{
@@ -7416,8 +7465,15 @@ function render(){
         td.innerHTML = `${finPreviewHtml(fin)}<span class="case-no">${escapeAttr(shortCaseNo(val))}${getClientBadgeHtml(r)}</span>`;
       } else if(col.key === "وصف الدعوى"){
         td.className = "desc-cell";
-        td.innerHTML = `<div class="desc-text">${val}</div><div class="desc-hint">اضغط للعرض الكامل</div>${partiesDetailHtml(r)}${finDetailHtml(fin)}`;
-        td.onclick = ()=>{ td.classList.toggle("expanded"); td.querySelector(".desc-hint").style.display = td.classList.contains("expanded")?"none":"block"; };
+        if(isRemittancesMode){
+          // في صفحة الرديات: بلا "اضغط للعرض الكامل" إطلاقاً (بطلب المستخدم) —
+          // نص الوصف المختصر فقط، بلا أي تفاصيل إضافية (رقم شيك/مستند) عند الضغط.
+          td.classList.add("desc-cell-plain");
+          td.innerHTML = `<div class="desc-text">${val}</div>`;
+        } else {
+          td.innerHTML = `<div class="desc-text">${val}</div><div class="desc-hint">اضغط للعرض الكامل</div>${partiesDetailHtml(r)}${finDetailHtml(fin)}`;
+          td.onclick = ()=>{ td.classList.toggle("expanded"); td.querySelector(".desc-hint").style.display = td.classList.contains("expanded")?"none":"block"; };
+        }
       } else if(val === "—"){
         td.innerHTML = `<span class="muted">—</span>`;
       } else {
@@ -7429,7 +7485,12 @@ function render(){
   });
 }
 
-document.getElementById("search").addEventListener("input", (e)=>{ state.search = e.target.value; render(); });
+document.getElementById("search").addEventListener("input", (e)=>{ state.search = e.target.value; mainCurrentPage = 0; render(); });
+document.getElementById("mainPageSizeSelect").addEventListener("change", (e)=>{
+  MAIN_PAGE_SIZE = parseInt(e.target.value, 10) || 25;
+  mainCurrentPage = 0;
+  render();
+});
 document.getElementById("resetBtn").onclick = ()=>{
   state = {status:"all", search:"", client:"", year:"", defendant:"", sortKey:null, sortDir:1};
   document.getElementById("search").value = "";
