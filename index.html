@@ -1312,6 +1312,13 @@
   /* صفحة الرديات: خلية وصف بسيطة، غير قابلة للضغط، بلا سطر مقتطَع ولا تفاصيل إضافية */
   .desc-cell-plain{cursor:default;}
   .desc-cell-plain .desc-text{-webkit-line-clamp:unset;}
+  /* قضية منتهية مالياً (المتبقي = صفر) ظهرت عبر بحث نشط — لون باهت + شارة */
+  tr.row-finished{opacity:.5;}
+  tr.row-finished:hover{opacity:.75;}
+  .row-finished-badge{
+    display:inline-block;margin-right:8px;font-size:10.5px;font-weight:700;
+    color:var(--green);background:var(--green-soft);border-radius:6px;padding:2px 8px;
+  }
   .muted{color:var(--ink-soft);}
   .empty-state{padding:60px 20px;text-align:center;color:var(--ink-soft);}
   .empty-state .big{font-family:'Amiri',serif;font-size:20px;color:var(--ink);margin-bottom:6px;}
@@ -4395,6 +4402,15 @@ function getFiltered(){
       getDefendantNames(r).some(n => n.includes(q)) ||
       getPlaintiffForRow(r).includes(q)
     );
+  } else if(document.body.classList.contains("mode-remittances")){
+    // صفحة الرديات فقط، وبلا بحث نشط: القضايا المنتهية مالياً (المتبقي = 0
+    // بالضبط) مخفيّة من القائمة الافتراضية — تظهر فقط عند البحث عنها صراحةً
+    // برقم القضية أو اسم الطرف (أعلاه)، بلون باهت يميّزها كمنتهية.
+    rows = rows.filter(r=>{
+      const fin = getFinancialForRow(r);
+      if(fin.requested === null) return true; // لا يوجد مطلوب مسجَّل أصلاً — لا تُعتبر منتهية
+      return Math.abs(fin.remaining) > 0.01;
+    });
   }
   if(state.sortKey){
     const k = state.sortKey;
@@ -7451,6 +7467,11 @@ function render(){
   pageRows.forEach(r=>{
     const tr = document.createElement("tr");
     const fin = getFinancialForRow(r);
+    // قضية منتهية مالياً (المتبقي = 0 بالضبط) — لا تظهر في القائمة الافتراضية
+    // أصلاً (استُبعِدت أعلاه في getFiltered)، فوجودها هنا يعني أنها ظهرت عبر
+    // بحث نشط تحديداً؛ تُميَّز بصرياً بلون باهت + شارة "✓ منتهية".
+    const isFinished = isRemittancesMode && fin.requested !== null && Math.abs(fin.remaining) < 0.01;
+    if(isFinished) tr.classList.add("row-finished");
     COLS.forEach(col=>{
       const td = document.createElement("td");
       td.dataset.label = col.label;
@@ -7462,7 +7483,8 @@ function render(){
         val = r[col.key] || "—";
       }
       if(col.key === "رقم الدعوى"){
-        td.innerHTML = `${finPreviewHtml(fin)}<span class="case-no">${escapeAttr(shortCaseNo(val))}${getClientBadgeHtml(r)}</span>`;
+        const finishedBadge = isFinished ? `<span class="row-finished-badge">✓ منتهية</span>` : "";
+        td.innerHTML = `${finPreviewHtml(fin)}<span class="case-no">${escapeAttr(shortCaseNo(val))}${getClientBadgeHtml(r)}</span>${finishedBadge}`;
       } else if(col.key === "وصف الدعوى"){
         td.className = "desc-cell";
         if(isRemittancesMode){
