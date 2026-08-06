@@ -1250,6 +1250,7 @@
   }
   .toolbar input[type=text]{flex:1 1 240px;min-width:200px;}
   .toolbar select{min-width:150px;}
+  .toolbar-actions-group{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
   .btn{
     font-family:'Tajawal',sans-serif;
     background:var(--ink);color:#fff;border:none;border-radius:9px;
@@ -1774,16 +1775,16 @@ if('serviceWorker' in navigator){
 
   <div class="toolbar">
     <input type="text" id="search" placeholder="ابحث برقم الدعوى، الوصف...">
+    <div class="toolbar-actions-group">
+      <label class="btn secondary" id="importLabel" for="importFile" style="cursor:pointer;">
+        استيراد ملف إكسل
+        <input type="file" id="importFile" accept=".xlsx,.xls" multiple style="display:none;">
+      </label>
+      <button class="btn" id="updateBtn">تحديث البيانات</button>
+      <button class="btn secondary" id="backupExportBtn">تصدير نسخة</button>
+    </div>
     <select id="clientFilter"><option value="">كل الموكلين</option></select>
     <button class="btn secondary" id="resetBtn">إعادة تعيين</button>
-    <label class="btn secondary" id="importLabel" for="importFile" style="cursor:pointer;">
-      استيراد ملف إكسل
-      <input type="file" id="importFile" accept=".xlsx,.xls" multiple style="display:none;">
-    </label>
-    <div style="display:flex;gap:10px;">
-      <button class="btn" id="updateBtn">تحديث البيانات</button>
-      <button class="btn secondary" id="backupExportBtn">تصدير نسخة احتياطية (إكسل)</button>
-    </div>
   </div>
   <div class="result-count" id="importStatus"></div>
   <div class="result-count" id="masterBadge" style="margin-bottom:16px;"></div>
