@@ -3323,25 +3323,43 @@ function getRowByKey(key){
   }
   return _rowIndex.get(key);
 }
-function invalidateRowIndex(){ _rowIndex = null; _dedupedRAWCache = null; _txnSigIndex = null; }
+function invalidateRowIndex(){ _rowIndex = null; _dedupedRAWCache = null; _txnSigIndex = null; _txnSigByCaseNoIndex = null; }
 
 // فهرس سريع: رقم القضية → مجموعة بصمات معاملاته المالية الموجودة في RAW_DATA.
 // كان فحص "هل هذه المعاملة مكرَّرة؟" يمسح كل RAW_DATA خطياً (O(n)) لكل معاملة
 // جديدة — مع آلاف الصفوف ومئات المعاملات، هذا كان أبطأ مصدر أداء حقيقي.
 // الفهرس يجعل هذا الفحص فورياً (O(1)) بدل المسح الكامل في كل مرة.
+//
+// إصلاح تكرار وهمي: فهرس ثانٍ احتياطي بـ"رقم القضية فقط" (بلا المحكمة) —
+// كانت المطابقة تعتمد حصرياً على "رقم القضية + المحكمة معاً بالضبط"، فأي
+// فرق طفيف باسم المحكمة بين استيراد وآخر لنفس القضية كان يجعل النظام يعتبر
+// رديّاتها القديمة "جديدة" من جديد في كل استيراد لاحق (رغم أنها محفوظة
+// فعلاً). بصمة المعاملة نفسها (رقم المستند + الشيك + التاريخ + المبلغ)
+// محدَّدة جداً، فمطابقتها وحدها كافية للتأكد أنها نفس المعاملة الحقيقية،
+// بغضّ النظر عن أي فرق بسيط بكتابة اسم المحكمة.
 let _txnSigIndex = null;
+let _txnSigByCaseNoIndex = null;
 function getTxnSigIndex(){
   if(_txnSigIndex === null){
     _txnSigIndex = new Map();
+    _txnSigByCaseNoIndex = new Map();
     RAW_DATA.forEach(r=>{
       const hasFin = FINANCIAL_FIELDS.some(f => r[f] !== undefined && String(r[f]).trim() !== "");
       if(!hasFin) return;
       const key = caseKey(r);
+      const sig = txnSig(r);
       if(!_txnSigIndex.has(key)) _txnSigIndex.set(key, new Set());
-      _txnSigIndex.get(key).add(txnSig(r));
+      _txnSigIndex.get(key).add(sig);
+      const no = shortCaseNo(r["رقم الدعوى"]);
+      if(!_txnSigByCaseNoIndex.has(no)) _txnSigByCaseNoIndex.set(no, new Set());
+      _txnSigByCaseNoIndex.get(no).add(sig);
     });
   }
   return _txnSigIndex;
+}
+function getTxnSigByCaseNoIndex(){
+  getTxnSigIndex(); // يبني الفهرسين معاً (نفس الحلقة)
+  return _txnSigByCaseNoIndex;
 }
 
 function getYear(v){
@@ -4077,6 +4095,7 @@ async function bootstrapMasterCache(){
 
 async function saveMasterFromRows(rows){
   const master = await getMaster();
+  invalidateMasterCaseNoIndex(); // نضمن أن الفهرس الاحتياطي أدناه يعكس حالة الماستر الحالية بالضبط
   const touchedKeys = [];
   rows.forEach(r=>{
     const key = caseKey(r);
@@ -4123,7 +4142,16 @@ async function saveMasterFromRows(rows){
       const txn = {};
       FINANCIAL_FIELDS.forEach(f => txn[f] = r[f] !== undefined ? r[f] : "");
       const sig = txnSig(txn);
-      const alreadyExists = transactions.some(t => txnSig(t) === sig);
+      let alreadyExists = transactions.some(t => txnSig(t) === sig);
+      if(!alreadyExists){
+        // فحص احتياطي: نفس المعاملة (بصمة مطابقة تماماً: رقم مستند + شيك +
+        // تاريخ + مبلغ) قد تكون محفوظة فعلاً تحت مفتاح آخر لنفس رقم القضية
+        // بمحكمة مكتوبة بصيغة مختلفة قليلاً — إصلاح خلل كان يجعل النظام
+        // "يكتشف" نفس الردية القديمة كـ"جديدة" في كل استيراد لاحق.
+        const caseNoOnly = shortCaseNo(r["رقم الدعوى"]);
+        const siblingKeys = (getMasterCaseNoIndex().get(caseNoOnly) || []).filter(k => k !== key);
+        alreadyExists = siblingKeys.some(k => (master[k] && master[k]["معاملات مالية"] || []).some(t => txnSig(t) === sig));
+      }
       if(!alreadyExists){
         transactions.push(txn);
         // خصم المبلغ المحصَّل حديثاً تلقائياً من "المتاح" — يبقى متزامناً مع
@@ -4170,6 +4198,7 @@ async function saveMasterFromRows(rows){
     master[key] = record;
   });
   masterCache = master; // نفس المرجع أصلاً بعد التعديل الجديد على getMaster، لكن نُصرِّح صراحةً لمزيد من الوضوح
+  invalidateMasterCaseNoIndex(); // مفاتيح جديدة قد أُضيفت أثناء هذه الدالة — الفهرس الاحتياطي يجب أن يعكسها للعمليات اللاحقة
   try{
     // حفظ القضايا التي وردت فعلاً في هذا الاستيراد فقط — وليس كل القضايا.
     // يحمي من الكتابة فوق قضايا أخرى لم تصل بعد من التحميل التدريجي.
@@ -7349,7 +7378,8 @@ function restoreFinancialFromMaster(){
 function mergeRowsIntoRawData(newRows){
   let added = 0, updated = 0, skippedDuplicateTxn = 0, addedTxn = 0;
   const newTxnDetails = []; // تفاصيل كل معاملة مالية جديدة — لعرضها لاحقاً في نافذة تنبيه
-  const sigIndex = getTxnSigIndex(); // فهرس بصمات المعاملات — يُبنى مرة واحدة فقط لكل هذا الاستدعاء
+  const sigIndex = getTxnSigIndex(); // فهرس بصمات المعاملات (رقم+محكمة) — يُبنى مرة واحدة فقط لكل هذا الاستدعاء
+  const sigByCaseNoIndex = getTxnSigByCaseNoIndex(); // فهرس احتياطي (رقم القضية فقط) — إصلاح خلل "تكرار وهمي"
 
   newRows.forEach(nr=>{
     const key = caseKey(nr);
@@ -7363,7 +7393,10 @@ function mergeRowsIntoRawData(newRows){
       // فحص فوري عبر الفهرس (O(1)) بدل مسح كل RAW_DATA خطياً (O(n)) لكل معاملة.
       const sig = txnSig(nr);
       const existingSigs = sigIndex.get(key);
-      const isDuplicateTxn = existingSigs ? existingSigs.has(sig) : false;
+      const caseNoOnly = shortCaseNo(nr["رقم الدعوى"]);
+      const existingSigsByCaseNo = sigByCaseNoIndex.get(caseNoOnly);
+      const isDuplicateTxn = (existingSigs && existingSigs.has(sig))
+        || (existingSigsByCaseNo && existingSigsByCaseNo.has(sig));
       if(!isDuplicateTxn){
         RAW_DATA.push(nr);
         addedTxn++;
@@ -7373,9 +7406,11 @@ function mergeRowsIntoRawData(newRows){
           amount: parseNum(nr["المبلغ المحول"]),
           date: nr["تاريخ الشيك/الحوالة"] || ""
         });
-        // تحديث الفهرس مباشرة بدل إبطاله بالكامل — أسرع بكثير
+        // تحديث الفهرسين مباشرة بدل إبطالهما بالكامل — أسرع بكثير
         if(!sigIndex.has(key)) sigIndex.set(key, new Set());
         sigIndex.get(key).add(sig);
+        if(!sigByCaseNoIndex.has(caseNoOnly)) sigByCaseNoIndex.set(caseNoOnly, new Set());
+        sigByCaseNoIndex.get(caseNoOnly).add(sig);
       } else {
         skippedDuplicateTxn++;
       }
