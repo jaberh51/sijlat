@@ -988,6 +988,34 @@
   body.mode-remittances #yearChips{display:none;}
   body.mode-remittances #defendantBanner{display:none;}
 
+  /* ===== تخصيصات صفحة الرديات فقط (بطلب المستخدم) ===== */
+  /* 1) صندوق البحث: أكبر وأوضح وملفت للنظر — إطار نحاسي بارز وظل واضح،
+     على سطر مستقل بعرض كامل بدل مشاركة سطر شريط الأدوات مع الأزرار. */
+  body.mode-remittances .toolbar{gap:12px;}
+  body.mode-remittances .toolbar input#search{
+    flex:1 1 100%;order:-1;
+    font-size:19px;padding:16px 20px;
+    border:2.5px solid var(--brass);border-radius:14px;
+    box-shadow:0 4px 16px rgba(169,120,47,.18);
+    background:var(--paper-raised);
+    transition:box-shadow .2s ease, border-color .2s ease;
+  }
+  body.mode-remittances .toolbar input#search::placeholder{color:var(--ink-soft);}
+  body.mode-remittances .toolbar input#search:focus{
+    outline:none;border-color:var(--ink);box-shadow:0 4px 20px rgba(169,120,47,.3);
+  }
+  /* 2) صندوق إجمالي المبالغ/التاريخ/النطاق: أصغر وأكثر إيجازاً */
+  body.mode-remittances .fin-summary{padding:10px 14px;margin-bottom:14px;}
+  body.mode-remittances .fin-summary-total{font-size:15px;padding-bottom:8px;margin-bottom:8px;}
+  body.mode-remittances .fin-summary-total .fin-range{font-size:11px;}
+  body.mode-remittances .fin-req-row{gap:12px;margin-bottom:8px;padding-bottom:8px;font-size:12.5px;}
+  body.mode-remittances .fin-req-item strong{font-size:13.5px;}
+  body.mode-remittances .fin-summary-sub{font-size:11px;margin-bottom:6px;}
+  body.mode-remittances .fin-date-picker select,
+  body.mode-remittances .fin-date-result{padding:6px 10px;font-size:12.5px;}
+  body.mode-remittances .fin-range-picker{margin-top:8px;padding-top:8px;}
+  body.mode-remittances .fin-range-picker label{font-size:11.5px;}
+
   .year-chip{
     background:var(--paper-raised);
     border:1px solid var(--line);
@@ -3318,6 +3346,23 @@ function formatPartyList(list){
   return list.length > 1 ? `${list[0]} وآخرون (${list.length})` : list[0];
 }
 
+// يختصر اسم شخص إلى الكلمة الأولى والأخيرة فقط (الاسم الأول واسم العائلة،
+// بإسقاط اسم الأب/الجد بينهما) — مثال: "جابر علي فطيمات" ← "جابر فطيمات".
+// يُستخدَم حصراً في عرض صفحة الرديات لعرض أسرع وأوضح على الجوال، بلا أي
+// تغيير على الاسم المخزَّن فعلياً أو على أي صفحة أخرى.
+function shortenPartyName(name){
+  const words = String(name||"").trim().split(/\s+/).filter(Boolean);
+  if(words.length <= 2) return words.join(" ");
+  return `${words[0]} ${words[words.length-1]}`;
+}
+function shortenPartiesDesc(desc){
+  if(!desc) return desc;
+  const parts = desc.split(" ضد ");
+  if(parts.length !== 2) return desc; // صيغة غير متوقعة — نتركها كما هي بأمان
+  const shortSide = (side)=> side.split("،").map(s=>shortenPartyName(s.trim())).join("، ");
+  return `${shortSide(parts[0])} ضد ${shortSide(parts[1])}`;
+}
+
 function getDefendant(desc){
   const {defendants} = splitParties(desc);
   return formatPartyList(defendants);
@@ -3475,6 +3520,17 @@ function collectTransactions(r){
 
 function getFinancialForRow(r){
   let transactions = collectTransactions(r);
+  // ترتيب الحركات من الأقدم إلى الأحدث دائماً (بطلب المستخدم) — ينعكس تلقائياً
+  // على كل مكان يعرض تواريخ الحركات في التطبيق (صندوق تفاصيل الرديات لكل
+  // تاريخ، والعرض المصغّر داخل جدول القضايا، وأي طباعة).
+  transactions = transactions.slice().sort((a,b)=>{
+    const da = parseDate(a["تاريخ الشيك/الحوالة"]);
+    const db = parseDate(b["تاريخ الشيك/الحوالة"]);
+    if(!da && !db) return 0;
+    if(!da) return 1;  // بلا تاريخ معروف — تُدفَع للنهاية
+    if(!db) return -1;
+    return da - db;
+  });
   let rawTotal = transactions.reduce((sum,t)=>{
     const amt = parseFloat(String(t["المبلغ المحول"]||"0").replace(/,/g,""));
     return sum + (isNaN(amt) ? 0 : amt);
@@ -7330,13 +7386,20 @@ function render(){
   document.getElementById("resultCount").textContent = `عرض ${rows.length} من أصل ${RAW_DATA_UNIQUE_COUNT} دعوى`;
   document.getElementById("emptyState").style.display = rows.length ? "none":"block";
 
+  const isRemittancesMode = document.body.classList.contains("mode-remittances");
   rows.forEach(r=>{
     const tr = document.createElement("tr");
     const fin = getFinancialForRow(r);
     COLS.forEach(col=>{
       const td = document.createElement("td");
       td.dataset.label = col.label;
-      const val = col.key === "وصف الدعوى" ? (getDescForRow(r) || "—") : (r[col.key] || "—");
+      let val;
+      if(col.key === "وصف الدعوى"){
+        const rawDesc = getDescForRow(r);
+        val = rawDesc ? (isRemittancesMode ? shortenPartiesDesc(rawDesc) : rawDesc) : "—";
+      } else {
+        val = r[col.key] || "—";
+      }
       if(col.key === "رقم الدعوى"){
         td.innerHTML = `${finPreviewHtml(fin)}<span class="case-no">${escapeAttr(shortCaseNo(val))}${getClientBadgeHtml(r)}</span>`;
       } else if(col.key === "وصف الدعوى"){
