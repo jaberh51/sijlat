@@ -1125,14 +1125,27 @@
     border:1px solid var(--line);border-radius:9px;padding:7px 10px;font-size:13.5px;color:var(--ink);
   }
   .fin-date-details{margin-top:14px;border-top:1px solid var(--line);padding-top:10px;}
-  .fin-detail-row{padding:9px 4px;border-bottom:1px dashed var(--line);}
-  .fin-detail-row:last-child{border-bottom:none;}
-  .fin-detail-main{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
-  .fin-detail-def{color:var(--ink-soft);font-size:13px;flex:1;}
-  .fin-detail-amt{font-weight:700;color:var(--brass);white-space:nowrap;}
-  .fin-detail-sub{font-size:11.5px;color:var(--ink-soft);margin-top:3px;}
-  .fin-detail-case-summary{font-size:11.5px;color:var(--ink-soft);margin-top:5px;padding-top:5px;border-top:1px dotted var(--line);}
-  .fin-detail-case-summary strong{font-family:'Amiri',serif;font-size:13px;}
+  /* جدول تفاصيل الرديات — جدول تقليدي بدل البطاقات (بطلب المستخدم)، بنفس
+     نمط جدول تحليل الرديات: الطرف أولاً (يمين باتجاه RTL). */
+  .fin-table-wrap{overflow-x:auto;margin-top:8px;border:1px solid var(--line);border-radius:12px;background:var(--paper-raised);box-shadow:0 1px 3px rgba(0,0,0,.04);}
+  .fin-table{width:100%;border-collapse:collapse;font-size:13px;}
+  .fin-table thead th{
+    background:var(--paper-raised);padding:8px 12px;font-weight:700;color:var(--ink);
+    border-bottom:2px solid var(--line);white-space:nowrap;position:sticky;top:0;
+  }
+  .fin-table th.fin-th-party{text-align:right;min-width:150px;}
+  .fin-table tbody td{padding:8px 12px;border-bottom:1px solid var(--line);text-align:center;white-space:nowrap;}
+  .fin-table tbody tr:last-child td{border-bottom:none;}
+  .fin-table tbody tr:hover td{background:var(--paper);}
+  .fin-table td.fin-td-party{text-align:right;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px;}
+  .fin-table td.fin-td-amt{font-weight:700;color:var(--brass);}
+  .fin-table td.fin-td-dates{font-size:11.5px;color:var(--ink-soft);white-space:normal;text-align:right;}
+  .fin-table td.fin-td-remaining strong{font-family:'Amiri',serif;font-size:14px;}
+  @media(max-width:640px){
+    .fin-table td.fin-td-party{max-width:110px;}
+    .fin-table td.fin-td-dates{display:none;}
+    .fin-table th.fin-th-dates{display:none;}
+  }
   .parties-block{
     margin-top:8px;padding-top:8px;border-top:1px dashed var(--line);
     font-size:12.5px;color:var(--ink-soft);line-height:1.8;
@@ -1297,7 +1310,6 @@
     .fin-range-picker .btn{width:100%;}
     .fin-preview{font-size:11px;padding:2px 8px;max-width:100%;white-space:normal;}
     .fin-dates-pop{font-size:11.5px;}
-    .fin-detail-main{flex-direction:column;align-items:flex-start;gap:4px;}
 
     /* Compact case list rows */
     .year-list-row{padding:11px 12px;}
@@ -6814,34 +6826,32 @@ function renderFinSummary(){
       detailsEl.innerHTML = `<div class="muted" style="padding:6px 4px;">لا توجد قضايا مرتبطة بهذا الاختيار</div>`;
       return;
     }
-    detailsEl.innerHTML = matching.map(r=>{
-      const rowAmt = parseFloat(String(r["المبلغ المحول"]||"0").replace(/,/g,"")) || 0;
-      const subParts = [];
-      if(r["الحوالة/الشيك"] && String(r["الحوالة/الشيك"]).trim()) subParts.push(`النوع: ${String(r["الحوالة/الشيك"]).trim()}`);
-      if(r["رقم الشيك/الحوالة"]) subParts.push(`رقم الشيك/الحوالة: ${escapeAttr(r["رقم الشيك/الحوالة"])}`);
-      if(r["رقم مستند الصرف"]) subParts.push(`رقم مستند الصرف: ${escapeAttr(r["رقم مستند الصرف"])}`);
-
-      const fin = getFinancialForRow(r);
-      const allDates = fin.transactions.map(t => t["تاريخ الشيك/الحوالة"] || "—").join("، ");
-      const caseSummaryParts = [];
-      caseSummaryParts.push(`📅 ${arabicCount(fin.transactions.length)} على هذه القضية: ${allDates}`);
-      if(fin.requested !== null){
-        const remClass = fin.remaining > 0 ? "fin-due" : "fin-clear";
-        caseSummaryParts.push(`⏳ المتبقي: <strong class="${remClass}">${fin.remaining.toLocaleString('ar',{minimumFractionDigits:2, maximumFractionDigits:2})} دينار</strong>`);
-      }
-
-      return `
-        <div class="fin-detail-row">
-          <div class="fin-detail-main">
-            <span class="case-no">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}</span>
-            <span class="fin-detail-def">${escapeAttr(getDefendantForRow(r))}${getClientBadgeHtml(r)}</span>
-            <span class="fin-detail-amt">${rowAmt.toLocaleString('ar',{minimumFractionDigits:2, maximumFractionDigits:2})} دينار</span>
-          </div>
-          ${subParts.length ? `<div class="fin-detail-sub">${subParts.join(" — ")}</div>` : ""}
-          <div class="fin-detail-case-summary">${caseSummaryParts.join(" &nbsp;|&nbsp; ")}</div>
-        </div>
-      `;
-    }).join("");
+    detailsEl.innerHTML = `<div class="fin-table-wrap"><table class="fin-table">
+      <thead><tr>
+        <th class="fin-th-party">الطرف</th>
+        <th>رقم القضية</th>
+        <th>المبلغ</th>
+        <th class="fin-th-dates">عدد الحركات وتواريخها</th>
+        <th>المتبقي</th>
+      </tr></thead>
+      <tbody>${matching.map(r=>{
+        const rowAmt = parseFloat(String(r["المبلغ المحول"]||"0").replace(/,/g,"")) || 0;
+        const fin = getFinancialForRow(r);
+        const allDates = fin.transactions.map(t => t["تاريخ الشيك/الحوالة"] || "—").join("، ");
+        let remainingHtml = "—";
+        if(fin.requested !== null){
+          const remClass = fin.remaining > 0 ? "fin-due" : "fin-clear";
+          remainingHtml = `<strong class="${remClass}">${fin.remaining.toLocaleString('ar',{minimumFractionDigits:2, maximumFractionDigits:2})}</strong>`;
+        }
+        return `<tr>
+          <td class="fin-td-party">${escapeAttr(getDefendantForRow(r))}${getClientBadgeHtml(r)}</td>
+          <td class="fin-td-caseno">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}</td>
+          <td class="fin-td-amt">${rowAmt.toLocaleString('ar',{minimumFractionDigits:2, maximumFractionDigits:2})}</td>
+          <td class="fin-td-dates">${arabicCount(fin.transactions.length)} — ${allDates}</td>
+          <td class="fin-td-remaining">${remainingHtml}</td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table></div>`;
   }
 
   sel.onchange = ()=>{
