@@ -8030,11 +8030,13 @@ let casesAllRows = [];
 
 // ===== اكتشاف زيادة "المتاح" وتمييزها بصرياً (وميض + تقديم للأعلى) =====
 // نحفظ "آخر قيمة متاح رأيناها" لكل قضية على هذا الجهاز تحديداً — عند أي
-// زيادة (وليس نقصاناً) عن آخر مرة رأينا فيها الرقم، نُسجِّل وقت الاكتشاف
-// ونُبقي القضية "مميّزة" لمدة دقيقتين من تلك اللحظة بالضبط (بالوقت الدقيق
-// من خوادم Firebase، وليس ساعة الجهاز).
-const CASES_INCREASE_HIGHLIGHT_MS = 2 * 60 * 1000; // دقيقتان
-let _recentIncreaseMap = {}; // key -> وقت الاكتشاف (ms)، في الذاكرة فقط لهذه الجلسة
+// زيادة (وليس نقصاناً) عن آخر مرة رأينا فيها الرقم (عادة بعد استيراد ملف
+// إكسيل فيه مبالغ متاحة جديدة)، نُسجِّل وقت الاكتشاف ونُبقي القضية
+// "مميّزة" (بالوميض + التقديم لأعلى القائمة) لمدة 24 ساعة كاملة من تلك
+// اللحظة — بالوقت الدقيق من خوادم Firebase، وليس ساعة الجهاز — بدل دقيقتين
+// فقط، حتى لو أغلق المستخدم التطبيق وأعاد فتحه لاحقاً (محفوظة في
+// localStorage، وليس بالذاكرة المؤقتة فقط، فلا تُفقَد بإعادة تحميل الصفحة).
+const CASES_INCREASE_HIGHLIGHT_MS = 24 * 60 * 60 * 1000; // 24 ساعة
 
 function getLastKnownAvailMap(){
   try{ return JSON.parse(localStorage.getItem('cases_last_avail') || '{}'); }catch(e){ return {}; }
@@ -8042,11 +8044,19 @@ function getLastKnownAvailMap(){
 function saveLastKnownAvailMap(map){
   try{ localStorage.setItem('cases_last_avail', JSON.stringify(map)); }catch(e){}
 }
+function getRecentIncreaseMap(){
+  try{ return JSON.parse(localStorage.getItem('cases_recent_increase') || '{}'); }catch(e){ return {}; }
+}
+function saveRecentIncreaseMap(map){
+  try{ localStorage.setItem('cases_recent_increase', JSON.stringify(map)); }catch(e){}
+}
+let _recentIncreaseMap = getRecentIncreaseMap(); // key -> وقت الاكتشاف (ms)، محفوظة عبر الجلسات
 // يُستدعى قبل كل ترتيب/عرض لصفحة القضايا — يقارن القيم الحالية بالمحفوظة،
 // ويُسجِّل أي زيادة جديدة اكتُشفت للتو
 function detectAvailIncreases(rows){
   const lastMap = getLastKnownAvailMap();
   let changed = false;
+  let increaseChanged = false;
   const nowMs = getAccurateNow().getTime();
   rows.forEach(r=>{
     const key = caseKey(r);
@@ -8055,6 +8065,7 @@ function detectAvailIncreases(rows){
     const prev = lastMap[key];
     if(prev !== undefined && availNum > prev + 0.001){
       _recentIncreaseMap[key] = nowMs;
+      increaseChanged = true;
     }
     if(prev === undefined || Math.abs(prev - availNum) > 0.001){
       lastMap[key] = availNum;
@@ -8062,12 +8073,14 @@ function detectAvailIncreases(rows){
     }
   });
   if(changed) saveLastKnownAvailMap(lastMap);
+  if(increaseChanged) saveRecentIncreaseMap(_recentIncreaseMap);
 }
 function isRecentlyIncreased(key){
   const t = _recentIncreaseMap[key];
   if(!t) return false;
   if(getAccurateNow().getTime() - t >= CASES_INCREASE_HIGHLIGHT_MS){
     delete _recentIncreaseMap[key]; // انتهت مهلة التمييز — تنظيف تلقائي
+    saveRecentIncreaseMap(_recentIncreaseMap);
     return false;
   }
   return true;
