@@ -4773,6 +4773,8 @@ function caseAgeText(r){
 let lastImportInfo = null;
 
 async function loadLastImportInfo(){
+  // Firebase أولاً (متزامن عبر كل الأجهزة)، وإلا احتياطي محلي فوري
+  if(appSettings.lastImportInfo){ lastImportInfo = appSettings.lastImportInfo; return; }
   try{
     const res = await appStorage.get('last_import');
     lastImportInfo = res && res.value ? JSON.parse(res.value) : null;
@@ -4781,7 +4783,8 @@ async function loadLastImportInfo(){
 
 async function saveLastImportInfo(fileName){
   lastImportInfo = {date: new Date().toISOString(), file: fileName};
-  try{ await safeStorageSet('last_import', JSON.stringify(lastImportInfo)); }catch(e){}
+  try{ await safeStorageSet('last_import', JSON.stringify(lastImportInfo)); }catch(e){} // فوري محلياً
+  await saveAppSettingField('lastImportInfo', lastImportInfo); // ثم مزامنة عبر Firebase لكل الأجهزة
 }
 
 // ===== Caching للعمليات الثقيلة في render() =====
@@ -4810,13 +4813,13 @@ function rebuildDefendantIndexIfNeeded(){
 function renderOverview(){
   const el = document.getElementById("overviewStrip");
 
-  // last import
+  // last import — تاريخ ووقت دقيقان + نص صريح "تم تحديث البيانات" (بطلب المستخدم)
   let importStr = "لم يتم بعد", importSub = "";
   if(lastImportInfo){
     const d = new Date(lastImportInfo.date);
-    const daysAgo = Math.floor((new Date() - d) / 86400000);
-    importStr = daysAgo === 0 ? "اليوم" : `قبل ${daysAgo} يوم`;
-    importSub = lastImportInfo.file || "";
+    const dateTimeStr = d.toLocaleString('ar-EG', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
+    importStr = dateTimeStr;
+    importSub = "✓ تم تحديث البيانات" + (lastImportInfo.file ? ` — ${lastImportInfo.file}` : "");
   }
 
   // this month's collection (all clients)
@@ -5477,7 +5480,8 @@ const DEFAULT_APP_SETTINGS = {
   lwFoldedCases: null,            // مجموعات مطوية بصفحة متابعة المحامي
   lwUnfoldedCustomGroups: null,   // مجموعات مخصَّصة مفرودة يدوياً
   lwZeroSectionUnfolded: null,    // حالة طي/فرد قسم "صفرية"
-  doveNotifiedClosureKeys: null   // قضايا سبق إشعارها بـ"🕊️ انتهت" — لمنع التكرار
+  doveNotifiedClosureKeys: null,  // قضايا سبق إشعارها بـ"🕊️ انتهت" — لمنع التكرار
+  lastImportInfo: null            // تاريخ ووقت + اسم آخر ملف استيراد ناجح (لصندوق "آخر استيراد")
 };
 let appSettings = {...DEFAULT_APP_SETTINGS};
 
@@ -8093,6 +8097,19 @@ async function runImportBatch(filesToImport){
         }
       }
 
+      // ===== طبقة 3: ملفات "تقرير المفصل" تحديداً (بطلب المستخدم) — رفض
+      // صارم لو تاريخ الملف (lastModified) أقدم بأكثر من 10 دقائق من تاريخ
+      // آخر استيراد ناجح المعروض بصندوق "آخر استيراد" (lastImportInfo،
+      // مزامَن عبر Firebase). يُطبَّق بغضّ النظر عن قضايا/رديات، فقط حسب اسم
+      // الملف نفسه.
+      if(file.name.includes("تقرير المفصل") || file.name.includes("المفصل")){
+        const refTime = lastImportInfo ? new Date(lastImportInfo.date).getTime() : null;
+        if(refTime !== null && !isNaN(refTime) && file.lastModified < refTime - IMPORT_DATE_GRACE_MS){
+          rejected.push(`⛔ "${file.name}": ممنوع تحميل ملف قديم — حمّل ملف حديث.`);
+          continue; // تخطّي هذا الملف تماماً — لا معالجة ولا دمج إطلاقاً
+        }
+      }
+
       const mergeStats = mergeRowsIntoRawData(rows);
       const masterStats = await saveMasterFromRows(rows);
       combined.added += mergeStats.added;
@@ -8530,11 +8547,12 @@ let casesAllRows = [];
 // نحفظ "آخر قيمة متاح رأيناها" لكل قضية على هذا الجهاز تحديداً — عند أي
 // زيادة (وليس نقصاناً) عن آخر مرة رأينا فيها الرقم (عادة بعد استيراد ملف
 // إكسيل فيه مبالغ متاحة جديدة)، نُسجِّل وقت الاكتشاف ونُبقي القضية
-// "مميّزة" (بالوميض + التقديم لأعلى القائمة) لمدة 24 ساعة كاملة من تلك
-// اللحظة — بالوقت الدقيق من خوادم Firebase، وليس ساعة الجهاز — بدل دقيقتين
-// فقط، حتى لو أغلق المستخدم التطبيق وأعاد فتحه لاحقاً (محفوظة في
-// localStorage، وليس بالذاكرة المؤقتة فقط، فلا تُفقَد بإعادة تحميل الصفحة).
-const CASES_INCREASE_HIGHLIGHT_MS = 24 * 60 * 60 * 1000; // 24 ساعة
+// "مميّزة" (بالوميض + التقديم لأعلى القائمة) لمدة 10 دقائق فقط من تلك
+// اللحظة (بطلب المستخدم — الوميض المستمر لفترة طويلة كان مزعجاً) — بالوقت
+// الدقيق من خوادم Firebase، وليس ساعة الجهاز. محفوظة عبر Firebase
+// (casesRecentIncrease)، فلا تُفقَد بإعادة تحميل الصفحة أو تبديل الجهاز،
+// لكنها تنتهي تلقائياً بعد 10 دقائق بغضّ النظر عن ذلك.
+const CASES_INCREASE_HIGHLIGHT_MS = 10 * 60 * 1000; // 10 دقائق
 
 // تحويل خريطة {مفتاح: قيمة} إلى مصفوفة أزواج [مفتاح, قيمة] قبل الحفظ بـ
 // Firebase — لأن مفاتيح خرائطنا هي caseKey (رقم القضية + المحكمة)، وقد تحوي
@@ -11030,6 +11048,10 @@ async function initApp(){
   render();
   await refreshMasterBadge();
   await loadLastImportInfo();
+  // إعادة رسم شريط الملخّص الآن بعد اكتمال تحميل "آخر استيراد" — كان يُرسَم
+  // قبل هذا التحميل فيظهر "لم يتم بعد" لحظياً حتى لو كانت البيانات موجودة فعلاً
+  markRenderCacheDirty();
+  renderOverviewCached();
 
   if(restored.added > 0){
     importStatusEl.className = "result-count import-success";
