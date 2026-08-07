@@ -3946,6 +3946,20 @@ function getCurrentUserEmail(){
 // (مقارنة محلية بحتة، سريعة وبلا أي تأخير إضافي على الحفظ نفسه).
 let _lastKnownSnapshot = {};
 
+// حفظ "مضمون" لقضية واحدة — يُستخدَم لأي إجراء يدوي حسّاس (أزرار "تطبيق"
+// بنوافذ التعارض، والتعديل اليدوي للمتاح) بدل saveMaster([key]) مباشرة.
+// المشكلة الحقيقية اللي عالجها هذا: saveMaster تعتمد على مقارنة "قبل/بعد"
+// محلية (_lastKnownSnapshot) لتحديد أي الحقول فعلاً تغيّرت، اختصاراً للأداء؛
+// لو — لأي سبب — بدت هذه المقارنة أن لا شيء تغيّر (رغم أن التعديل تم فعلياً
+// بالذاكرة للتو)، الحفظ يُتجاهَل بصمت تماماً بلا أي خطأ ظاهر، والزر يعرض
+// "✓ تم" رغم عدم حدوث أي حفظ حقيقي. حذف اللقطة المحفوظة لهذه القضية تحديداً
+// قبل الحفظ يجبر المقارنة على اعتبار كل الحقول الحالية "جديدة"، فيُضمَن
+// حفظها وتسجيلها بسجل التدقيق دائماً، بلا أي احتمال لتجاهل صامت.
+async function forceSaveKey(key){
+  delete _lastKnownSnapshot[key];
+  await saveMaster([key]);
+}
+
 // مقارنة الحقول العليا فقط بين نسختين من نفس القضية — تُرجع قائمة بكل حقل
 // تغيَّرت قيمته فعلياً (بمقارنة مستقرة لا تتأثر بترتيب المفاتيح الداخلي)
 function computeFieldDiff(before, after){
@@ -8350,7 +8364,7 @@ function showStatusConflictModal(conflicts, onClose){
         const master = masterCache;
         if(!master[c.key]) master[c.key] = {};
         master[c.key]["الحالة"] = c.newStatus;
-        await saveMaster([c.key]);
+        await forceSaveKey(c.key);
         masterCache = master;
         // تحديث الصف المعروض حالياً في RAW_DATA أيضاً (بلا إعادة تحميل) —
         // وإلا يبقى الجدول يعرض "فصل" رغم أن الماستر تحدَّث فعلاً لـ"قيد التنفيذ"
@@ -8405,7 +8419,7 @@ function showFieldConflictModal(conflicts, onClose){
         const master = masterCache;
         if(!master[c.key]) master[c.key] = {};
         master[c.key][c.field] = String(c.newVal);
-        await saveMaster([c.key]);
+        await forceSaveKey(c.key);
         masterCache = master;
         const liveRow = getRowByKey(c.key);
         if(liveRow) liveRow[c.field] = String(c.newVal);
@@ -9016,7 +9030,7 @@ async function setManualAvailOverride(key, value){
   const master = masterCache;
   if(!master[key]) master[key] = {};
   master[key]["متاح_يدوي"] = value;
-  await saveMaster([key]);
+  await forceSaveKey(key);
   masterCache = master; invalidateMasterCaseNoIndex();
 }
 
