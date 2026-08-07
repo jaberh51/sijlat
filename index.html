@@ -8660,22 +8660,35 @@ let casesAllRows = [];
 // localStorage، وليس بالذاكرة المؤقتة فقط، فلا تُفقَد بإعادة تحميل الصفحة).
 const CASES_INCREASE_HIGHLIGHT_MS = 24 * 60 * 60 * 1000; // 24 ساعة
 
+// تحويل خريطة {مفتاح: قيمة} إلى مصفوفة أزواج [مفتاح, قيمة] قبل الحفظ بـ
+// Firebase — لأن مفاتيح خرائطنا هي caseKey (رقم القضية + المحكمة)، وقد تحوي
+// المحكمة حرف "/" (شائع بأسماء أقسام التنفيذ)، وFirebase يرفض أي مفتاح كائن
+// يحوي / . # $ [ ] لأنها تُعامَل كأجزاء مسار حقيقية. المصفوفة تتفادى هذا
+// القيد تماماً (فهارسها أرقام لا نصوص)، وتُعاد لصيغة خريطة عادية عند القراءة.
+function mapToFirebaseSafeArray(map){
+  return Object.entries(map).map(([key, value])=> ({key, value}));
+}
+function firebaseSafeArrayToMap(arr){
+  const map = {};
+  (arr || []).forEach(item=>{ if(item && item.key !== undefined) map[item.key] = item.value; });
+  return map;
+}
 function getLastKnownAvailMap(){
   // Firebase أولاً (متزامن عبر كل الأجهزة)، وإلا احتياطي محلي فوري
-  if(appSettings.casesLastAvail) return {...appSettings.casesLastAvail};
+  if(appSettings.casesLastAvail) return firebaseSafeArrayToMap(appSettings.casesLastAvail);
   try{ return JSON.parse(localStorage.getItem('cases_last_avail') || '{}'); }catch(e){ return {}; }
 }
 async function saveLastKnownAvailMap(map){
   try{ localStorage.setItem('cases_last_avail', JSON.stringify(map)); }catch(e){}
-  await saveAppSettingField('casesLastAvail', map);
+  await saveAppSettingField('casesLastAvail', mapToFirebaseSafeArray(map));
 }
 function getRecentIncreaseMap(){
-  if(appSettings.casesRecentIncrease) return {...appSettings.casesRecentIncrease};
+  if(appSettings.casesRecentIncrease) return firebaseSafeArrayToMap(appSettings.casesRecentIncrease);
   try{ return JSON.parse(localStorage.getItem('cases_recent_increase') || '{}'); }catch(e){ return {}; }
 }
 async function saveRecentIncreaseMap(map){
   try{ localStorage.setItem('cases_recent_increase', JSON.stringify(map)); }catch(e){}
-  await saveAppSettingField('casesRecentIncrease', map);
+  await saveAppSettingField('casesRecentIncrease', mapToFirebaseSafeArray(map));
 }
 let _recentIncreaseMap = getRecentIncreaseMap(); // key -> وقت الاكتشاف (ms)، محفوظة عبر الجلسات
 // يُستدعى قبل كل ترتيب/عرض لصفحة القضايا — يقارن القيم الحالية بالمحفوظة،
