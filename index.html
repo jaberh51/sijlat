@@ -8679,6 +8679,10 @@ function mapToFirebaseSafeArray(map){
 }
 function firebaseSafeArrayToMap(arr){
   const map = {};
+  // دفاعي: قد تصل بيانات قديمة محفوظة بصيغة "كائن" (من قبل هذا الإصلاح) بدل
+  // "مصفوفة" — لو وصل كائن عادي (وليس مصفوفة)، نعيده كما هو مباشرة كخريطة
+  // بدل محاولة .forEach عليه (وهو ما كان يسبِّب هذا الخطأ بالضبط).
+  if(arr && !Array.isArray(arr) && typeof arr === "object") return {...arr};
   (arr || []).forEach(item=>{ if(item && item.key !== undefined) map[item.key] = item.value; });
   return map;
 }
