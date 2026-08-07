@@ -1452,19 +1452,28 @@ try{
       if(!banner){
         banner = document.createElement("div");
         banner.id = "globalErrorBanner";
-        banner.style.cssText = "position:fixed;bottom:0;left:0;right:0;z-index:999999;background:#7f1d1d;color:#fff;padding:12px 16px;font-family:'Tajawal',sans-serif;font-size:13px;text-align:center;direction:rtl;box-shadow:0 -2px 10px rgba(0,0,0,.3);";
+        banner.style.cssText = "position:fixed;bottom:0;left:0;right:0;z-index:999999;background:#7f1d1d;color:#fff;padding:12px 16px;font-family:'Tajawal',sans-serif;font-size:13px;text-align:center;direction:rtl;box-shadow:0 -2px 10px rgba(0,0,0,.3);max-height:40vh;overflow-y:auto;";
         document.body.appendChild(banner);
       }
-      banner.innerHTML = `⚠️ حدث خطأ غير متوقَّع في النظام — إن توقَّف جزء عن العمل، حدِّث الصفحة (اسحب للأسفل أو زر التحديث). <span style="text-decoration:underline;cursor:pointer;font-weight:700;" onclick="this.parentElement.remove()">إخفاء</span>`;
+      // نعرض نص الخطأ الفعلي مباشرة بالبانر (مقتصَّاً) — بدل الاكتفاء برسالة
+      // عامة تخفي التفاصيل، لتسهيل التشخيص الفوري بمجرد أخذ لقطة شاشة له،
+      // بلا الحاجة للوصول لأدوات المطوّر بالمتصفح (غير متاحة عملياً هنا).
+      const safeMsg = message ? String(message).slice(0, 300) : "";
+      banner.innerHTML = `⚠️ حدث خطأ غير متوقَّع في النظام — إن توقَّف جزء عن العمل، حدِّث الصفحة (اسحب للأسفل أو زر التحديث).` +
+        (safeMsg ? `<div style="margin-top:6px;font-size:11px;opacity:.9;direction:ltr;text-align:left;word-break:break-word;font-family:monospace;">${safeMsg.replace(/</g,"&lt;")}</div>` : "") +
+        `<span style="text-decoration:underline;cursor:pointer;font-weight:700;display:inline-block;margin-top:6px;" onclick="this.parentElement.remove()">إخفاء</span>`;
     }catch(e){}
   }
   window.addEventListener("error", function(event){
+    const msg = (event.error && (event.error.stack || event.error.message)) || event.message || "";
     console.error("خطأ عام غير مُعالَج:", event.error || event.message);
-    showGlobalErrorNotice();
+    showGlobalErrorNotice(msg);
   });
   window.addEventListener("unhandledrejection", function(event){
+    const reason = event.reason;
+    const msg = (reason && (reason.stack || reason.message)) || String(reason || "");
     console.error("خطأ Promise غير مُعالَج:", event.reason);
-    showGlobalErrorNotice();
+    showGlobalErrorNotice(msg);
   });
 })();
 // تنظيف تلقائي: إزالة أي Service Worker متبقٍّ من تجربة سابقة — يضمن أن
@@ -8673,22 +8682,41 @@ function firebaseSafeArrayToMap(arr){
   (arr || []).forEach(item=>{ if(item && item.key !== undefined) map[item.key] = item.value; });
   return map;
 }
+// حفظ لـFirebase يتأخّر (debounce) بدل الإرسال فوراً — هاتان الخريطتان
+// تُفحَصان مع كل استدعاء applyCasesFilter (أي أثناء الكتابة بصندوق البحث،
+// حرفاً بحرف)، فبلا هذا التأخير كان يُرسَل طلب حفظ منفصل لـFirebase مع كل
+// ضغطة حرف — يُهدر الحصة المتاحة ويزيد فرصة تعارض/فشل الكتابات المتلاحقة
+// (وهو الأرجح وراء ظهور رسالة الخطأ العامة أثناء التصفّح والبحث).
+function debounce(fn, ms){
+  let t = null;
+  return (...args)=>{
+    clearTimeout(t);
+    t = setTimeout(()=> fn(...args), ms);
+  };
+}
+const _debouncedSaveLastAvail = debounce((map)=>{
+  saveAppSettingField('casesLastAvail', mapToFirebaseSafeArray(map));
+}, 2000);
+const _debouncedSaveRecentIncrease = debounce((map)=>{
+  saveAppSettingField('casesRecentIncrease', mapToFirebaseSafeArray(map));
+}, 2000);
+
 function getLastKnownAvailMap(){
   // Firebase أولاً (متزامن عبر كل الأجهزة)، وإلا احتياطي محلي فوري
   if(appSettings.casesLastAvail) return firebaseSafeArrayToMap(appSettings.casesLastAvail);
   try{ return JSON.parse(localStorage.getItem('cases_last_avail') || '{}'); }catch(e){ return {}; }
 }
-async function saveLastKnownAvailMap(map){
-  try{ localStorage.setItem('cases_last_avail', JSON.stringify(map)); }catch(e){}
-  await saveAppSettingField('casesLastAvail', mapToFirebaseSafeArray(map));
+function saveLastKnownAvailMap(map){
+  try{ localStorage.setItem('cases_last_avail', JSON.stringify(map)); }catch(e){} // فوري محلياً
+  _debouncedSaveLastAvail(map); // مؤجَّل لـFirebase
 }
 function getRecentIncreaseMap(){
   if(appSettings.casesRecentIncrease) return firebaseSafeArrayToMap(appSettings.casesRecentIncrease);
   try{ return JSON.parse(localStorage.getItem('cases_recent_increase') || '{}'); }catch(e){ return {}; }
 }
-async function saveRecentIncreaseMap(map){
-  try{ localStorage.setItem('cases_recent_increase', JSON.stringify(map)); }catch(e){}
-  await saveAppSettingField('casesRecentIncrease', mapToFirebaseSafeArray(map));
+function saveRecentIncreaseMap(map){
+  try{ localStorage.setItem('cases_recent_increase', JSON.stringify(map)); }catch(e){} // فوري محلياً
+  _debouncedSaveRecentIncrease(map); // مؤجَّل لـFirebase
 }
 let _recentIncreaseMap = getRecentIncreaseMap(); // key -> وقت الاكتشاف (ms)، محفوظة عبر الجلسات
 // يُستدعى قبل كل ترتيب/عرض لصفحة القضايا — يقارن القيم الحالية بالمحفوظة،
