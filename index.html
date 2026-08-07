@@ -5487,11 +5487,17 @@ const DEFAULT_APP_SETTINGS = {
   defaultGroupsFolded: true,
   defaultHideThirdSegment: false,
   adminEmail: "", // فارغ = لا تقييد بعد (لن يُحظَر أحد قبل تحديده صراحةً)
-  // آخر تاريخ/وقت (lastModified) لملف استيراد ناجح، لكل نوع على حدة —
-  // مزامَن عبر Firebase (وليس محلياً فقط) حتى لا يفقد المرجع عند تبديل
-  // الجهاز أو مسح بيانات المتصفح (راجع runImportBatch لاستخدامها).
-  lastImportDateCases: null,
+  // آخر تاريخ محتوى (أحدث تاريخ شيك/حوالة) لملف رديات ناجح — طبقة حماية أولى
+  // مبنية على بيانات الملف نفسها.
   lastImportDateRemittances: null,
+  // طبقة حماية ثانية مستقلة (بطلب المستخدم): آخر تاريخ/وقت للملف نفسه على
+  // نظام الملفات (lastModified) — لكل نوع (قضايا/رديات) على حدة. بعكس
+  // "تاريخ ورود الدعوى"، هذا التاريخ لا يتأثر بتغيّر حالة قضية قديمة، فهو
+  // آمن للتطبيق على القضايا أيضاً (راجع التعليق قرب detectFileKind).
+  lastFileModifiedCases: null,
+  lastFileModifiedRemittances: null,
+  // كل هذي الحقول مزامَنة عبر Firebase (وليس محلياً فقط) حتى لا تُفقَد عند
+  // تبديل الجهاز أو مسح بيانات المتصفح (راجع runImportBatch لاستخدامها).
   // ===== باقي القيم المتزامَنة (بطلب المستخدم — "اعملها كلها") =====
   importedFileFingerprints: null, // منع استيراد نفس الملف مرتين، عبر كل الأجهزة
   casesLastAvail: null,           // آخر "متاح" معروف لكل قضية — أساس اكتشاف الزيادات
@@ -7796,28 +7802,58 @@ async function addImportedFileFingerprint(fp){
   await saveAppSettingField('importedFileFingerprints', arr);
 }
 
-// ===== رفض صارم للملفات الأقدم من آخر ملف من نفس نوعها (بطلب المستخدم) =====
+// ===== رفض صارم للملفات الأقدم — رديات فقط (بطلب المستخدم صراحةً) =====
 // نوع الملف يُحدَّد من محتواه (بالأغلبية — أكثر من نصف صفوفه فيها بيانات
-// مالية = "رديات"، وإلا "قضايا")، لا من اسمه. لكل نوع تاريخ منفصل تماماً
-// (آخر lastModified نجح استيراده) — مزامَن عبر Firebase (appSettings) وليس
-// محلياً فقط، فيبقى موجوداً حتى لو بدَّلت جهازاً أو مسحت بيانات المتصفح.
-// localStorage يبقى نسخة احتياطية فورية (offline-first) تُستخدَم فقط لو
-// appSettings لم يكتمل تحميله بعد من Firebase.
+// مالية = "رديات"، وإلا "قضايا"). يُطبَّق حصراً على "رديات": المرجع هو أحدث
+// "تاريخ شيك/حوالة" داخل الملف — تاريخ حركة حقيقي وموثوق كمؤشر حداثة.
+// ملفات "القضايا" مستثناة تماماً: "تاريخ ورود الدعوى" تاريخ ثابت تاريخياً
+// لا يعكس حداثة التقرير (قضية قديمة قد تُحدَّث حالتها اليوم بلا أي قضية
+// جديدة بالملف) — حماية القيم (متاح/الحالة/المطلوب/المحصّل) كافية وحدها لها.
+// مزامَن عبر Firebase (appSettings) فيبقى موجوداً حتى لو بدَّلت جهازاً.
 // هامش سماح 10 دقائق: يتيح رفع عدة ملفات بدفعة واحدة (مثل ملفي جابر وحنين)
 // حتى لو وصل ترتيب معالجتها الفعلي بفارق بسيط بينها، بلا رفض غير مبرَّر.
 function detectFileKind(rows){
   const finCount = rows.filter(r => FINANCIAL_FIELDS.some(f => r[f] !== undefined && String(r[f]).trim() !== "")).length;
   return finCount > rows.length / 2 ? "remittances" : "cases";
 }
-function getLastImportDate(kind){
-  const settingsKey = kind === "remittances" ? "lastImportDateRemittances" : "lastImportDateCases";
-  if(appSettings[settingsKey] !== null && appSettings[settingsKey] !== undefined) return appSettings[settingsKey];
-  const v = localStorage.getItem('_lastImportDate_' + kind); // احتياطي محلي فوري
+// يستخرج أحدث "تاريخ شيك/حوالة" داخل محتوى ملف الرديات — لا يُستدعى إطلاقاً
+// لملفات القضايا (راجع التعليق أعلاه).
+function getFileContentDate(rows){
+  let maxTime = null;
+  rows.forEach(r=>{
+    const d = parseDate(r["تاريخ الشيك/الحوالة"]);
+    if(d && !isNaN(d.getTime())){
+      const t = d.getTime();
+      if(maxTime === null || t > maxTime) maxTime = t;
+    }
+  });
+  return maxTime;
+}
+function getLastImportDate(){
+  if(appSettings.lastImportDateRemittances !== null && appSettings.lastImportDateRemittances !== undefined) return appSettings.lastImportDateRemittances;
+  const v = localStorage.getItem('_lastImportDate_remittances'); // احتياطي محلي فوري
   return v ? parseInt(v, 10) : null;
 }
-async function setLastImportDate(kind, ms){
-  const settingsKey = kind === "remittances" ? "lastImportDateRemittances" : "lastImportDateCases";
-  try{ localStorage.setItem('_lastImportDate_' + kind, String(ms)); }catch(e){} // فوري محلياً
+async function setLastImportDate(ms){
+  try{ localStorage.setItem('_lastImportDate_remittances', String(ms)); }catch(e){} // فوري محلياً
+  await saveAppSettingField('lastImportDateRemittances', ms); // ثم مزامنة عبر Firebase لكل الأجهزة
+}
+// ===== طبقة حماية ثانية ومستقلة: تاريخ الملف نفسه (lastModified) =====
+// بطلب المستخدم — لكل نوع (قضايا/رديات) على حدة، بمعزل تماماً عن فحص
+// "تاريخ المحتوى" أعلاه لملفات الرديات. آمن للتطبيق على القضايا أيضاً لأنه
+// لا يعتمد على "تاريخ ورود الدعوى" (المشكلة السابقة)، بل على تاريخ الملف
+// كوحدة كاملة على نظام الملفات — أعد تحميل نفس الملف القديم اليوم؟ تاريخه
+// يصير اليوم، فهذي الطبقة وحدها لن تمسكه (تماماً كما شُرح سابقاً)، لكنها
+// تمسك حالة "اخترت بالخطأ ملفاً أقدم فعلياً من مجلد التنزيلات" بثقة تامة.
+function getLastFileModified(kind){
+  const settingsKey = kind === "remittances" ? "lastFileModifiedRemittances" : "lastFileModifiedCases";
+  if(appSettings[settingsKey] !== null && appSettings[settingsKey] !== undefined) return appSettings[settingsKey];
+  const v = localStorage.getItem('_lastFileModified_' + kind); // احتياطي محلي فوري
+  return v ? parseInt(v, 10) : null;
+}
+async function setLastFileModified(kind, ms){
+  const settingsKey = kind === "remittances" ? "lastFileModifiedRemittances" : "lastFileModifiedCases";
+  try{ localStorage.setItem('_lastFileModified_' + kind, String(ms)); }catch(e){} // فوري محلياً
   await saveAppSettingField(settingsKey, ms); // ثم مزامنة عبر Firebase لكل الأجهزة
 }
 const FILE_KIND_LABEL = {cases: "قضايا", remittances: "رديات"};
@@ -8065,13 +8101,24 @@ async function runImportBatch(filesToImport){
     try{
       const rows = await readExcelFileAsRows(file);
 
-      // ===== رفض صارم للملفات الأقدم من هامش الـ10 دقائق (بطلب المستخدم) =====
-      // بلا أي سؤال أو صندوق تأكيد — رفض حازم ومباشر، مع رسالة توضّح السبب.
+      // ===== طبقة 1: رفض الأقدم من هامش الـ10 دقائق حسب تاريخ الملف نفسه
+      // (lastModified) — على القضايا والرديات معاً (بطلب المستخدم) =====
       const kind = detectFileKind(rows);
-      const lastDate = getLastImportDate(kind);
-      if(lastDate !== null && file.lastModified < lastDate - IMPORT_DATE_GRACE_MS){
+      const lastFileMod = getLastFileModified(kind);
+      if(lastFileMod !== null && file.lastModified < lastFileMod - IMPORT_DATE_GRACE_MS){
         rejected.push(`⛔ "${file.name}": ممنوع تحميل ملف قديم — حمّل ملف ${FILE_KIND_LABEL[kind]} بتاريخ أحدث.`);
         continue; // تخطّي هذا الملف تماماً — لا معالجة ولا دمج إطلاقاً
+      }
+
+      // ===== طبقة 2: رفض الأقدم من هامش الـ10 دقائق حسب تاريخ المحتوى
+      // الفعلي — رديات فقط (راجع الشرح أعلى الملف قرب detectFileKind) =====
+      if(kind === "remittances"){
+        const contentDate = getFileContentDate(rows);
+        const lastDate = getLastImportDate();
+        if(contentDate !== null && lastDate !== null && contentDate < lastDate - IMPORT_DATE_GRACE_MS){
+          rejected.push(`⛔ "${file.name}": ممنوع تحميل ملف قديم — حمّل ملف ${FILE_KIND_LABEL[kind]} بتاريخ أحدث.`);
+          continue; // تخطّي هذا الملف تماماً — لا معالجة ولا دمج إطلاقاً
+        }
       }
 
       const mergeStats = mergeRowsIntoRawData(rows);
@@ -8087,10 +8134,17 @@ async function runImportBatch(filesToImport){
       }
       succeeded.push(file.name);
       await addImportedFileFingerprint(fileFingerprint(file));
-      // نحدِّث "آخر تاريخ" لهذا النوع فقط للأمام — لا يرجع للخلف أبداً حتى لو
-      // كان ترتيب معالجة ملفات نفس الدفعة عشوائياً
-      if(lastDate === null || file.lastModified > lastDate){
-        await setLastImportDate(kind, file.lastModified);
+      // تحديث مرجع "تاريخ الملف" (كلا النوعين) — للأمام دوماً فقط
+      if(lastFileMod === null || file.lastModified > lastFileMod){
+        await setLastFileModified(kind, file.lastModified);
+      }
+      // تحديث مرجع "تاريخ المحتوى" — رديات فقط، للأمام دوماً فقط
+      if(kind === "remittances"){
+        const contentDate = getFileContentDate(rows);
+        const lastDate = getLastImportDate();
+        if(contentDate !== null && (lastDate === null || contentDate > lastDate)){
+          await setLastImportDate(contentDate);
+        }
       }
     }catch(err){
       failed.push(`${file.name} (${err.message || err})`);
