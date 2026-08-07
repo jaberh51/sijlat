@@ -8050,7 +8050,6 @@ async function runImportBatch(filesToImport){
 
   // معالجة الملفات بالتسلسل (واحداً بعد الآخر) وليس بالتوازي، لتفادي أي تضارب
   // عند الكتابة المتزامنة على نفس بيانات القضايا من أكثر من ملف في نفس اللحظة.
-  const fmtFileDate = (ms)=> new Date(ms).toLocaleString('ar-EG', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
   for(let i = 0; i < filesToImport.length; i++){
     const file = filesToImport[i];
     importStatusEl.textContent = `جارٍ معالجة الملف ${i+1} من ${totalFiles}: "${file.name}"...`;
@@ -8062,10 +8061,7 @@ async function runImportBatch(filesToImport){
       const kind = detectFileKind(rows);
       const lastDate = getLastImportDate(kind);
       if(lastDate !== null && file.lastModified < lastDate - IMPORT_DATE_GRACE_MS){
-        rejected.push(
-          `⛔ "${file.name}" (${FILE_KIND_LABEL[kind]}، مؤرَّخ ${fmtFileDate(file.lastModified)}) — ` +
-          `أقدم من آخر ملف ${FILE_KIND_LABEL[kind]} مستورَد (${fmtFileDate(lastDate)}) بأكثر من 10 دقائق. لم يُستورَد.`
-        );
+        rejected.push(`⛔ "${file.name}": ممنوع تحميل ملف قديم — حمّل ملف ${FILE_KIND_LABEL[kind]} بتاريخ أحدث.`);
         continue; // تخطّي هذا الملف تماماً — لا معالجة ولا دمج إطلاقاً
       }
 
