@@ -1802,6 +1802,7 @@ if('serviceWorker' in navigator){
     <button class="btn secondary" id="resetBtn">إعادة تعيين</button>
   </div>
   <div class="result-count" id="importStatus"></div>
+  <button id="importBypassBtn" class="btn secondary" style="display:none;margin-bottom:10px;background:#fef3c7;border-color:#f59e0b;color:#92400e;"></button>
   <div class="result-count" id="masterBadge" style="margin-bottom:16px;"></div>
 
   <div class="result-count" id="resultCount"></div>
@@ -7761,6 +7762,25 @@ function addImportedFileFingerprint(fp){
   try{ localStorage.setItem('_importedFileFingerprints', JSON.stringify(arr)); }catch(e){}
 }
 
+// ===== رفض استيراد ملف قديم/مكرر — منفصل لكل نوع ملف (قضايا / رديات) =====
+// نوع الملف يُحدَّد من محتواه (لا من اسمه): لو أي صف فيه بيانات مالية حقيقية
+// (رقم شيك/حوالة، مبلغ محول...)، هذا "ملف رديات"؛ وإلا فهو "ملف قضايا".
+// لكل نوع تاريخ منفصل (lastModified لآخر ملف من هذا النوع نجح استيراده)،
+// محفوظ بشكل دائم على الجهاز — فأي ملف لاحق من نفس النوع بتاريخ مساوٍ أو
+// أقدم يُرفَض فوراً قبل أي معالجة، بدل الاعتماد فقط على حماية القيم الفردية.
+function detectFileKind(rows){
+  const hasFin = rows.some(r => FINANCIAL_FIELDS.some(f => r[f] !== undefined && String(r[f]).trim() !== ""));
+  return hasFin ? "remittances" : "cases";
+}
+function getLastImportDate(kind){
+  const v = localStorage.getItem('_lastImportDate_' + kind);
+  return v ? parseInt(v, 10) : null;
+}
+function setLastImportDate(kind, ms){
+  try{ localStorage.setItem('_lastImportDate_' + kind, String(ms)); }catch(e){}
+}
+const FILE_KIND_LABEL = {cases: "قضايا", remittances: "رديات"};
+
 document.getElementById("importFile").addEventListener("change", (e)=>{
   const files = Array.from(e.target.files || []);
   if(!files.length){
@@ -7972,12 +7992,27 @@ document.getElementById("updateBtn").onclick = async ()=>{
     document.getElementById("importFile").value = "";
     return;
   }
+  const filesToRun = pendingFiles;
+  pendingFiles = [];
+  document.getElementById("importFile").value = "";
+  await runImportBatch(filesToRun, false);
+};
 
+// ملفات آخر دفعة استيراد رُفضت بسبب "قديم/مكرَّر حسب التاريخ" — محفوظة هنا
+// (وليس فقط كرسالة نصية) لإتاحة زر "🔓 تجاوز مرة واحدة" الذي يعيد معالجتها
+// فعلياً بتجاوز هذا الفحص تحديداً فقط، بلا التأثير على أي حماية أخرى.
+let _lastRejectedFileObjs = [];
+
+// النواة الفعلية لمعالجة أي دفعة ملفات استيراد — يستخدمها كل من زر "تحديث
+// البيانات" العادي وزر "تجاوز مرة واحدة" (بفارق bypassDateCheck فقط).
+async function runImportBatch(filesToImport, bypassDateCheck){
   importStatusEl.className = "result-count";
-  const totalFiles = pendingFiles.length;
+  const totalFiles = filesToImport.length;
   const combined = {added:0, updated:0, addedTxn:0, skippedDuplicateTxn:0, newTxnDetails:[], unchangedCount:0, touchedCount:0};
   const succeeded = [];
   const failed = [];
+  const rejected = []; // رسائل الملفات المرفوضة (أقدم من أو تساوي آخر ملف من نفس نوعها)
+  const rejectedFileObjs = []; // نفس الملفات، لكن ككائنات File فعلية (لزر التجاوز)
   _pendingAvailConflicts = []; // إعادة ضبط قبل بدء هذه الدفعة من الاستيراد
   _pendingStatusConflicts = [];
   _pendingFieldConflicts = [];
@@ -7988,11 +8023,27 @@ document.getElementById("updateBtn").onclick = async ()=>{
 
   // معالجة الملفات بالتسلسل (واحداً بعد الآخر) وليس بالتوازي، لتفادي أي تضارب
   // عند الكتابة المتزامنة على نفس بيانات القضايا من أكثر من ملف في نفس اللحظة.
-  for(let i = 0; i < pendingFiles.length; i++){
-    const file = pendingFiles[i];
+  const fmtFileDate = (ms)=> new Date(ms).toLocaleString('ar-EG', {day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'});
+  for(let i = 0; i < filesToImport.length; i++){
+    const file = filesToImport[i];
     importStatusEl.textContent = `جارٍ معالجة الملف ${i+1} من ${totalFiles}: "${file.name}"...`;
     try{
       const rows = await readExcelFileAsRows(file);
+
+      // ===== رفض الملفات القديمة/المكرَّرة حسب النوع (بطلب المستخدم) =====
+      // bypassDateCheck=true (من زر "تجاوز مرة واحدة") يتخطّى هذا الفحص
+      // تحديداً فقط — كل الحمايات الأخرى (المتاح/الحالة/المبالغ) تبقى فعّالة.
+      const kind = detectFileKind(rows);
+      const lastDate = getLastImportDate(kind);
+      if(!bypassDateCheck && lastDate !== null && file.lastModified <= lastDate){
+        rejected.push(
+          `⛔ "${file.name}" (${FILE_KIND_LABEL[kind]}، مؤرَّخ ${fmtFileDate(file.lastModified)}) — ` +
+          `أقدم من أو يساوي آخر ملف ${FILE_KIND_LABEL[kind]} مستورَد (${fmtFileDate(lastDate)}).`
+        );
+        rejectedFileObjs.push(file);
+        continue; // تخطّي هذا الملف تماماً — لا معالجة ولا دمج إطلاقاً
+      }
+
       const mergeStats = mergeRowsIntoRawData(rows);
       const masterStats = await saveMasterFromRows(rows);
       combined.added += mergeStats.added;
@@ -8006,6 +8057,11 @@ document.getElementById("updateBtn").onclick = async ()=>{
       }
       succeeded.push(file.name);
       addImportedFileFingerprint(fileFingerprint(file));
+      // نحدِّث "آخر تاريخ" لهذا النوع فقط بعد نجاح المعالجة فعلياً، ونحرص أن
+      // يكون الأحدث دوماً حتى مع ملفات دفعة واحدة بترتيب زمني غير مرتّب
+      if(lastDate === null || file.lastModified > lastDate){
+        setLastImportDate(kind, file.lastModified);
+      }
     }catch(err){
       failed.push(`${file.name} (${err.message || err})`);
       // نتابع بقية الملفات ولا نتوقف عند فشل ملف واحد
@@ -8049,21 +8105,37 @@ document.getElementById("updateBtn").onclick = async ()=>{
   if(combined.skippedDuplicateTxn) parts.push(`تجاهُل ${combined.skippedDuplicateTxn} مكرر`);
   if(combined.unchangedCount) parts.push(`${combined.unchangedCount} قضية بلا أي تعديل`);
   const mergeMsg = parts.length ? parts.join("، ") : "لا يوجد تعديلات — نفس البيانات المحفوظة مسبقاً بالضبط";
+  const rejectedSuffix = rejected.length ? ` ${rejected.join(" ")}` : "";
 
-  if(failed.length){
+  if(!succeeded.length && rejected.length && !failed.length){
+    // كل الملفات المختارة رُفضت (قديمة/مكرَّرة) — بلا أي نجاح أو فشل حقيقي
+    importStatusEl.className = "result-count import-error";
+    importStatusEl.textContent = rejected.join(" ");
+  } else if(failed.length){
     importStatusEl.className = "result-count import-error";
     importStatusEl.textContent =
       `تم استيراد ${succeeded.length} من ${totalFiles} ملفات بنجاح — ${mergeMsg} (إجمالي القضايا: ${uniqueCount}). ` +
-      `فشلت الملفات التالية: ${failed.join(" — ")}`;
+      `فشلت الملفات التالية: ${failed.join(" — ")}` + rejectedSuffix;
   } else {
-    importStatusEl.className = "result-count import-success";
-    importStatusEl.textContent = totalFiles === 1
+    importStatusEl.className = rejected.length ? "result-count import-error" : "result-count import-success";
+    importStatusEl.textContent = (totalFiles === 1
       ? `تم استيراد "${succeeded[0]}" — ${mergeMsg} (إجمالي القضايا الآن: ${uniqueCount}) — محفوظة في الملف الماستر`
-      : `تم استيراد ${totalFiles} ملفات بنجاح — ${mergeMsg} (إجمالي القضايا الآن: ${uniqueCount}) — محفوظة في الملف الماستر`;
+      : `تم استيراد ${succeeded.length} من ${totalFiles} ملفات بنجاح — ${mergeMsg} (إجمالي القضايا الآن: ${uniqueCount}) — محفوظة في الملف الماستر`)
+      + rejectedSuffix;
   }
 
-  pendingFiles = [];
-  document.getElementById("importFile").value = "";
+  // زر "🔓 تجاوز مرة واحدة" — يظهر فقط إذا وُجدت ملفات مرفوضة بهذه الدفعة،
+  // ويُخفى تلقائياً في أي حالة أخرى
+  _lastRejectedFileObjs = rejectedFileObjs;
+  const bypassBtn = document.getElementById("importBypassBtn");
+  if(rejectedFileObjs.length){
+    bypassBtn.style.display = "inline-flex";
+    bypassBtn.textContent = rejectedFileObjs.length === 1
+      ? "🔓 تجاوز مرة واحدة واستيراد هذا الملف على أي حال"
+      : `🔓 تجاوز مرة واحدة واستيراد ${rejectedFileObjs.length} ملفات على أي حال`;
+  } else {
+    bypassBtn.style.display = "none";
+  }
 
   // إظهار نافذة تعرض تفاصيل كل معاملة مالية جديدة اكتُشفت في هذا الاستيراد،
   // مرة واحدة فقط لكل استيراد — وتطير كحمامة عند الضغط على "تم"
@@ -8081,6 +8153,13 @@ document.getElementById("updateBtn").onclick = async ()=>{
     if(_cqIdx < conflictQueue.length){ const fn = conflictQueue[_cqIdx++]; fn(); }
   }
   next();
+}
+
+document.getElementById("importBypassBtn").onclick = async ()=>{
+  const files = _lastRejectedFileObjs;
+  if(!files.length) return;
+  document.getElementById("importBypassBtn").style.display = "none";
+  await runImportBatch(files, true);
 };
 
 buildChips();
