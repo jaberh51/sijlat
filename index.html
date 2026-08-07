@@ -1935,6 +1935,48 @@ if('serviceWorker' in navigator){
   </div>
 </div>
 
+<!-- نافذة "تعارض المتاح" — تظهر بعد استيراد يحتوي قضايا فيها "متاح" جديد
+     أعلى من المحفوظ عندنا؛ حماية من ملف قضايا متأخر يكتب فوق خصم صحيح
+     (راجع setManualAvailOverride لتطبيق التعديل يدوياً لكل قضية) -->
+<div id="availConflictModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;">
+  <div id="availConflictModalBox" style="background:var(--paper,#fff);border-radius:16px;padding:22px 20px;min-width:280px;max-width:460px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25);direction:rtl;font-family:'Tajawal',sans-serif;">
+    <div style="font-weight:700;font-size:16px;margin-bottom:4px;color:var(--rust,#8b3a3a);">⚠️ تعارض في "المتاح"</div>
+    <div id="availConflictModalCount" style="font-size:12.5px;color:var(--ink-soft,#777);margin-bottom:6px;"></div>
+    <div style="font-size:11.5px;color:var(--ink-soft,#777);margin-bottom:14px;line-height:1.6;">
+      قيمة "المتاح" الجديدة المستورَدة أعلى من القيمة المحفوظة عندنا لهذه القضايا — أبقينا الأقل أماناً تلقائياً بدل الاستبدال الصامت. لو الزيادة صحيحة فعلاً (مطالبة جديدة حقيقية)، اضغط "تطبيق" للقضية المعنية.
+    </div>
+    <div id="availConflictModalList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:10px;margin-bottom:16px;"></div>
+    <button id="availConflictModalOk" class="btn secondary" style="align-self:center;padding:9px 28px;">تم</button>
+  </div>
+</div>
+
+<!-- نافذة "تعارض الحالة" — قضية كانت "فصل" ورجعت "قيد التنفيذ" بملف مستورَد قديم -->
+<div id="statusConflictModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;">
+  <div id="statusConflictModalBox" style="background:var(--paper,#fff);border-radius:16px;padding:22px 20px;min-width:280px;max-width:460px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25);direction:rtl;font-family:'Tajawal',sans-serif;">
+    <div style="font-weight:700;font-size:16px;margin-bottom:4px;color:var(--rust,#8b3a3a);">⚠️ تعارض في حالة الدعوى</div>
+    <div id="statusConflictModalCount" style="font-size:12.5px;color:var(--ink-soft,#777);margin-bottom:6px;"></div>
+    <div style="font-size:11.5px;color:var(--ink-soft,#777);margin-bottom:14px;line-height:1.6;">
+      هذه القضايا كانت مسجَّلة "فصل" (منتهية) عندنا، لكن الملف المستورَد يقول إنها "قيد التنفيذ" — أبقيناها "فصل" تلقائياً بدل الرجوع الصامت. لو أُعيد فتحها فعلاً، اضغط "تطبيق" للقضية المعنية.
+    </div>
+    <div id="statusConflictModalList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:10px;margin-bottom:16px;"></div>
+    <button id="statusConflictModalOk" class="btn secondary" style="align-self:center;padding:9px 28px;">تم</button>
+  </div>
+</div>
+
+<!-- نافذة "تعارض المبالغ الإجمالية" — المطلوب/المحصّل نقصا، أو المتبقي زاد،
+     عن الملف المستورَد مقارنة بالمحفوظ عندنا (احتمال ملف قديم) -->
+<div id="fieldConflictModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;">
+  <div id="fieldConflictModalBox" style="background:var(--paper,#fff);border-radius:16px;padding:22px 20px;min-width:280px;max-width:460px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25);direction:rtl;font-family:'Tajawal',sans-serif;">
+    <div style="font-weight:700;font-size:16px;margin-bottom:4px;color:var(--rust,#8b3a3a);">⚠️ تعارض في مبالغ إجمالية</div>
+    <div id="fieldConflictModalCount" style="font-size:12.5px;color:var(--ink-soft,#777);margin-bottom:6px;"></div>
+    <div style="font-size:11.5px;color:var(--ink-soft,#777);margin-bottom:14px;line-height:1.6;">
+      القيمة المستورَدة لهذه القضايا تتراجع بشكل غير متوقَّع عن المحفوظة عندنا (نقصان بالمطلوب/المحصّل، أو زيادة بالمتبقي) — أبقينا القيمة الأكثر أماناً تلقائياً. لو الملف الجديد صحيح فعلاً، اضغط "تطبيق" للقضية المعنية.
+    </div>
+    <div id="fieldConflictModalList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:10px;margin-bottom:16px;"></div>
+    <button id="fieldConflictModalOk" class="btn secondary" style="align-self:center;padding:9px 28px;">تم</button>
+  </div>
+</div>
+
 <!-- إشعار الحمامة — يظهر عند تحوّل قضية من قيد التنفيذ إلى فصل -->
 <div id="doveNotification" class="dove-notification">
   <svg class="dove-svg" viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg">
@@ -4093,10 +4135,37 @@ async function bootstrapMasterCache(){
   }
 }
 
+// تُجمَّع هنا أي حالات "تعارض متاح" اكتُشفت أثناء آخر استدعاء لـ
+// saveMasterFromRows — قضايا استُبعِدت فيها قيمة "متاح" مستورَدة جديدة لأنها
+// أعلى من القيمة المحفوظة عندنا (نبقي الأقل أماناً بدل الاستبدال الصامت).
+// يقرأها معالج الاستيراد بعد الانتهاء ليعرضها للمستخدم لتأكيد يدوي.
+let _pendingAvailConflicts = [];
+// نفس الفكرة لكن لحالة الدعوى تحديداً — أخطر حالة: قضية كانت "فصل" (منتهية)
+// ورجعت "قيد التنفيذ" بسبب استيراد ملف قضايا قديم لم يتحدَّث بعد.
+let _pendingStatusConflicts = [];
+// نفس الفكرة لباقي الحقول المالية الإجمالية الثلاثة (المطلوب/المحصّل/المتبقي)
+let _pendingFieldConflicts = [];
+
+// دالة مساعدة عامة: تحمي أي حقل مالي إجمالي من "تراجع صامت" باتجاه معيّن.
+// direction="increase": نرفض القيمة الجديدة لو كانت أعلى من المحفوظة (مثل
+// المتاح والمتبقي — يُفترض أن يتناقصا فقط مع مرور الوقت وتحصيل الرديات).
+// direction="decrease": نرفضها لو كانت أقل من المحفوظة (مثل المطلوب
+// والمحصّل — لا يُفترض أن يتناقصا أبداً؛ نقصانهما غالباً يعني ملفاً قديماً).
+function guardAggregateField(newRaw, existingRaw, direction){
+  const value = newRaw || existingRaw;
+  if(newRaw === "") return {value, isConflict:false, newNum:null, oldNum:null};
+  const newNum = parseNum(newRaw);
+  const oldNum = parseNum(existingRaw);
+  if(newNum === null || oldNum === null) return {value, isConflict:false, newNum, oldNum};
+  const isConflict = direction === "increase" ? (newNum > oldNum + 0.01) : (newNum < oldNum - 0.01);
+  return {value: isConflict ? existingRaw : value, isConflict, newNum, oldNum};
+}
+
 async function saveMasterFromRows(rows){
   const master = await getMaster();
   invalidateMasterCaseNoIndex(); // نضمن أن الفهرس الاحتياطي أدناه يعكس حالة الماستر الحالية بالضبط
   const touchedKeys = [];
+  let unchangedCount = 0; // بطلب المستخدم: قضايا لم يتغيّر فيها أي شيء فعلياً عن آخر مرة
   rows.forEach(r=>{
     const key = caseKey(r);
     if(!key) return;
@@ -4110,13 +4179,82 @@ async function saveMasterFromRows(rows){
       plaintiffs = parsed.plaintiffs;
       defendants = parsed.defendants;
     }
-    const status = (r["حالة الدعوى"] && String(r["حالة الدعوى"]).trim()) || existing["الحالة"] || "";
+    const importedStatus = (r["حالة الدعوى"] && String(r["حالة الدعوى"]).trim()) || "";
+    let status = importedStatus || existing["الحالة"] || "";
+    // حماية من تراجع مشبوه: قضية كانت "فصل" (منتهية) ورجعت "قيد التنفيذ" —
+    // غالباً بسبب استيراد ملف قضايا قديم لم يتحدَّث بعد عند جهة المحكمة.
+    // نُبقي حالتها "فصل" مؤقتاً، ونعرض التعارض للمراجعة اليدوية بعد الاستيراد.
+    if(importedStatus && importedStatus !== existing["الحالة"] &&
+       existing["الحالة"] === "فصل" && importedStatus === "قيد التنفيذ"){
+      status = "فصل";
+      _pendingStatusConflicts.push({
+        key,
+        caseNo: shortCaseNo(r["رقم الدعوى"]),
+        defendant: getDefendantForRow(r),
+        oldStatus: existing["الحالة"],
+        newStatus: importedStatus
+      });
+    }
     const court = (r["المحكمة"] && String(r["المحكمة"]).trim()) || existing["المحكمة"] || "";
     const date = (r["تاريخ ورود الدعوى"] && String(r["تاريخ ورود الدعوى"]).trim()) || existing["تاريخ الورود"] || "";
-    const totalRequested = (r["مجموع المبالغ المطلوبة"] && String(r["مجموع المبالغ المطلوبة"]).trim()) || existing["مجموع المبالغ المطلوبة"] || "";
-    const totalCollected = (r["مجموع المبالغ المقبوضة فعليا"] && String(r["مجموع المبالغ المقبوضة فعليا"]).trim()) || existing["مجموع المبالغ المقبوضة فعليا"] || "";
-    const totalRemaining = (r["مجموع المبالغ المتبقية"] && String(r["مجموع المبالغ المتبقية"]).trim()) || existing["مجموع المبالغ المتبقية"] || "";
-    const totalAvailable = (r["مجموع المبالغ المتاحة للقبض"] && String(r["مجموع المبالغ المتاحة للقبض"]).trim()) || existing["مجموع المبالغ المتاحة للقبض"] || "";
+
+    // ===== حماية المبالغ الإجمالية الثلاثة من "تراجع صامت" =====
+    // المطلوب والمحصّل لا يُفترض أن يتناقصا أبداً عبر الزمن (نقصانهما يعني
+    // غالباً ملف "قضايا" قديماً يكتب فوق رقم صحيح وأحدث). المتبقي (الخام،
+    // يُستخدَم فقط عند عدم وجود معاملات حقيقية مسجَّلة) بنفس منطق "المتاح" —
+    // يُفترض أن يتناقص فقط، فأي زيادة مشبوهة.
+    const guardedRequested = guardAggregateField(
+      (r["مجموع المبالغ المطلوبة"] && String(r["مجموع المبالغ المطلوبة"]).trim()) || "",
+      existing["مجموع المبالغ المطلوبة"] || "", "decrease");
+    const guardedCollected = guardAggregateField(
+      (r["مجموع المبالغ المقبوضة فعليا"] && String(r["مجموع المبالغ المقبوضة فعليا"]).trim()) || "",
+      existing["مجموع المبالغ المقبوضة فعليا"] || "", "decrease");
+    const guardedRemaining = guardAggregateField(
+      (r["مجموع المبالغ المتبقية"] && String(r["مجموع المبالغ المتبقية"]).trim()) || "",
+      existing["مجموع المبالغ المتبقية"] || "", "increase");
+    const totalRequested = guardedRequested.value;
+    const totalCollected = guardedCollected.value;
+    const totalRemaining = guardedRemaining.value;
+    [
+      ["مجموع المبالغ المطلوبة", guardedRequested],
+      ["مجموع المبالغ المقبوضة فعليا", guardedCollected],
+      ["مجموع المبالغ المتبقية", guardedRemaining]
+    ].forEach(([label, g])=>{
+      if(g.isConflict){
+        _pendingFieldConflicts.push({
+          key, caseNo: shortCaseNo(r["رقم الدعوى"]), defendant: getDefendantForRow(r),
+          field: label, oldVal: g.oldNum, newVal: g.newNum
+        });
+      }
+    });
+
+    // ===== حماية من "تراجع صامت" في المتاح =====
+    // "المتاح" يُفترض أن ينخفض فقط (مع تحصيل الرديات) أو يبقى كما هو — لا يزيد
+    // إلا بمبلغ مطالبة جديدة حقيقية. المشكلة السابقة: استيراد ملف "قضايا"
+    // متأخر (لم يتحدَّث بعد عند جهة المحكمة) كان يكتب فوق قيمة "متاح" صحيحة
+    // ومخفَّضة فعلياً (بفضل خصم تلقائي من رديّة محصَّلة لاحقاً) برقم قديم أعلى،
+    // بلا أي تنبيه — فتظهر القضية وكأن عليها مبلغ متاح لم يعد موجوداً فعلياً.
+    // الآن: أي زيادة في "المتاح" المستورَد عن القيمة المحفوظة تُرفَض تلقائياً
+    // (نُبقي الأقل أماناً)، وتُسجَّل كـ"تعارض" يُعرَض على المستخدم بعد الاستيراد
+    // ليقرر بنفسه إن كانت هذه الزيادة فعلاً مطالبة جديدة حقيقية أم لا.
+    const newAvailRaw = (r["مجموع المبالغ المتاحة للقبض"] && String(r["مجموع المبالغ المتاحة للقبض"]).trim()) || "";
+    const existingAvailRaw = existing["مجموع المبالغ المتاحة للقبض"] || "";
+    let totalAvailable = newAvailRaw || existingAvailRaw;
+    if(newAvailRaw !== ""){
+      const newNum = parseNum(newAvailRaw);
+      const existingNum = parseNum(existingAvailRaw);
+      if(newNum !== null && existingNum !== null && newNum > existingNum + 0.01){
+        totalAvailable = existingAvailRaw; // نبقي القيمة الأقل (الأكثر أماناً) مؤقتاً
+        _pendingAvailConflicts.push({
+          key,
+          caseNo: shortCaseNo(r["رقم الدعوى"]),
+          defendant: getDefendantForRow(r),
+          oldAvail: existingNum,
+          newAvail: newNum
+        });
+      }
+    }
+
     const record = {
       "رقم القضية": shortCaseNo(r["رقم الدعوى"]),
       "المدعون": plaintiffs,
@@ -4195,6 +4333,25 @@ async function saveMasterFromRows(rows){
       if(record[field] === undefined) record[field] = existing[field];
     });
 
+    // ===== اقتراح المستخدم: "قارن الأعمدة ذهنياً، ولو نفس القديم لا يوجد
+    // تعديلات" — نقارن كل الحقول المعروضة فعلياً (الحالة/المحكمة/تاريخ
+    // الورود/المبالغ الإجمالية الأربعة/عدد المعاملات) بين المستورَد الجديد
+    // والمحفوظ سابقاً؛ لو كلها متطابقة تماماً، هذه القضية "بلا أي تعديل"
+    // فعلي رغم مرورها بكل خطوات الاستيراد أعلاه.
+    const wasExisting = Object.keys(existing).length > 0;
+    if(wasExisting){
+      const unchanged =
+        (existing["الحالة"]||"") === record["الحالة"] &&
+        (existing["المحكمة"]||"") === record["المحكمة"] &&
+        (existing["تاريخ الورود"]||"") === record["تاريخ الورود"] &&
+        (existing["مجموع المبالغ المطلوبة"]||"") === record["مجموع المبالغ المطلوبة"] &&
+        (existing["مجموع المبالغ المقبوضة فعليا"]||"") === record["مجموع المبالغ المقبوضة فعليا"] &&
+        (existing["مجموع المبالغ المتبقية"]||"") === record["مجموع المبالغ المتبقية"] &&
+        (existing["مجموع المبالغ المتاحة للقبض"]||"") === record["مجموع المبالغ المتاحة للقبض"] &&
+        (existing["معاملات مالية"]||[]).length === record["معاملات مالية"].length;
+      if(unchanged) unchangedCount++;
+    }
+
     master[key] = record;
   });
   masterCache = master; // نفس المرجع أصلاً بعد التعديل الجديد على getMaster، لكن نُصرِّح صراحةً لمزيد من الوضوح
@@ -4206,7 +4363,7 @@ async function saveMasterFromRows(rows){
   }catch(e){
     return null;
   }
-  return Object.keys(master).length;
+  return {masterCount: Object.keys(master).length, touchedCount: touchedKeys.length, unchangedCount};
 }
 
 async function refreshMasterBadge(){
@@ -7432,10 +7589,28 @@ function mergeRowsIntoRawData(newRows){
       let changed = false;
       nonFinFields.forEach(field=>{
         const val = nr[field];
-        if(val !== undefined && String(val).trim() !== "" && existingRow[field] !== val){
-          existingRow[field] = val;
-          changed = true;
+        if(val === undefined || String(val).trim() === "" || existingRow[field] === val) return;
+        // نفس حماية saveMasterFromRows: لا نرجّع حالة "فصل" لـ"قيد التنفيذ"
+        // صامتاً من ملف قديم — القرار النهائي محفوظ فعلاً بالماستر (المستخدم
+        // يراجعه هناك عبر نافذة التعارض)؛ هنا فقط نُبقي RAW_DATA (المعروض
+        // فوراً بلا إعادة تحميل) متوافقاً مع نفس القرار الآمن.
+        if(field === "حالة الدعوى" && existingRow[field] === "فصل" && val === "قيد التنفيذ") return;
+        // نفس الحماية لباقي المبالغ الإجمالية الثلاثة — القرار النهائي محفوظ
+        // فعلاً بالماستر (نافذة التعارض)؛ هنا فقط نُبقي RAW_DATA متوافقاً معه.
+        if(field === "مجموع المبالغ المطلوبة" || field === "مجموع المبالغ المقبوضة فعليا"){
+          const newNum = parseNum(val), oldNum = parseNum(existingRow[field]);
+          if(newNum !== null && oldNum !== null && newNum < oldNum - 0.01) return; // نقصان مشبوه
         }
+        if(field === "مجموع المبالغ المتبقية"){
+          const newNum = parseNum(val), oldNum = parseNum(existingRow[field]);
+          if(newNum !== null && oldNum !== null && newNum > oldNum + 0.01) return; // زيادة مشبوهة
+        }
+        if(field === "مجموع المبالغ المتاحة للقبض"){
+          const newNum = parseNum(val), oldNum = parseNum(existingRow[field]);
+          if(newNum !== null && oldNum !== null && newNum > oldNum + 0.01) return; // زيادة مشبوهة (نفس منطق "المتاح" بالماستر)
+        }
+        existingRow[field] = val;
+        changed = true;
       });
       if(changed) updated++;
     }
@@ -7800,9 +7975,12 @@ document.getElementById("updateBtn").onclick = async ()=>{
 
   importStatusEl.className = "result-count";
   const totalFiles = pendingFiles.length;
-  const combined = {added:0, updated:0, addedTxn:0, skippedDuplicateTxn:0, newTxnDetails:[]};
+  const combined = {added:0, updated:0, addedTxn:0, skippedDuplicateTxn:0, newTxnDetails:[], unchangedCount:0, touchedCount:0};
   const succeeded = [];
   const failed = [];
+  _pendingAvailConflicts = []; // إعادة ضبط قبل بدء هذه الدفعة من الاستيراد
+  _pendingStatusConflicts = [];
+  _pendingFieldConflicts = [];
 
   // نسخة احتياطية تلقائية صامتة قبل أي استيراد — حماية إضافية: لو حدث خطأ
   // غير متوقّع أثناء الدمج، تبقى نقطة رجوع كاملة لحالة ما قبل الاستيراد.
@@ -7816,12 +7994,16 @@ document.getElementById("updateBtn").onclick = async ()=>{
     try{
       const rows = await readExcelFileAsRows(file);
       const mergeStats = mergeRowsIntoRawData(rows);
-      await saveMasterFromRows(rows);
+      const masterStats = await saveMasterFromRows(rows);
       combined.added += mergeStats.added;
       combined.updated += mergeStats.updated;
       combined.addedTxn += mergeStats.addedTxn;
       combined.newTxnDetails.push(...mergeStats.newTxnDetails);
       combined.skippedDuplicateTxn += mergeStats.skippedDuplicateTxn;
+      if(masterStats){
+        combined.unchangedCount += masterStats.unchangedCount;
+        combined.touchedCount += masterStats.touchedCount;
+      }
       succeeded.push(file.name);
       addImportedFileFingerprint(fileFingerprint(file));
     }catch(err){
@@ -7865,7 +8047,8 @@ document.getElementById("updateBtn").onclick = async ()=>{
   if(combined.updated) parts.push(`تحديث ${combined.updated} قضية`);
   if(combined.addedTxn) parts.push(`${combined.addedTxn} عملية مالية جديدة`);
   if(combined.skippedDuplicateTxn) parts.push(`تجاهُل ${combined.skippedDuplicateTxn} مكرر`);
-  const mergeMsg = parts.length ? parts.join("، ") : "لا جديد (كل السجلات موجودة مسبقاً)";
+  if(combined.unchangedCount) parts.push(`${combined.unchangedCount} قضية بلا أي تعديل`);
+  const mergeMsg = parts.length ? parts.join("، ") : "لا يوجد تعديلات — نفس البيانات المحفوظة مسبقاً بالضبط";
 
   if(failed.length){
     importStatusEl.className = "result-count import-error";
@@ -7887,6 +8070,17 @@ document.getElementById("updateBtn").onclick = async ()=>{
   if(combined.newTxnDetails.length){
     showNewTxnModal(combined.newTxnDetails);
   }
+  // نوافذ التعارض (متاح/حالة/مبالغ إجمالية) — تُعرَض بالتتابع (مو بنفس الوقت)
+  // لتفادي تراكب أكثر من نافذة معاً على الشاشة
+  const conflictQueue = [];
+  if(_pendingAvailConflicts.length) conflictQueue.push(()=> showAvailConflictModal(_pendingAvailConflicts, next));
+  if(_pendingStatusConflicts.length) conflictQueue.push(()=> showStatusConflictModal(_pendingStatusConflicts, next));
+  if(_pendingFieldConflicts.length) conflictQueue.push(()=> showFieldConflictModal(_pendingFieldConflicts, next));
+  let _cqIdx = 0;
+  function next(){
+    if(_cqIdx < conflictQueue.length){ const fn = conflictQueue[_cqIdx++]; fn(); }
+  }
+  next();
 };
 
 buildChips();
@@ -7931,6 +8125,161 @@ function showNewTxnModal(details){
       box.classList.remove("flying");
     }, 700);
   };
+}
+
+// نافذة تعارض "المتاح" — تعرض كل قضية رُفضت فيها قيمة مستورَدة أعلى من
+// المحفوظة، مع زر "تطبيق" لكل قضية على حدة إن كانت الزيادة صحيحة فعلاً
+// (يستخدم نفس آلية التعديل اليدوي المعتمدة أصلاً — setManualAvailOverride).
+function showAvailConflictModal(conflicts, onClose){
+  const modal = document.getElementById("availConflictModal");
+  const countEl = document.getElementById("availConflictModalCount");
+  const listEl = document.getElementById("availConflictModalList");
+  const okBtn = document.getElementById("availConflictModalOk");
+  const fmt2 = (n)=> n.toLocaleString('ar',{minimumFractionDigits:2, maximumFractionDigits:2});
+
+  countEl.textContent = `${conflicts.length} قضية بحاجة لمراجعة يدوية`;
+  listEl.innerHTML = conflicts.map((c,i) => `
+    <div class="avail-conflict-item" data-idx="${i}" style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;">
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px;">${escapeAttr(c.caseNo)} — ${escapeAttr(c.defendant)}</div>
+      <div style="font-size:12px;color:var(--ink-soft);margin-bottom:8px;">
+        المحفوظ حالياً: <strong>${fmt2(c.oldAvail)}</strong> ← المستورَد الجديد: <strong style="color:var(--rust);">${fmt2(c.newAvail)}</strong>
+      </div>
+      <button class="btn secondary avail-conflict-apply-btn" data-idx="${i}" style="font-size:11.5px;padding:5px 12px;">✓ تطبيق القيمة الجديدة (مطالبة حقيقية)</button>
+    </div>
+  `).join("");
+
+  modal.style.display = "flex";
+
+  listEl.querySelectorAll(".avail-conflict-apply-btn").forEach(btn=>{
+    btn.onclick = async ()=>{
+      const idx = parseInt(btn.dataset.idx, 10);
+      const c = conflicts[idx];
+      btn.disabled = true;
+      btn.textContent = "جارٍ التطبيق...";
+      try{
+        await setManualAvailOverride(c.key, c.newAvail);
+        casesAllRows = getCasesRows();
+        applyCasesFilter(true);
+        if(typeof render === "function") render();
+        btn.textContent = "✓ تم التطبيق";
+        btn.closest(".avail-conflict-item").style.opacity = "0.55";
+      }catch(e){
+        btn.disabled = false;
+        btn.textContent = "✓ تطبيق القيمة الجديدة (مطالبة حقيقية)";
+        showToast("⚠️ فشل التطبيق — " + (e.message || e), "warn");
+      }
+    };
+  });
+
+  okBtn.onclick = ()=>{ modal.style.display = "none"; if(typeof onClose === "function") onClose(); };
+}
+
+// نافذة تعارض "الحالة" — قضية كانت "فصل" (منتهية) ورجعت "قيد التنفيذ" بملف
+// مستورَد. لكل قضية زر "تطبيق" يحوّلها فعلياً لـ"قيد التنفيذ" إن كان هذا
+// صحيحاً (مثلاً القضية أُعيد فتحها فعلاً)، وإلا تبقى محمية على "فصل".
+function showStatusConflictModal(conflicts, onClose){
+  const modal = document.getElementById("statusConflictModal");
+  const countEl = document.getElementById("statusConflictModalCount");
+  const listEl = document.getElementById("statusConflictModalList");
+  const okBtn = document.getElementById("statusConflictModalOk");
+
+  countEl.textContent = `${conflicts.length} قضية بحاجة لمراجعة يدوية`;
+  listEl.innerHTML = conflicts.map((c,i) => `
+    <div class="status-conflict-item" data-idx="${i}" style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;">
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px;">${escapeAttr(c.caseNo)} — ${escapeAttr(c.defendant)}</div>
+      <div style="font-size:12px;color:var(--ink-soft);margin-bottom:8px;">
+        الحالة المحفوظة: <strong class="status-فصل" style="padding:2px 8px;border-radius:6px;">فصل</strong>
+        ← المستورَدة بالملف: <strong style="padding:2px 8px;border-radius:6px;background:var(--brass-soft);color:var(--brass);">قيد التنفيذ</strong>
+      </div>
+      <button class="btn secondary status-conflict-apply-btn" data-idx="${i}" style="font-size:11.5px;padding:5px 12px;">✓ فعلاً أُعيد فتحها — تطبيق التحديث</button>
+    </div>
+  `).join("");
+
+  modal.style.display = "flex";
+
+  listEl.querySelectorAll(".status-conflict-apply-btn").forEach(btn=>{
+    btn.onclick = async ()=>{
+      const idx = parseInt(btn.dataset.idx, 10);
+      const c = conflicts[idx];
+      btn.disabled = true;
+      btn.textContent = "جارٍ التطبيق...";
+      try{
+        const master = masterCache;
+        if(!master[c.key]) master[c.key] = {};
+        master[c.key]["الحالة"] = c.newStatus;
+        await saveMaster([c.key]);
+        masterCache = master;
+        // تحديث الصف المعروض حالياً في RAW_DATA أيضاً (بلا إعادة تحميل) —
+        // وإلا يبقى الجدول يعرض "فصل" رغم أن الماستر تحدَّث فعلاً لـ"قيد التنفيذ"
+        const liveRow = getRowByKey(c.key);
+        if(liveRow) liveRow["حالة الدعوى"] = c.newStatus;
+        casesAllRows = getCasesRows();
+        applyCasesFilter(true);
+        if(typeof render === "function") render();
+        btn.textContent = "✓ تم التطبيق";
+        btn.closest(".status-conflict-item").style.opacity = "0.55";
+      }catch(e){
+        btn.disabled = false;
+        btn.textContent = "✓ فعلاً أُعيد فتحها — تطبيق التحديث";
+        showToast("⚠️ فشل التطبيق — " + (e.message || e), "warn");
+      }
+    };
+  });
+
+  okBtn.onclick = ()=>{ modal.style.display = "none"; if(typeof onClose === "function") onClose(); };
+}
+
+// نافذة تعارض موحَّدة للمبالغ الإجمالية الثلاثة (المطلوب/المحصّل/المتبقي) —
+// كل عنصر يحمل اسم الحقل المتعارض عليه؛ زر "تطبيق" يكتب القيمة الجديدة
+// مباشرة في نفس الحقل بالماستر (والصف المعروض حالياً في RAW_DATA أيضاً).
+function showFieldConflictModal(conflicts, onClose){
+  const modal = document.getElementById("fieldConflictModal");
+  const countEl = document.getElementById("fieldConflictModalCount");
+  const listEl = document.getElementById("fieldConflictModalList");
+  const okBtn = document.getElementById("fieldConflictModalOk");
+  const fmt2 = (n)=> n.toLocaleString('ar',{minimumFractionDigits:2, maximumFractionDigits:2});
+
+  countEl.textContent = `${conflicts.length} قضية بحاجة لمراجعة يدوية`;
+  listEl.innerHTML = conflicts.map((c,i) => `
+    <div class="field-conflict-item" data-idx="${i}" style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;">
+      <div style="font-weight:700;font-size:13px;margin-bottom:4px;">${escapeAttr(c.caseNo)} — ${escapeAttr(c.defendant)}</div>
+      <div style="font-size:12px;color:var(--ink-soft);margin-bottom:8px;">
+        ${escapeAttr(c.field)}: <strong>${fmt2(c.oldVal)}</strong> ← المستورَد الجديد: <strong style="color:var(--rust);">${fmt2(c.newVal)}</strong>
+      </div>
+      <button class="btn secondary field-conflict-apply-btn" data-idx="${i}" style="font-size:11.5px;padding:5px 12px;">✓ تطبيق القيمة الجديدة (صحيحة فعلاً)</button>
+    </div>
+  `).join("");
+
+  modal.style.display = "flex";
+
+  listEl.querySelectorAll(".field-conflict-apply-btn").forEach(btn=>{
+    btn.onclick = async ()=>{
+      const idx = parseInt(btn.dataset.idx, 10);
+      const c = conflicts[idx];
+      btn.disabled = true;
+      btn.textContent = "جارٍ التطبيق...";
+      try{
+        const master = masterCache;
+        if(!master[c.key]) master[c.key] = {};
+        master[c.key][c.field] = String(c.newVal);
+        await saveMaster([c.key]);
+        masterCache = master;
+        const liveRow = getRowByKey(c.key);
+        if(liveRow) liveRow[c.field] = String(c.newVal);
+        casesAllRows = getCasesRows();
+        applyCasesFilter(true);
+        if(typeof render === "function") render();
+        btn.textContent = "✓ تم التطبيق";
+        btn.closest(".field-conflict-item").style.opacity = "0.55";
+      }catch(e){
+        btn.disabled = false;
+        btn.textContent = "✓ تطبيق القيمة الجديدة (صحيحة فعلاً)";
+        showToast("⚠️ فشل التطبيق — " + (e.message || e), "warn");
+      }
+    };
+  });
+
+  okBtn.onclick = ()=>{ modal.style.display = "none"; if(typeof onClose === "function") onClose(); };
 }
 
 
