@@ -5477,7 +5477,20 @@ const DEFAULT_APP_SETTINGS = {
   strictDeadlineWarningDays: 14,
   defaultGroupsFolded: true,
   defaultHideThirdSegment: false,
-  adminEmail: "" // فارغ = لا تقييد بعد (لن يُحظَر أحد قبل تحديده صراحةً)
+  adminEmail: "", // فارغ = لا تقييد بعد (لن يُحظَر أحد قبل تحديده صراحةً)
+  // آخر تاريخ/وقت (lastModified) لملف استيراد ناجح، لكل نوع على حدة —
+  // مزامَن عبر Firebase (وليس محلياً فقط) حتى لا يفقد المرجع عند تبديل
+  // الجهاز أو مسح بيانات المتصفح (راجع runImportBatch لاستخدامها).
+  lastImportDateCases: null,
+  lastImportDateRemittances: null,
+  // ===== باقي القيم المتزامَنة (بطلب المستخدم — "اعملها كلها") =====
+  importedFileFingerprints: null, // منع استيراد نفس الملف مرتين، عبر كل الأجهزة
+  casesLastAvail: null,           // آخر "متاح" معروف لكل قضية — أساس اكتشاف الزيادات
+  casesRecentIncrease: null,      // القضايا اللي "متاحها" زاد حديثاً (تمييز + تقديم لأعلى القائمة)
+  lwFoldedCases: null,            // مجموعات مطوية بصفحة متابعة المحامي
+  lwUnfoldedCustomGroups: null,   // مجموعات مخصَّصة مفرودة يدوياً
+  lwZeroSectionUnfolded: null,    // حالة طي/فرد قسم "صفرية"
+  doveNotifiedClosureKeys: null   // قضايا سبق إشعارها بـ"🕊️ انتهت" — لمنع التكرار
 };
 let appSettings = {...DEFAULT_APP_SETTINGS};
 
@@ -5930,11 +5943,13 @@ function renderPinnedCasesPanel(){
 }
 
 function getFoldedCasesSet(){
+  if(appSettings.lwFoldedCases) return new Set(appSettings.lwFoldedCases);
   try{ return new Set(JSON.parse(localStorage.getItem('lw_folded_cases') || '[]')); }
   catch(e){ return new Set(); }
 }
-function saveFoldedCasesSet(set){
+async function saveFoldedCasesSet(set){
   try{ localStorage.setItem('lw_folded_cases', JSON.stringify([...set])); }catch(e){}
+  await saveAppSettingField('lwFoldedCases', [...set]);
 }
 function toggleCaseFolded(key){
   const set = getFoldedCasesSet();
@@ -5946,13 +5961,15 @@ function toggleCaseFolded(key){
 // نُخزِّن أسماء المجموعات "المفتوحة يدوياً" فقط (بدل "المطوية") — بهذا
 // تكون الحالة الافتراضية لأي مجموعة (جديدة أو لم تُفتَح من قبل) = مطوية دائماً.
 function getUnfoldedCustomGroupsSet(){
+  if(appSettings.lwUnfoldedCustomGroups) return new Set(appSettings.lwUnfoldedCustomGroups);
   try{ return new Set(JSON.parse(localStorage.getItem('lw_unfolded_custom_groups') || '[]')); }
   catch(e){ return new Set(); }
 }
-function toggleCustomGroupFolded(groupName){
+async function toggleCustomGroupFolded(groupName){
   const set = getUnfoldedCustomGroupsSet();
   if(set.has(groupName)) set.delete(groupName); else set.add(groupName);
   try{ localStorage.setItem('lw_unfolded_custom_groups', JSON.stringify([...set])); }catch(e){}
+  await saveAppSettingField('lwUnfoldedCustomGroups', [...set]);
 }
 
 // استخراج كل أسماء المجموعات المخصَّصة الموجودة فعلياً حالياً (بلا تكرار)،
@@ -6067,6 +6084,7 @@ async function renameCustomGroup(oldName){
     unfoldedSet.delete(oldName);
     unfoldedSet.add(finalName);
     try{ localStorage.setItem('lw_unfolded_custom_groups', JSON.stringify([...unfoldedSet])); }catch(e){}
+    await saveAppSettingField('lwUnfoldedCustomGroups', [...unfoldedSet]);
   }
   showToast(`✓ أُعيدت تسمية المجموعة إلى "${finalName}"`, "ok");
   renderLwActionsBox();
@@ -6479,9 +6497,12 @@ function renderLwActionsBox(){
   // قسم القضايا الصفرية يظهر دائماً في الأسفل (أولوية أقل بصرياً) — قابل للطي
   // — مطوي افتراضياً أيضاً، إلا إن فتحه المستخدم صراحةً
   if(zeroItems.length){
+    const zeroUnfoldedVal = appSettings.lwZeroSectionUnfolded !== null && appSettings.lwZeroSectionUnfolded !== undefined
+      ? (appSettings.lwZeroSectionUnfolded ? '1' : '0')
+      : localStorage.getItem('lw_zero_section_unfolded');
     const isZeroSectionFolded = appSettings.defaultGroupsFolded
-      ? localStorage.getItem('lw_zero_section_unfolded') !== '1'
-      : localStorage.getItem('lw_zero_section_unfolded') === '1';
+      ? zeroUnfoldedVal !== '1'
+      : zeroUnfoldedVal === '1';
     const zAttr = 'data-zerosection="1"';
     html += `
       <div class="lw-zero-section-header" id="lwZeroSectionHeader">
@@ -6560,7 +6581,9 @@ function renderLwActionsBox(){
     const zeroSectionHeader = e.target.closest("#lwZeroSectionHeader");
     if(zeroSectionHeader){
       const isUnfolded = localStorage.getItem('lw_zero_section_unfolded') === '1';
-      localStorage.setItem('lw_zero_section_unfolded', isUnfolded ? '0' : '1');
+      const newVal = !isUnfolded;
+      localStorage.setItem('lw_zero_section_unfolded', newVal ? '1' : '0');
+      saveAppSettingField('lwZeroSectionUnfolded', newVal); // fire-and-forget
       renderLwActionsBox();
       return;
     }
@@ -7751,20 +7774,26 @@ function fileFingerprint(f){
   return `${f.name}|${f.size}|${f.lastModified}`;
 }
 function getImportedFileFingerprints(){
+  // Firebase أولاً (متزامن عبر كل الأجهزة)، وإلا احتياطي محلي فوري
+  if(appSettings.importedFileFingerprints) return new Set(appSettings.importedFileFingerprints);
   try{ return new Set(JSON.parse(localStorage.getItem('_importedFileFingerprints') || '[]')); }
   catch(e){ return new Set(); }
 }
-function addImportedFileFingerprint(fp){
+async function addImportedFileFingerprint(fp){
   const set = getImportedFileFingerprints();
   set.add(fp);
   const arr = [...set].slice(-300); // الاحتفاظ بآخر 300 بصمة فقط لتفادي تضخم التخزين
   try{ localStorage.setItem('_importedFileFingerprints', JSON.stringify(arr)); }catch(e){}
+  await saveAppSettingField('importedFileFingerprints', arr);
 }
 
 // ===== رفض صارم للملفات الأقدم من آخر ملف من نفس نوعها (بطلب المستخدم) =====
 // نوع الملف يُحدَّد من محتواه (بالأغلبية — أكثر من نصف صفوفه فيها بيانات
 // مالية = "رديات"، وإلا "قضايا")، لا من اسمه. لكل نوع تاريخ منفصل تماماً
-// (آخر lastModified نجح استيراده)، محفوظ بشكل دائم على الجهاز.
+// (آخر lastModified نجح استيراده) — مزامَن عبر Firebase (appSettings) وليس
+// محلياً فقط، فيبقى موجوداً حتى لو بدَّلت جهازاً أو مسحت بيانات المتصفح.
+// localStorage يبقى نسخة احتياطية فورية (offline-first) تُستخدَم فقط لو
+// appSettings لم يكتمل تحميله بعد من Firebase.
 // هامش سماح 10 دقائق: يتيح رفع عدة ملفات بدفعة واحدة (مثل ملفي جابر وحنين)
 // حتى لو وصل ترتيب معالجتها الفعلي بفارق بسيط بينها، بلا رفض غير مبرَّر.
 function detectFileKind(rows){
@@ -7772,11 +7801,15 @@ function detectFileKind(rows){
   return finCount > rows.length / 2 ? "remittances" : "cases";
 }
 function getLastImportDate(kind){
-  const v = localStorage.getItem('_lastImportDate_' + kind);
+  const settingsKey = kind === "remittances" ? "lastImportDateRemittances" : "lastImportDateCases";
+  if(appSettings[settingsKey] !== null && appSettings[settingsKey] !== undefined) return appSettings[settingsKey];
+  const v = localStorage.getItem('_lastImportDate_' + kind); // احتياطي محلي فوري
   return v ? parseInt(v, 10) : null;
 }
-function setLastImportDate(kind, ms){
-  try{ localStorage.setItem('_lastImportDate_' + kind, String(ms)); }catch(e){}
+async function setLastImportDate(kind, ms){
+  const settingsKey = kind === "remittances" ? "lastImportDateRemittances" : "lastImportDateCases";
+  try{ localStorage.setItem('_lastImportDate_' + kind, String(ms)); }catch(e){} // فوري محلياً
+  await saveAppSettingField(settingsKey, ms); // ثم مزامنة عبر Firebase لكل الأجهزة
 }
 const FILE_KIND_LABEL = {cases: "قضايا", remittances: "رديات"};
 const IMPORT_DATE_GRACE_MS = 10 * 60 * 1000; // 10 دقائق
@@ -8048,11 +8081,11 @@ async function runImportBatch(filesToImport){
         combined.touchedCount += masterStats.touchedCount;
       }
       succeeded.push(file.name);
-      addImportedFileFingerprint(fileFingerprint(file));
+      await addImportedFileFingerprint(fileFingerprint(file));
       // نحدِّث "آخر تاريخ" لهذا النوع فقط للأمام — لا يرجع للخلف أبداً حتى لو
       // كان ترتيب معالجة ملفات نفس الدفعة عشوائياً
       if(lastDate === null || file.lastModified > lastDate){
-        setLastImportDate(kind, file.lastModified);
+        await setLastImportDate(kind, file.lastModified);
       }
     }catch(err){
       failed.push(`${file.name} (${err.message || err})`);
@@ -8632,16 +8665,21 @@ let casesAllRows = [];
 const CASES_INCREASE_HIGHLIGHT_MS = 24 * 60 * 60 * 1000; // 24 ساعة
 
 function getLastKnownAvailMap(){
+  // Firebase أولاً (متزامن عبر كل الأجهزة)، وإلا احتياطي محلي فوري
+  if(appSettings.casesLastAvail) return {...appSettings.casesLastAvail};
   try{ return JSON.parse(localStorage.getItem('cases_last_avail') || '{}'); }catch(e){ return {}; }
 }
-function saveLastKnownAvailMap(map){
+async function saveLastKnownAvailMap(map){
   try{ localStorage.setItem('cases_last_avail', JSON.stringify(map)); }catch(e){}
+  await saveAppSettingField('casesLastAvail', map);
 }
 function getRecentIncreaseMap(){
+  if(appSettings.casesRecentIncrease) return {...appSettings.casesRecentIncrease};
   try{ return JSON.parse(localStorage.getItem('cases_recent_increase') || '{}'); }catch(e){ return {}; }
 }
-function saveRecentIncreaseMap(map){
+async function saveRecentIncreaseMap(map){
   try{ localStorage.setItem('cases_recent_increase', JSON.stringify(map)); }catch(e){}
+  await saveAppSettingField('casesRecentIncrease', map);
 }
 let _recentIncreaseMap = getRecentIncreaseMap(); // key -> وقت الاكتشاف (ms)، محفوظة عبر الجلسات
 // يُستدعى قبل كل ترتيب/عرض لصفحة القضايا — يقارن القيم الحالية بالمحفوظة،
@@ -9123,11 +9161,13 @@ function getCaseYearNum(r){
 
 // إشعار الحمامة — يظهر فقط عند اكتشاف تحوّل جديد لحالة "فصل" لم يُشعَر به من قبل
 function getDoveNotifiedKeys(){
+  if(appSettings.doveNotifiedClosureKeys) return new Set(appSettings.doveNotifiedClosureKeys);
   try{ return new Set(JSON.parse(localStorage.getItem('dove_notified_closure_keys') || '[]')); }
   catch(e){ return new Set(); }
 }
-function saveDoveNotifiedKeys(set){
+async function saveDoveNotifiedKeys(set){
   try{ localStorage.setItem('dove_notified_closure_keys', JSON.stringify([...set])); }catch(e){}
+  await saveAppSettingField('doveNotifiedClosureKeys', [...set]);
 }
 function showDoveNotification(message){
   const el = document.getElementById("doveNotification");
@@ -11036,7 +11076,15 @@ async function initApp(){
   await bootstrapMasterCache();
   // تحميل إعدادات النظام مبكراً (كلمة السر المخصَّصة إن وُجدت، مدد الاحتفاظ،
   // إلخ) — قبل أي تفاعل قد يحتاجها، بلا حجب بقية التحميل (fire-and-forget)
-  loadAppSettings();
+  loadAppSettings().then(()=>{
+    // بعد وصول إعدادات Firebase (قد تصل بعد التهيئة الأولية للمتغيرات أدناه
+    // التي بُنيت من localStorage فقط) — ندمج قيم "المتاح الأخير" و"الزيادة
+    // الحديثة" القادمة من جهاز آخر، دون فقدان أي اكتشاف محلي أحدث حصل للتو.
+    const remoteRecent = getRecentIncreaseMap();
+    Object.keys(remoteRecent).forEach(k=>{
+      if(!_recentIncreaseMap[k] || remoteRecent[k] > _recentIncreaseMap[k]) _recentIncreaseMap[k] = remoteRecent[k];
+    });
+  });
   watchConnectionState();
 
   // 2) تنظيف الماستر القديم — مرة واحدة فقط (نتحقق من علامة في localStorage)
