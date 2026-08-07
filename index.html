@@ -1944,48 +1944,6 @@ if('serviceWorker' in navigator){
   </div>
 </div>
 
-<!-- نافذة "تعارض المتاح" — تظهر بعد استيراد يحتوي قضايا فيها "متاح" جديد
-     أعلى من المحفوظ عندنا؛ حماية من ملف قضايا متأخر يكتب فوق خصم صحيح
-     (راجع setManualAvailOverride لتطبيق التعديل يدوياً لكل قضية) -->
-<div id="availConflictModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;">
-  <div id="availConflictModalBox" style="background:var(--paper,#fff);border-radius:16px;padding:22px 20px;min-width:280px;max-width:460px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25);direction:rtl;font-family:'Tajawal',sans-serif;">
-    <div style="font-weight:700;font-size:16px;margin-bottom:4px;color:var(--rust,#8b3a3a);">⚠️ تعارض في "المتاح"</div>
-    <div id="availConflictModalCount" style="font-size:12.5px;color:var(--ink-soft,#777);margin-bottom:6px;"></div>
-    <div style="font-size:11.5px;color:var(--ink-soft,#777);margin-bottom:14px;line-height:1.6;">
-      قيمة "المتاح" الجديدة المستورَدة أعلى من القيمة المحفوظة عندنا لهذه القضايا — أبقينا الأقل أماناً تلقائياً بدل الاستبدال الصامت. لو الزيادة صحيحة فعلاً (مطالبة جديدة حقيقية)، اضغط "تطبيق" للقضية المعنية.
-    </div>
-    <div id="availConflictModalList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:10px;margin-bottom:16px;"></div>
-    <button id="availConflictModalOk" class="btn secondary" style="align-self:center;padding:9px 28px;">تم</button>
-  </div>
-</div>
-
-<!-- نافذة "تعارض الحالة" — قضية كانت "فصل" ورجعت "قيد التنفيذ" بملف مستورَد قديم -->
-<div id="statusConflictModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;">
-  <div id="statusConflictModalBox" style="background:var(--paper,#fff);border-radius:16px;padding:22px 20px;min-width:280px;max-width:460px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25);direction:rtl;font-family:'Tajawal',sans-serif;">
-    <div style="font-weight:700;font-size:16px;margin-bottom:4px;color:var(--rust,#8b3a3a);">⚠️ تعارض في حالة الدعوى</div>
-    <div id="statusConflictModalCount" style="font-size:12.5px;color:var(--ink-soft,#777);margin-bottom:6px;"></div>
-    <div style="font-size:11.5px;color:var(--ink-soft,#777);margin-bottom:14px;line-height:1.6;">
-      هذه القضايا كانت مسجَّلة "فصل" (منتهية) عندنا، لكن الملف المستورَد يقول إنها "قيد التنفيذ" — أبقيناها "فصل" تلقائياً بدل الرجوع الصامت. لو أُعيد فتحها فعلاً، اضغط "تطبيق" للقضية المعنية.
-    </div>
-    <div id="statusConflictModalList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:10px;margin-bottom:16px;"></div>
-    <button id="statusConflictModalOk" class="btn secondary" style="align-self:center;padding:9px 28px;">تم</button>
-  </div>
-</div>
-
-<!-- نافذة "تعارض المبالغ الإجمالية" — المطلوب/المحصّل نقصا، أو المتبقي زاد،
-     عن الملف المستورَد مقارنة بالمحفوظ عندنا (احتمال ملف قديم) -->
-<div id="fieldConflictModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;">
-  <div id="fieldConflictModalBox" style="background:var(--paper,#fff);border-radius:16px;padding:22px 20px;min-width:280px;max-width:460px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.25);direction:rtl;font-family:'Tajawal',sans-serif;">
-    <div style="font-weight:700;font-size:16px;margin-bottom:4px;color:var(--rust,#8b3a3a);">⚠️ تعارض في مبالغ إجمالية</div>
-    <div id="fieldConflictModalCount" style="font-size:12.5px;color:var(--ink-soft,#777);margin-bottom:6px;"></div>
-    <div style="font-size:11.5px;color:var(--ink-soft,#777);margin-bottom:14px;line-height:1.6;">
-      القيمة المستورَدة لهذه القضايا تتراجع بشكل غير متوقَّع عن المحفوظة عندنا (نقصان بالمطلوب/المحصّل، أو زيادة بالمتبقي) — أبقينا القيمة الأكثر أماناً تلقائياً. لو الملف الجديد صحيح فعلاً، اضغط "تطبيق" للقضية المعنية.
-    </div>
-    <div id="fieldConflictModalList" style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:10px;margin-bottom:16px;"></div>
-    <button id="fieldConflictModalOk" class="btn secondary" style="align-self:center;padding:9px 28px;">تم</button>
-  </div>
-</div>
-
 <!-- إشعار الحمامة — يظهر عند تحوّل قضية من قيد التنفيذ إلى فصل -->
 <div id="doveNotification" class="dove-notification">
   <svg class="dove-svg" viewBox="0 0 120 100" xmlns="http://www.w3.org/2000/svg">
@@ -8227,17 +8185,12 @@ async function runImportBatch(filesToImport){
   if(combined.newTxnDetails.length){
     showNewTxnModal(combined.newTxnDetails);
   }
-  // نوافذ التعارض (متاح/حالة/مبالغ إجمالية) — تُعرَض بالتتابع (مو بنفس الوقت)
-  // لتفادي تراكب أكثر من نافذة معاً على الشاشة
-  const conflictQueue = [];
-  if(_pendingAvailConflicts.length) conflictQueue.push(()=> showAvailConflictModal(_pendingAvailConflicts, next));
-  if(_pendingStatusConflicts.length) conflictQueue.push(()=> showStatusConflictModal(_pendingStatusConflicts, next));
-  if(_pendingFieldConflicts.length) conflictQueue.push(()=> showFieldConflictModal(_pendingFieldConflicts, next));
-  let _cqIdx = 0;
-  function next(){
-    if(_cqIdx < conflictQueue.length){ const fn = conflictQueue[_cqIdx++]; fn(); }
-  }
-  next();
+  // نوافذ "مراجعة التعارض" (متاح/حالة/مبالغ) أُزيلت بطلب المستخدم — أزرار
+  // "تطبيق" فيها لم تكن تُسجَّل بسجل التدقيق بموثوقية رغم عدة محاولات إصلاح،
+  // فأُزيلت الواجهة نفسها بالكامل. الحماية الأساسية (رفض أي تراجع/زيادة
+  // مشبوهة صامتاً عند الاستيراد) تبقى فعّالة تماماً في saveMasterFromRows —
+  // فقط بلا نافذة مراجعة تعرضها. لو احتجت تطبيق قيمة "مشبوهة" رفضها النظام
+  // تلقائياً لقضية معيّنة، اطلب مني تحديداً وأطبّقها يدوياً.
 }
 
 buildChips();
@@ -8284,160 +8237,6 @@ function showNewTxnModal(details){
   };
 }
 
-// نافذة تعارض "المتاح" — تعرض كل قضية رُفضت فيها قيمة مستورَدة أعلى من
-// المحفوظة، مع زر "تطبيق" لكل قضية على حدة إن كانت الزيادة صحيحة فعلاً
-// (يستخدم نفس آلية التعديل اليدوي المعتمدة أصلاً — setManualAvailOverride).
-function showAvailConflictModal(conflicts, onClose){
-  const modal = document.getElementById("availConflictModal");
-  const countEl = document.getElementById("availConflictModalCount");
-  const listEl = document.getElementById("availConflictModalList");
-  const okBtn = document.getElementById("availConflictModalOk");
-  const fmt2 = (n)=> n.toLocaleString('ar',{minimumFractionDigits:2, maximumFractionDigits:2});
-
-  countEl.textContent = `${conflicts.length} قضية بحاجة لمراجعة يدوية`;
-  listEl.innerHTML = conflicts.map((c,i) => `
-    <div class="avail-conflict-item" data-idx="${i}" style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;">
-      <div style="font-weight:700;font-size:13px;margin-bottom:4px;">${escapeAttr(c.caseNo)} — ${escapeAttr(c.defendant)}</div>
-      <div style="font-size:12px;color:var(--ink-soft);margin-bottom:8px;">
-        المحفوظ حالياً: <strong>${fmt2(c.oldAvail)}</strong> ← المستورَد الجديد: <strong style="color:var(--rust);">${fmt2(c.newAvail)}</strong>
-      </div>
-      <button class="btn secondary avail-conflict-apply-btn" data-idx="${i}" style="font-size:11.5px;padding:5px 12px;">✓ تطبيق القيمة الجديدة (مطالبة حقيقية)</button>
-    </div>
-  `).join("");
-
-  modal.style.display = "flex";
-
-  listEl.querySelectorAll(".avail-conflict-apply-btn").forEach(btn=>{
-    btn.onclick = async ()=>{
-      const idx = parseInt(btn.dataset.idx, 10);
-      const c = conflicts[idx];
-      btn.disabled = true;
-      btn.textContent = "جارٍ التطبيق...";
-      try{
-        await setManualAvailOverride(c.key, c.newAvail);
-        casesAllRows = getCasesRows();
-        applyCasesFilter(true);
-        if(typeof render === "function") render();
-        btn.textContent = "✓ تم التطبيق";
-        btn.closest(".avail-conflict-item").style.opacity = "0.55";
-      }catch(e){
-        btn.disabled = false;
-        btn.textContent = "✓ تطبيق القيمة الجديدة (مطالبة حقيقية)";
-        showToast("⚠️ فشل التطبيق — " + (e.message || e), "warn");
-      }
-    };
-  });
-
-  okBtn.onclick = ()=>{ modal.style.display = "none"; if(typeof onClose === "function") onClose(); };
-}
-
-// نافذة تعارض "الحالة" — قضية كانت "فصل" (منتهية) ورجعت "قيد التنفيذ" بملف
-// مستورَد. لكل قضية زر "تطبيق" يحوّلها فعلياً لـ"قيد التنفيذ" إن كان هذا
-// صحيحاً (مثلاً القضية أُعيد فتحها فعلاً)، وإلا تبقى محمية على "فصل".
-function showStatusConflictModal(conflicts, onClose){
-  const modal = document.getElementById("statusConflictModal");
-  const countEl = document.getElementById("statusConflictModalCount");
-  const listEl = document.getElementById("statusConflictModalList");
-  const okBtn = document.getElementById("statusConflictModalOk");
-
-  countEl.textContent = `${conflicts.length} قضية بحاجة لمراجعة يدوية`;
-  listEl.innerHTML = conflicts.map((c,i) => `
-    <div class="status-conflict-item" data-idx="${i}" style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;">
-      <div style="font-weight:700;font-size:13px;margin-bottom:4px;">${escapeAttr(c.caseNo)} — ${escapeAttr(c.defendant)}</div>
-      <div style="font-size:12px;color:var(--ink-soft);margin-bottom:8px;">
-        الحالة المحفوظة: <strong class="status-فصل" style="padding:2px 8px;border-radius:6px;">فصل</strong>
-        ← المستورَدة بالملف: <strong style="padding:2px 8px;border-radius:6px;background:var(--brass-soft);color:var(--brass);">قيد التنفيذ</strong>
-      </div>
-      <button class="btn secondary status-conflict-apply-btn" data-idx="${i}" style="font-size:11.5px;padding:5px 12px;">✓ فعلاً أُعيد فتحها — تطبيق التحديث</button>
-    </div>
-  `).join("");
-
-  modal.style.display = "flex";
-
-  listEl.querySelectorAll(".status-conflict-apply-btn").forEach(btn=>{
-    btn.onclick = async ()=>{
-      const idx = parseInt(btn.dataset.idx, 10);
-      const c = conflicts[idx];
-      btn.disabled = true;
-      btn.textContent = "جارٍ التطبيق...";
-      try{
-        const master = masterCache;
-        if(!master[c.key]) master[c.key] = {};
-        master[c.key]["الحالة"] = c.newStatus;
-        await forceSaveKey(c.key);
-        masterCache = master;
-        // تحديث الصف المعروض حالياً في RAW_DATA أيضاً (بلا إعادة تحميل) —
-        // وإلا يبقى الجدول يعرض "فصل" رغم أن الماستر تحدَّث فعلاً لـ"قيد التنفيذ"
-        const liveRow = getRowByKey(c.key);
-        if(liveRow) liveRow["حالة الدعوى"] = c.newStatus;
-        casesAllRows = getCasesRows();
-        applyCasesFilter(true);
-        if(typeof render === "function") render();
-        btn.textContent = "✓ تم التطبيق";
-        btn.closest(".status-conflict-item").style.opacity = "0.55";
-      }catch(e){
-        btn.disabled = false;
-        btn.textContent = "✓ فعلاً أُعيد فتحها — تطبيق التحديث";
-        showToast("⚠️ فشل التطبيق — " + (e.message || e), "warn");
-      }
-    };
-  });
-
-  okBtn.onclick = ()=>{ modal.style.display = "none"; if(typeof onClose === "function") onClose(); };
-}
-
-// نافذة تعارض موحَّدة للمبالغ الإجمالية الثلاثة (المطلوب/المحصّل/المتبقي) —
-// كل عنصر يحمل اسم الحقل المتعارض عليه؛ زر "تطبيق" يكتب القيمة الجديدة
-// مباشرة في نفس الحقل بالماستر (والصف المعروض حالياً في RAW_DATA أيضاً).
-function showFieldConflictModal(conflicts, onClose){
-  const modal = document.getElementById("fieldConflictModal");
-  const countEl = document.getElementById("fieldConflictModalCount");
-  const listEl = document.getElementById("fieldConflictModalList");
-  const okBtn = document.getElementById("fieldConflictModalOk");
-  const fmt2 = (n)=> n.toLocaleString('ar',{minimumFractionDigits:2, maximumFractionDigits:2});
-
-  countEl.textContent = `${conflicts.length} قضية بحاجة لمراجعة يدوية`;
-  listEl.innerHTML = conflicts.map((c,i) => `
-    <div class="field-conflict-item" data-idx="${i}" style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;">
-      <div style="font-weight:700;font-size:13px;margin-bottom:4px;">${escapeAttr(c.caseNo)} — ${escapeAttr(c.defendant)}</div>
-      <div style="font-size:12px;color:var(--ink-soft);margin-bottom:8px;">
-        ${escapeAttr(c.field)}: <strong>${fmt2(c.oldVal)}</strong> ← المستورَد الجديد: <strong style="color:var(--rust);">${fmt2(c.newVal)}</strong>
-      </div>
-      <button class="btn secondary field-conflict-apply-btn" data-idx="${i}" style="font-size:11.5px;padding:5px 12px;">✓ تطبيق القيمة الجديدة (صحيحة فعلاً)</button>
-    </div>
-  `).join("");
-
-  modal.style.display = "flex";
-
-  listEl.querySelectorAll(".field-conflict-apply-btn").forEach(btn=>{
-    btn.onclick = async ()=>{
-      const idx = parseInt(btn.dataset.idx, 10);
-      const c = conflicts[idx];
-      btn.disabled = true;
-      btn.textContent = "جارٍ التطبيق...";
-      try{
-        const master = masterCache;
-        if(!master[c.key]) master[c.key] = {};
-        master[c.key][c.field] = String(c.newVal);
-        await forceSaveKey(c.key);
-        masterCache = master;
-        const liveRow = getRowByKey(c.key);
-        if(liveRow) liveRow[c.field] = String(c.newVal);
-        casesAllRows = getCasesRows();
-        applyCasesFilter(true);
-        if(typeof render === "function") render();
-        btn.textContent = "✓ تم التطبيق";
-        btn.closest(".field-conflict-item").style.opacity = "0.55";
-      }catch(e){
-        btn.disabled = false;
-        btn.textContent = "✓ تطبيق القيمة الجديدة (صحيحة فعلاً)";
-        showToast("⚠️ فشل التطبيق — " + (e.message || e), "warn");
-      }
-    };
-  });
-
-  okBtn.onclick = ()=>{ modal.style.display = "none"; if(typeof onClose === "function") onClose(); };
-}
 
 
 function askInput(title, opts){
