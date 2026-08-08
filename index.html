@@ -4773,8 +4773,23 @@ function caseAgeText(r){
 let lastImportInfo = null;
 
 async function loadLastImportInfo(){
-  // Firebase أولاً (متزامن عبر كل الأجهزة)، وإلا احتياطي محلي فوري
-  if(appSettings.lastImportInfo){ lastImportInfo = appSettings.lastImportInfo; return; }
+  // قراءة مباشرة من Firebase أولاً (بمعزل تام عن توقيت loadAppSettings — كانت
+  // هذي نقطة سباق حقيقية: لو استُدعيت هذه الدالة قبل اكتمال تحميل appSettings
+  // بالخلفية، كانت تكتفي صامتة بالنسخة المحلية القديمة على هذا الجهاز، حتى
+  // لو أُعيد تحميل الصفحة بالكامل. القراءة المباشرة تضمن القيمة الأحدث دوماً
+  // بلا اعتماد على أي توقيت آخر بالتطبيق.
+  if(fbDb){
+    try{
+      const fb = window.__fbModular;
+      const snap = await fb.get(fb.ref(fbDb, 'app_settings/lastImportInfo'));
+      if(snap.exists()){
+        lastImportInfo = snap.val();
+        appSettings.lastImportInfo = lastImportInfo;
+        return;
+      }
+    }catch(e){ console.error("فشل تحميل آخر استيراد من Firebase:", e); }
+  }
+  // احتياطي محلي فوري (بلا اتصال، أو Firebase غير مهيّأ بعد)
   try{
     const res = await appStorage.get('last_import');
     lastImportInfo = res && res.value ? JSON.parse(res.value) : null;
