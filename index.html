@@ -4116,17 +4116,6 @@ async function bootstrapMasterCache(){
   }
 }
 
-// تُجمَّع هنا أي حالات "تعارض متاح" اكتُشفت أثناء آخر استدعاء لـ
-// saveMasterFromRows — قضايا استُبعِدت فيها قيمة "متاح" مستورَدة جديدة لأنها
-// أعلى من القيمة المحفوظة عندنا (نبقي الأقل أماناً بدل الاستبدال الصامت).
-// يقرأها معالج الاستيراد بعد الانتهاء ليعرضها للمستخدم لتأكيد يدوي.
-let _pendingAvailConflicts = [];
-// نفس الفكرة لكن لحالة الدعوى تحديداً — أخطر حالة: قضية كانت "فصل" (منتهية)
-// ورجعت "قيد التنفيذ" بسبب استيراد ملف قضايا قديم لم يتحدَّث بعد.
-let _pendingStatusConflicts = [];
-// نفس الفكرة لباقي الحقول المالية الإجمالية الثلاثة (المطلوب/المحصّل/المتبقي)
-let _pendingFieldConflicts = [];
-
 // دالة مساعدة عامة: تحمي أي حقل مالي إجمالي من "تراجع صامت" باتجاه معيّن.
 // direction="increase": نرفض القيمة الجديدة لو كانت أعلى من المحفوظة (مثل
 // المتاح والمتبقي — يُفترض أن يتناقصا فقط مع مرور الوقت وتحصيل الرديات).
@@ -4164,17 +4153,10 @@ async function saveMasterFromRows(rows){
     let status = importedStatus || existing["الحالة"] || "";
     // حماية من تراجع مشبوه: قضية كانت "فصل" (منتهية) ورجعت "قيد التنفيذ" —
     // غالباً بسبب استيراد ملف قضايا قديم لم يتحدَّث بعد عند جهة المحكمة.
-    // نُبقي حالتها "فصل" مؤقتاً، ونعرض التعارض للمراجعة اليدوية بعد الاستيراد.
+    // نُبقي حالتها "فصل" (استبدال صامت آمن، بلا نافذة مراجعة).
     if(importedStatus && importedStatus !== existing["الحالة"] &&
        existing["الحالة"] === "فصل" && importedStatus === "قيد التنفيذ"){
       status = "فصل";
-      _pendingStatusConflicts.push({
-        key,
-        caseNo: shortCaseNo(r["رقم الدعوى"]),
-        defendant: getDefendantForRow(r),
-        oldStatus: existing["الحالة"],
-        newStatus: importedStatus
-      });
     }
     const court = (r["المحكمة"] && String(r["المحكمة"]).trim()) || existing["المحكمة"] || "";
     const date = (r["تاريخ ورود الدعوى"] && String(r["تاريخ ورود الدعوى"]).trim()) || existing["تاريخ الورود"] || "";
@@ -4183,7 +4165,8 @@ async function saveMasterFromRows(rows){
     // المطلوب والمحصّل لا يُفترض أن يتناقصا أبداً عبر الزمن (نقصانهما يعني
     // غالباً ملف "قضايا" قديماً يكتب فوق رقم صحيح وأحدث). المتبقي (الخام،
     // يُستخدَم فقط عند عدم وجود معاملات حقيقية مسجَّلة) بنفس منطق "المتاح" —
-    // يُفترض أن يتناقص فقط، فأي زيادة مشبوهة.
+    // يُفترض أن يتناقص فقط، فأي زيادة مشبوهة. الاستبدال صامت وآمن دائماً
+    // (نُبقي القيمة الأقدم الأكثر أماناً)، بلا نافذة مراجعة.
     const guardedRequested = guardAggregateField(
       (r["مجموع المبالغ المطلوبة"] && String(r["مجموع المبالغ المطلوبة"]).trim()) || "",
       existing["مجموع المبالغ المطلوبة"] || "", "decrease");
@@ -4196,18 +4179,6 @@ async function saveMasterFromRows(rows){
     const totalRequested = guardedRequested.value;
     const totalCollected = guardedCollected.value;
     const totalRemaining = guardedRemaining.value;
-    [
-      ["مجموع المبالغ المطلوبة", guardedRequested],
-      ["مجموع المبالغ المقبوضة فعليا", guardedCollected],
-      ["مجموع المبالغ المتبقية", guardedRemaining]
-    ].forEach(([label, g])=>{
-      if(g.isConflict){
-        _pendingFieldConflicts.push({
-          key, caseNo: shortCaseNo(r["رقم الدعوى"]), defendant: getDefendantForRow(r),
-          field: label, oldVal: g.oldNum, newVal: g.newNum
-        });
-      }
-    });
 
     // ===== حماية من "تراجع صامت" في المتاح =====
     // "المتاح" يُفترض أن ينخفض فقط (مع تحصيل الرديات) أو يبقى كما هو — لا يزيد
@@ -4216,8 +4187,7 @@ async function saveMasterFromRows(rows){
     // ومخفَّضة فعلياً (بفضل خصم تلقائي من رديّة محصَّلة لاحقاً) برقم قديم أعلى،
     // بلا أي تنبيه — فتظهر القضية وكأن عليها مبلغ متاح لم يعد موجوداً فعلياً.
     // الآن: أي زيادة في "المتاح" المستورَد عن القيمة المحفوظة تُرفَض تلقائياً
-    // (نُبقي الأقل أماناً)، وتُسجَّل كـ"تعارض" يُعرَض على المستخدم بعد الاستيراد
-    // ليقرر بنفسه إن كانت هذه الزيادة فعلاً مطالبة جديدة حقيقية أم لا.
+    // ونُبقي القيمة الأقل أماناً — استبدال صامت، بلا نافذة مراجعة.
     const newAvailRaw = (r["مجموع المبالغ المتاحة للقبض"] && String(r["مجموع المبالغ المتاحة للقبض"]).trim()) || "";
     const existingAvailRaw = existing["مجموع المبالغ المتاحة للقبض"] || "";
     let totalAvailable = newAvailRaw || existingAvailRaw;
@@ -4225,14 +4195,7 @@ async function saveMasterFromRows(rows){
       const newNum = parseNum(newAvailRaw);
       const existingNum = parseNum(existingAvailRaw);
       if(newNum !== null && existingNum !== null && newNum > existingNum + 0.01){
-        totalAvailable = existingAvailRaw; // نبقي القيمة الأقل (الأكثر أماناً) مؤقتاً
-        _pendingAvailConflicts.push({
-          key,
-          caseNo: shortCaseNo(r["رقم الدعوى"]),
-          defendant: getDefendantForRow(r),
-          oldAvail: existingNum,
-          newAvail: newNum
-        });
+        totalAvailable = existingAvailRaw; // نبقي القيمة الأقل (الأكثر أماناً)
       }
     }
 
@@ -4913,37 +4876,11 @@ async function deleteCaseNote(key, index){
   masterCache = master; invalidateMasterCaseNoIndex();
 }
 
-async function saveNote(key, text, statusEl){
-  try{
-    const master = masterCache;
-    if(!master[key]) master[key] = {"رقم القضية": key.split("||")[0]};
-    master[key]["ملاحظة"] = text.trim();
-    await saveMaster([key]);
-    masterCache = master; invalidateMasterCaseNoIndex();
-    if(statusEl){
-      statusEl.textContent = "✓ حُفظت";
-      setTimeout(()=>{ statusEl.textContent = ""; }, 2500);
-    }
-  }catch(e){
-    if(statusEl) statusEl.textContent = "تعذّر الحفظ";
-  }
-}
-
-function getNote(r){
-  const rec = masterCache[caseKey(r)];
-  return rec && rec["ملاحظة"] ? rec["ملاحظة"] : "";
-}
-
 const FOLLOWUP_STATUSES = ["تم الطلب","بانتظار الموافقة","تمت الموافقة","مرفوض","منجز","مؤجل"];
 
 function getFollowup(r){
   const rec = masterCache[caseKey(r)];
   return (rec && rec["متابعة"]) ? rec["متابعة"] : null;
-}
-
-function isInFollowup(r){
-  const f = getFollowup(r);
-  return !!(f && f.active);
 }
 
 async function saveFollowup(key, data, statusEl){
@@ -5055,11 +4992,6 @@ async function removeLawyerAction(key){
 }
 
 let lwPageSearchTimer = null;
-
-// عدد كل القضايا "قيد التنفيذ" في النظام إجمالاً (يُستخدم في صناديق الإحصائيات)
-function countCasesInExecution(){
-  return getDedupedRAW().filter(r => (r["حالة الدعوى"]||"").trim() === "قيد التنفيذ").length;
-}
 
 // القضايا "القابلة للمتابعة" فعلياً: قيد التنفيذ، مع استثناء صريح لأي قضية
 // عليها علامة "تسوية خارج المحكمة" داخلياً (حتى لو ما زالت حالتها الرسمية
@@ -5759,11 +5691,6 @@ document.getElementById("settingsChangePwdBtn").onclick = async ()=>{
   }
 };
 
-
-function getLwSteps(key){
-  const master = masterCache;
-  return (master[key] && master[key]["محامي_خطوات"]) ? master[key]["محامي_خطوات"] : {};
-}
 
 // نظام ثلاث حالات للخطوة: فارغة (لم تبدأ) → "قيد المتابعة" (بضغطة عادية،
 // بلا كلمة سر) → "منجز" (بضغطة مطوّلة 5 ثوانٍ، بلا كلمة سر أيضاً للتفعيل).
@@ -6848,13 +6775,6 @@ function openFollowupPage(){
   document.body.style.overflow = "hidden";
   renderFollowupList();
   renderFuStatsBox();
-}
-
-function closeFollowupPage(){
-  document.getElementById("followupPage").style.display = "none";
-  document.body.style.overflow = "";
-  buildChips();
-  render();
 }
 
 // AudioContext واحد يُنشأ مرة واحدة فقط ويُعاد استخدامه — المتصفحات تحدّ عدد
@@ -8076,9 +7996,6 @@ async function runImportBatch(filesToImport){
   const succeeded = [];
   const failed = [];
   const rejected = []; // ملفات رُفضت بصرامة (أقدم من هامش الـ10 دقائق المسموح لنوعها)
-  _pendingAvailConflicts = []; // إعادة ضبط قبل بدء هذه الدفعة من الاستيراد
-  _pendingStatusConflicts = [];
-  _pendingFieldConflicts = [];
 
   // نسخة احتياطية تلقائية صامتة قبل أي استيراد — حماية إضافية: لو حدث خطأ
   // غير متوقّع أثناء الدمج، تبقى نقطة رجوع كاملة لحالة ما قبل الاستيراد.
@@ -10406,14 +10323,6 @@ function applyAnalysisFilter(){
   });
   analysisCurrentPage = 0;
   renderAnalysisPage();
-}
-
-// عرض ثابت لأعمدة رقم القضية/الطرف/المحكمة، وعمود كل شهر عرضه صغير وثابت
-// (وليس نسبة من "منطقة أشهر" كبيرة) — لأنه مع شهر واحد فقط كانت هذه المنطقة
-// تحجز 50% من عرض الجدول كاملاً، فيظهر فراغ كبير جداً قبل الرقم داخل الخلية.
-function computeAnalysisColWidths(monthsCount){
-  const perMonth = 9; // عرض ثابت صغير ومعقول لكل عمود شهر بغض النظر عن العدد
-  return {no:"14%", party:"24%", court:"14%", addBtn:"3%", perMonth: perMonth + "%"};
 }
 
 // يحدِّث زر "+ شهر" الموجود أعلى الصفحة (الحالة/التلميح فقط) — الزر نفسه ثابت
