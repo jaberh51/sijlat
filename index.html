@@ -510,6 +510,14 @@
     display:inline-block;margin-inline-start:6px;font-size:10.5px;font-weight:700;
     background:#dcfce7;color:#166534;border:1px solid #86efac;border-radius:6px;padding:2px 7px;
   }
+  .cases-anomaly-box{
+    background:linear-gradient(135deg,#fef2f2,#fee2e2);
+    border:1.5px solid #fca5a5;border-radius:12px;
+    padding:12px 20px;margin-top:10px;font-size:13.5px;font-weight:700;color:#991b1b;
+  }
+  .cases-anomaly-badge{
+    display:inline-block;font-size:12px;cursor:help;
+  }
   .cases-type-badge{
     display:inline-block;margin-inline-start:6px;font-size:10px;font-weight:700;
     border-radius:6px;padding:2px 7px;white-space:nowrap;
@@ -2009,6 +2017,9 @@ if('serviceWorker' in navigator){
         </div>
         <div id="casesFinishedBox" class="cases-finished-box" style="display:none;">
           ✅ <span id="casesFinishedCount">0</span> قضية انتهت مالياً بالكامل (المطلوب = المحصّل، ولا يوجد متبقٍ أو متاح)
+        </div>
+        <div id="casesAnomalyBox" class="cases-anomaly-box" style="display:none;">
+          ⚠️ <span id="casesAnomalyCount">0</span> قضية فيها تناقض بيانات — تستاهل مراجعة (مرّر المؤشر على ⚠️ بجدول القضايا لمعرفة السبب)
         </div>
       </div>
 
@@ -9005,6 +9016,37 @@ function getRowCollected(r){
   return fin.total > 0 ? fin.total : (rec ? parseNum(rec["مجموع المبالغ المقبوضة فعليا"]) : null);
 }
 
+// اكتشاف تلقائي لأنماط بيانات غريبة/غير منطقية (بطلب المستخدم — محاكاة على
+// 20,000 حالة اصطناعية بنفس صيغة الحساب الفعلية لاكتشاف كل الأنماط الممكنة
+// منطقياً). تُرجع مصفوفة بأسباب الشذوذ الموجودة لهذه القضية تحديداً (فارغة
+// إن لم يوجد أي شذوذ) — تُستخدَم لكل من الشارة داخل الصف وصندوق الملخّص.
+function detectCaseAnomalies(r){
+  const reasons = [];
+  const fin = getFinancialForRow(r);
+  const req = fin.requested;
+  const collected = getRowCollected(r);
+  const rem = fin.remaining;
+  const avail = getRowAvail(r);
+  const status = (r["حالة الدعوى"]||"").trim();
+
+  if(rem !== null && rem < -0.01){
+    reasons.push("متبقي سالب — المتاح المستورَد أعلى من الفرق الفعلي المتبقي على القضية");
+  }
+  if(avail !== null && req !== null && avail > req + 0.01){
+    reasons.push("المتاح أعلى من كل المبلغ المطلوب أصلاً — تحقّق من صحة الرقمين");
+  }
+  if(collected !== null && req !== null && collected > req + 0.01){
+    reasons.push("المحصّل أعلى من المطلوب — إما المطلوب قديم ولم يُحدَّث، أو خطأ بالبيانات");
+  }
+  if(status === "فصل" && rem !== null && rem > 0.01){
+    reasons.push("القضية \"فصل\" لكن لا يزال عليها متبقٍّ حسب سجلّاتنا");
+  }
+  if(status === "فصل" && avail !== null && avail > 0.01){
+    reasons.push("القضية \"فصل\" وفيها مبلغ متاح لم يُسحَب بعد");
+  }
+  return reasons;
+}
+
 // استخراج {year, num} من رقم الدعوى الموحّد "رقم - سنة" للترتيب حسب السنة ثم الرقم
 function getCaseYearNum(r){
   const norm = shortCaseNo(r["رقم الدعوى"]); // صيغة موحّدة: "رقم - سنة"
@@ -9599,6 +9641,25 @@ function renderCasesFinishedBox(){
   }
 }
 
+// اكتشاف تلقائي لأنماط بيانات "غريبة" (بطلب المستخدم — محاكاة على 20,000
+// حالة اصطناعية حدَّدت خمسة أنماط، راجع detectCaseAnomalies) — يُحسَب على
+// كل القضايا المطابقة للفلتر الحالي (مو فقط صفحة العرض)، ليبقى العدّاد
+// دقيقاً بغضّ النظر عن الترقيم.
+function renderCasesAnomalyBox(){
+  const box = document.getElementById("casesAnomalyBox");
+  const countEl = document.getElementById("casesAnomalyCount");
+  let count = 0;
+  casesFilteredRows.forEach(r=>{
+    if(detectCaseAnomalies(r).length > 0) count++;
+  });
+  if(count > 0){
+    box.style.display = "block";
+    countEl.textContent = count;
+  } else {
+    box.style.display = "none";
+  }
+}
+
 function renderCasesPage(){
   const tbody = document.getElementById("casesTbody");
   const emptyEl = document.getElementById("casesEmpty");
@@ -9660,6 +9721,10 @@ function renderCasesPage(){
     const statusClass = status === "قيد التنفيذ" ? "cases-badge-exec" :
                         status === "فصل" ? "cases-badge-closed" : "cases-badge-other";
     const remClass = rem !== null && rem > 0 ? "amt-col-remaining-due" : "amt-col-remaining-ok";
+    // اكتشاف تلقائي لأنماط بيانات غريبة/غير منطقية — راجع detectCaseAnomalies
+    // (محاكاة على 20,000 حالة اصطناعية حدَّدت الأنماط الخمسة المفحوصة هناك)
+    const anomalyReasons = detectCaseAnomalies(r);
+    const isAnomaly = anomalyReasons.length > 0;
     const justIncreased = isRecentlyIncreased(key);
     const availClass = (avail !== null && avail > 0 ? "amt-col-avail" : "amt-col-remaining-ok") + (justIncreased ? " amt-avail-flash" : "");
     // قضية منتهية مالياً: المطلوب = المحصّل (فالمتبقي صفر) والمتاح صفر أيضاً —
@@ -9733,7 +9798,7 @@ function renderCasesPage(){
       <td data-col="الحالة"><span class="cases-badge ${statusClass}${statusSmallClass}">${escapeAttr(status)}</span></td>
       <td class="amt-col amt-req" data-col="📋 المطلوب">${fmt(req)}</td>
       <td class="amt-col amt-col-collected" data-col="✓ المحصّل">${fmt(collected)}</td>
-      <td class="amt-col ${remClass}" data-col="⏳ المتبقي">${fmt(rem)}${remEditHtml}</td>
+      <td class="amt-col ${remClass}" data-col="⏳ المتبقي">${isAnomaly ? `<span class="cases-anomaly-badge" title="${escapeAttr(anomalyReasons.join(' — '))}">⚠️</span> ` : ""}${fmt(rem)}${remEditHtml}</td>
       <td class="amt-col ${availClass}" data-col="💰 المتاح للقبض">${fmt(avail)}</td>
       <td class="cases-action-col">
         ${removeBtnHtml}
@@ -9870,6 +9935,7 @@ function renderCasesPage(){
   renderCasesPrintBtn();
   renderCasesAvailBox();
   renderCasesFinishedBox();
+  renderCasesAnomalyBox();
 }
 
 function renderCasesPrintBtn(){
