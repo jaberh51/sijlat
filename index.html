@@ -2039,6 +2039,7 @@ if('serviceWorker' in navigator){
             <option value="">شخصي/محامي (الكل)</option>
             <option value="شخصي">شخصي فقط</option>
             <option value="محامي">محامي فقط</option>
+            <option value="بلا">بلا (غير مصنَّفة)</option>
           </select>
           <select id="casesClientFilter" class="cases-select">
             <option value="">جابر/حنين (الكل)</option>
@@ -2300,6 +2301,87 @@ const firebaseConfig = {
 
 let fbApp = null, fbDb = null, fbAuth = null;
 let _fbModularWaitPromise = null;
+
+// ===== ربط ثانٍ اختياري بنظام المحامي (بطلب المستخدم) =====
+// اتصال منفصل تماماً بقاعدة بيانات Firebase الخاصة بنظام المحامي (مشروع
+// آخر بالكامل)، يُستخدَم فقط لمزامنة البيانات المالية للقضايا المصنَّفة
+// "محامي" فور تعديلها من صفحة القضايا هنا (راجع syncCaseToLawyerSystem
+// أدناه). لا علاقة له بقاعدة بيانات هذا النظام (fbDb أعلاه) إطلاقاً —
+// اتصالان مستقلان بقاعدتين مختلفتين بنفس الوقت.
+//
+// ⚠️ عبّئ القيم الثلاث أدناه بنفسك (لن يعمل الربط بلا تعبئتها):
+// 1) lawyerFirebaseConfig — بالضبط نفس كائن firebaseConfig المستخدَم فعلياً
+//    بملف index.html الخاص بنظام المحامي (انسخه من هناك حرفياً).
+// 2) lawyerAuthEmail / lawyerAuthPassword — بريد وكلمة سر حساب صحيح ومسجَّل
+//    فعلاً بقسم Authentication بمشروع Firebase الخاص بالمحامي (يُفضَّل حساب
+//    مخصَّص لهذا الغرض تحديداً، بدل حساب المحامي الشخصي).
+const lawyerFirebaseConfig = {
+  apiKey: "ضع_مفتاح_API_الخاص_بنظام_المحامي_هنا",
+  authDomain: "ضع_اسم_مشروع_المحامي_هنا.firebaseapp.com",
+  databaseURL: "https://ضع_اسم_مشروع_المحامي_هنا-default-rtdb.firebaseio.com",
+  projectId: "ضع_اسم_مشروع_المحامي_هنا",
+  storageBucket: "ضع_اسم_مشروع_المحامي_هنا.firebasestorage.app",
+  messagingSenderId: "ضع_الرقم_هنا",
+  appId: "ضع_معرّف_تطبيق_المحامي_هنا"
+};
+const lawyerAuthEmail = "ضع_بريد_حساب_المزامنة_هنا";
+const lawyerAuthPassword = "ضع_كلمة_سر_حساب_المزامنة_هنا";
+
+let lawyerFbApp = null, lawyerFbDb = null;
+let _lawyerFbInitPromise = null;
+
+// يُهيِّئ الاتصال بقاعدة المحامي مرة واحدة فقط (يتجاهل الطلبات المتكررة أثناء
+// التهيئة نفسها). فشل هذا الاتصال (مثلاً: القيم أعلاه لم تُعبَّأ بعد) لا يوقف
+// عمل هذا النظام إطلاقاً — يُسجَّل بصمت بسجل الأخطاء فقط، والمزامنة تُتخطَّى.
+async function initLawyerFirebase(){
+  if(lawyerFbDb) return lawyerFbDb;
+  if(_lawyerFbInitPromise) return _lawyerFbInitPromise;
+  _lawyerFbInitPromise = (async ()=>{
+    try{
+      if(lawyerFirebaseConfig.apiKey.startsWith("ضع_")) return null; // لم تُعبَّأ القيم بعد
+      await waitForFbModular();
+      const fb = window.__fbModular;
+      lawyerFbApp = fb.initializeApp(lawyerFirebaseConfig, "lawyerApp");
+      lawyerFbDb = fb.getDatabase(lawyerFbApp);
+      const lawyerAuth = fb.getAuth(lawyerFbApp);
+      await fb.signInWithEmailAndPassword(lawyerAuth, lawyerAuthEmail, lawyerAuthPassword);
+      return lawyerFbDb;
+    }catch(e){
+      console.error("تعذّر الاتصال بنظام المحامي — المزامنة التلقائية معطَّلة:", e);
+      lawyerFbDb = null;
+      return null;
+    }
+  })();
+  return _lawyerFbInitPromise;
+}
+
+// يُزامِن قضية واحدة (بياناتها المالية فقط) لقاعدة المحامي — يُستدعى فقط من
+// دوال التعديل اليدوي الأربع بصفحة القضايا (متاح/محصّل/متبقي/مطلوب)، وفقط
+// إن كانت القضية مصنَّفة "محامي" فعلاً. تحديث جزئي (update وليس set) حتى لا
+// يمحو أي حقول أخرى خاصة بنظام المحامي لنفس القضية (ملاحظاته، متابعته، إلخ).
+async function syncCaseToLawyerSystem(key){
+  try{
+    const rec = masterCache[key];
+    if(!rec || rec["نوع_القضية"] !== "محامي") return; // فقط القضايا المشتركة المصنَّفة "محامي"
+    const db = await initLawyerFirebase();
+    if(!db) return; // الاتصال غير مُهيَّأ (القيم أعلاه فارغة) — تخطٍّ صامت
+    const fb = window.__fbModular;
+    const row = getRowByKey(key);
+    if(!row) return;
+    const fin = getFinancialForRow(row);
+    const update = {
+      "مجموع المبالغ المطلوبة": fin.requested !== null ? String(fin.requested) : "",
+      "مجموع المبالغ المقبوضة فعليا": (()=>{ const c = getRowCollected(row); return c !== null ? String(c) : ""; })(),
+      "مجموع المبالغ المتاحة للقبض": (()=>{ const a = getRowAvail(row); return a !== null ? String(a) : ""; })(),
+      "مجموع المبالغ المتبقية": fin.remaining !== null ? String(fin.remaining) : ""
+    };
+    await fb.update(fb.ref(db, "master_cases/" + encodeFbKey(key)), update);
+  }catch(e){
+    console.error("فشل مزامنة القضية مع نظام المحامي:", e);
+    showToast("⚠️ تعذّرت مزامنة هذي القضية مع نظام المحامي — التعديل محفوظ عندك بشكل طبيعي", "warn");
+  }
+}
+
 
 // ننتظر تحميل وحدة Firebase الحديثة (type=module في <head>) قبل أي استخدام —
 // قد تصل هذه الوحدة قبل أو بعد تنفيذ هذا الكود، فنتعامل مع الحالتين معاً.
@@ -8765,6 +8847,7 @@ async function setManualRemainingOverride(key, value){
   delete master[key]["محصل_يدوي"]; // تجنّب تعارض تعديلين متضاربين معاً
   await saveMaster([key]);
   masterCache = master; invalidateMasterCaseNoIndex();
+  syncCaseToLawyerSystem(key); // مزامنة بالخلفية (بلا انتظار) — راجع تعريفها أعلاه
 }
 
 // تعديل يدوي للمحصّل — عند تحديده يُعاد حساب المتبقي تلقائياً (المطلوب ناقص المحصّل الجديد)
@@ -8775,6 +8858,7 @@ async function setManualCollectedOverride(key, value){
   delete master[key]["متبقي_يدوي"]; // تجنّب تعارض تعديلين متضاربين معاً
   await saveMaster([key]);
   masterCache = master; invalidateMasterCaseNoIndex();
+  syncCaseToLawyerSystem(key);
 }
 
 // تعديل يدوي للمطلوب — متاح لكل قضية حالتها "فصل"
@@ -8784,6 +8868,7 @@ async function setManualRequestedOverride(key, value){
   master[key]["مطلوب_يدوي"] = value;
   await saveMaster([key]);
   masterCache = master; invalidateMasterCaseNoIndex();
+  syncCaseToLawyerSystem(key);
 }
 
 // تعديل يدوي للمتاح — يُستخدم للقضايا المفصولة التي فيها مبلغ متاح ونريد تصحيحه
@@ -8793,6 +8878,7 @@ async function setManualAvailOverride(key, value){
   master[key]["متاح_يدوي"] = value;
   await forceSaveKey(key);
   masterCache = master; invalidateMasterCaseNoIndex();
+  syncCaseToLawyerSystem(key);
 }
 
 // تعديل يدوي لاسم الطرف/المحكمة — يُخزَّن في حقل منفصل عن البيانات الخام،
@@ -9469,7 +9555,9 @@ function applyCasesFilter(keepPage){
     if(typeFilter){
       const rec = masterCache[caseKey(r)];
       const caseType = (rec && rec["نوع_القضية"]) || "";
-      if(caseType !== typeFilter) return false;
+      if(typeFilter === "بلا"){
+        if(caseType !== "") return false; // "بلا" = غير مصنَّفة إطلاقاً (لا شخصي ولا محامي)
+      } else if(caseType !== typeFilter) return false;
     }
     if(clientFilter && !getPlaintiffForRow(r).includes(clientFilter)) return false;
     if(courtCityFilter && !normalizeArabicForSearch(getCourtForRow(r)||"").includes(normalizeArabicForSearch(courtCityFilter))) return false;
@@ -9523,6 +9611,7 @@ function applyCasesFilter(keepPage){
       return tokens.every(token=>{
         if(/^\d{4}$/.test(token)) return String(caseYearForSearch) === token || caseNoText.includes(token);
         if(token === "شخصي" || token === "محامي") return caseTypeForSearch === token;
+        if(token === "بلا") return caseTypeForSearch === "";
         if(KNOWN_COURT_NAMES.includes(token)) return courtNameText.includes(token);
         return caseNoText.includes(token) || courtNameText.includes(token) || allNamesText.includes(token);
       });
