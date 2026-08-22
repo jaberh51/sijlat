@@ -638,6 +638,14 @@
   .mr-box.mr-checked{background:var(--green-soft);border-color:#86efac;}
   .mr-box.mr-box-disabled{background:var(--slate-soft);border-color:var(--line);opacity:.65;}
   .mr-box.mr-box-disabled .mr-box-title{color:var(--ink-soft);}
+  .mr-box.mr-box-frozen{border-color:#60a5fa;box-shadow:0 0 0 1.5px #bfdbfe;}
+  .mr-frozen-tag{font-size:10px;}
+  .mr-freeze-btn{
+    width:100%;box-sizing:border-box;margin-top:5px;background:#eff6ff;color:#1d4ed8;
+    border:1px solid #93c5fd;border-radius:6px;padding:4px 6px;font-size:10px;font-weight:700;
+    cursor:pointer;font-family:'Tajawal',sans-serif;transition:filter .12s ease;
+  }
+  .mr-freeze-btn:hover, .mr-freeze-btn:active{filter:brightness(.97);}
   .mr-card-draft{border-color:var(--brass);box-shadow:0 0 0 2px var(--brass-soft);}
   @media(max-width:640px){
     .mr-boxes-row{flex-direction:column;}
@@ -5841,6 +5849,13 @@ const _mrRunSearch = debounce((qRaw)=>{
   if(!q){ resultsEl.style.display = "none"; resultsEl.innerHTML = ""; return; }
   const activeKeys = new Set(getMrRecords());
   const matches = getDedupedRAW().filter(r=>{
+    // إخفاء "فصل" أو متبقٍّ أقل من 50 دينار من البحث نهائياً (بطلب المستخدم)
+    // — نفس شرط getMrRecords بالضبط، فما تظهر هذي القضايا هنا إطلاقاً، سواء
+    // كانت مُضافة أصلاً (وأصبحت مخفيّة) أو لسا ما أُضيفت.
+    const status = (r["حالة الدعوى"]||"").trim();
+    if(status === "فصل") return false;
+    const fin = getFinancialForRow(r);
+    if(fin.remaining !== null && fin.remaining < 50) return false;
     const caseNo = normalizeEasternDigits(r["رقم الدعوى"]||"");
     return caseNo.includes(q) ||
            getDefendantForRow(r).includes(q) ||
@@ -8886,6 +8901,20 @@ async function saveMrCard(key){
   renderMrList();
 }
 
+// تجميد خانة واحدة بمفردها (بطلب المستخدم — منفصل تماماً عن حفظ القضية
+// كاملة): تختار طريقة إرسال لخانة معيّنة، تضغط 🧊 تجميد، فتُقفَل هي بس —
+// بلا أي تأثير على الخانتين الأخريين ولا على إمكانية حفظ القضية كاملة إلا
+// بعد ما تُجمَّد الثلاث خانات معاً.
+async function freezeMrField(key, fieldBase){
+  const master = masterCache;
+  if(!master[key] || !master[key]["مراسلات"]) return;
+  master[key]["مراسلات"][fieldBase + "_مجمَّد"] = true;
+  await forceSaveKey(key);
+  masterCache = master;
+  showToast(`🧊 جُمِّدت خانة "${fieldBase}"`, "ok");
+  renderMrList();
+}
+
 function renderMrList(){
   const listEl = document.getElementById("mrList");
   const emptyEl = document.getElementById("mrEmptyState");
@@ -8908,13 +8937,12 @@ function renderMrList(){
     return (collected !== null && collected > 0.009) || (avail !== null && avail > 0.009);
   }
 
-  // خانة "كتاب الحسم" تُحسَب مكتملة لو وصل مبلغ فعلياً (الشارة التلقائية
-  // "✅ وصل" دليل قاطع بذاته، بغضّ النظر عن تسجيل طريقة الإرسال) — أو لو
-  // اختير يدوياً طريقة إرسال (بطلب المستخدم: توضيح منطقي، الشارة أهم من
-  // اختيار الطريقة لغرض اعتبار الخانة "مكتملة").
+  // خانة "كتاب الحسم" تُحسَب "مجمَّدة" (مكتملة) لو وصل مبلغ فعلياً (الشارة
+  // التلقائية "✅ وصل" قفل تلقائي بذاتها) — أو لو ضغط المستخدم زر التجميد
+  // الفردي لها يدوياً. باقي الخانتين تحتاجان تجميداً يدوياً صريحاً.
   function isMrComplete(mr, arrived){
-    const hasmOk = arrived || !!mr["حسم_طريقة"];
-    return !!(hasmOk && mr["مكافأة_طريقة"] && mr["حوافز_طريقة"]);
+    const hasmFrozen = arrived || !!mr["حسم_مجمَّد"];
+    return !!(hasmFrozen && mr["مكافأة_مجمَّد"] && mr["حوافز_مجمَّد"]);
   }
 
   const keys = getMrRecords().sort((a,b)=>{
@@ -8942,20 +8970,25 @@ function renderMrList(){
   // خانة واحدة موحَّدة الشكل (تُستخدَم للثلاث خانات معاً) — عنوان + قائمة
   // منسدلة "طريقة الإرسال" (بريد/باليد/توصيله/أخرى...)، وحقل نص يظهر فقط
   // عند اختيار "أخرى" لإدخال طريقة جديدة تُضاف تلقائياً لباقي القوائم لاحقاً.
-  // extraOption: خيار إضافي خاص (يُستخدَم فقط لخانة "حجز الحوافز" — راجع
-  // MR_HAWAFIZ_NA_VALUE أعلاه).
-  function buildMrBox({icon, title, key, field, value, extraHtml, disabled, extraOptionValue}){
+  // extraOptionValue: خيار إضافي خاص (يُستخدَم فقط لخانة "حجز الحوافز" —
+  // راجع MR_HAWAFIZ_NA_VALUE أعلاه).
+  // fieldBase/frozen: حفظ فردي لهذي الخانة بس (بطلب المستخدم — منفصل تماماً
+  // عن زر "💾 حفظ" العام أعلى البطاقة، اللي يحفظ القضية كاملة). زر التجميد
+  // الصغير 🧊 يظهر فقط بعد اختيار قيمة فعلية ولم تُجمَّد بعد.
+  function buildMrBox({icon, title, key, field, fieldBase, value, extraHtml, disabled, extraOptionValue, frozen}){
     const isNA = extraOptionValue && value === extraOptionValue;
     const isOther = value && !isNA && !methods.includes(value);
-    const disabledAttr = disabled ? "disabled" : "";
+    const isDisabled = disabled || frozen;
+    const disabledAttr = isDisabled ? "disabled" : "";
     const optionsHtml = [`<option value="">— اختر —</option>`]
       .concat(methods.map(m => `<option value="${escapeAttr(m)}" ${value===m?"selected":""}>${escapeAttr(m)}</option>`))
       .concat([`<option value="__other__" ${isOther?"selected":""}>أخرى...</option>`])
       .concat(extraOptionValue ? [`<option value="${escapeAttr(extraOptionValue)}" ${isNA?"selected":""}>${escapeAttr(extraOptionValue)}</option>`] : [])
       .join("");
+    const showFreezeBtn = fieldBase && value && !frozen && !disabled;
     return `
-      <div class="mr-box ${value && !isNA ? "mr-checked" : ""} ${isNA ? "mr-box-disabled" : ""}">
-        <div class="mr-box-title">${icon} ${title}</div>
+      <div class="mr-box ${value && !isNA ? "mr-checked" : ""} ${isNA ? "mr-box-disabled" : ""} ${frozen ? "mr-box-frozen" : ""}">
+        <div class="mr-box-title">${icon} ${title}${frozen ? ` <span class="mr-frozen-tag" title="مجمَّدة">🧊</span>` : ""}</div>
         ${extraHtml || ""}
         <select class="mr-method-select mr-method-action" data-key="${escapeAttr(key)}" data-field="${field}" ${disabledAttr}>
           ${optionsHtml}
@@ -8963,6 +8996,7 @@ function renderMrList(){
         <input type="text" class="mr-method-other mr-method-other-action" data-key="${escapeAttr(key)}" data-field="${field}"
           value="${isOther ? escapeAttr(value) : ""}" placeholder="اكتب الطريقة..."
           style="display:${isOther ? "block" : "none"};" ${disabledAttr}>
+        ${showFreezeBtn ? `<button class="mr-freeze-btn mr-freeze-action" data-key="${escapeAttr(key)}" data-fieldbase="${fieldBase}" title="تجميد هذي الخانة بس">🧊 تجميد</button>` : ""}
       </div>`;
   }
 
@@ -8999,9 +9033,9 @@ function renderMrList(){
       </div>
 
       <div class="mr-boxes-row">
-        ${buildMrBox({icon:"📮", title:"كتاب الحسم", key, field:"حسم_طريقة", value:mr["حسم_طريقة"], extraHtml:statusHtml, disabled: arrived || !cardUnlocked})}
-        ${buildMrBox({icon:"💰", title:"حجز مكافأة", key, field:"مكافأة_طريقة", value:mr["مكافأة_طريقة"], disabled:!cardUnlocked})}
-        ${buildMrBox({icon:"🎁", title:"حجز حوافز", key, field:"حوافز_طريقة", value:mr["حوافز_طريقة"], disabled:!cardUnlocked, extraOptionValue:MR_HAWAFIZ_NA_VALUE})}
+        ${buildMrBox({icon:"📮", title:"كتاب الحسم", key, field:"حسم_طريقة", fieldBase:"حسم", value:mr["حسم_طريقة"], extraHtml:statusHtml, disabled: arrived || !cardUnlocked, frozen: arrived || !!mr["حسم_مجمَّد"]})}
+        ${buildMrBox({icon:"💰", title:"حجز مكافأة", key, field:"مكافأة_طريقة", fieldBase:"مكافأة", value:mr["مكافأة_طريقة"], disabled:!cardUnlocked, frozen:!!mr["مكافأة_مجمَّد"]})}
+        ${buildMrBox({icon:"🎁", title:"حجز حوافز", key, field:"حوافز_طريقة", fieldBase:"حوافز", value:mr["حوافز_طريقة"], disabled:!cardUnlocked, extraOptionValue:MR_HAWAFIZ_NA_VALUE, frozen:!!mr["حوافز_مجمَّد"]})}
       </div>
     </div>`;
   }).join("");
@@ -9012,6 +9046,9 @@ function renderMrList(){
   });
   listEl.querySelectorAll(".mr-confirm-action").forEach(btn=>{
     btn.onclick = ()=> saveMrCard(btn.dataset.key);
+  });
+  listEl.querySelectorAll(".mr-freeze-action").forEach(btn=>{
+    btn.onclick = ()=> freezeMrField(btn.dataset.key, btn.dataset.fieldbase);
   });
   listEl.querySelectorAll(".mr-method-action").forEach(sel=>{
     sel.onchange = async ()=>{
