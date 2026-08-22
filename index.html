@@ -590,34 +590,38 @@
   .mr-delete-btn:hover{transform:scale(1.08);background:#fecaca;}
   .mr-card-date{font-size:10.5px;color:var(--ink-soft);margin-bottom:12px;}
 
+  .mr-boxes-row{display:flex;gap:10px;flex-wrap:wrap;}
   .mr-box{
     background:var(--paper);border:1px solid var(--line);border-radius:12px;
-    padding:10px 14px;margin-bottom:10px;
+    padding:10px 12px;flex:1 1 0;min-width:130px;transition:background .15s ease, border-color .15s ease;
   }
-  .mr-box:last-child{margin-bottom:0;}
-  .mr-box-title{font-size:12.5px;font-weight:700;color:var(--ink);margin-bottom:8px;display:flex;align-items:center;gap:6px;}
+  .mr-box-title{font-size:11.5px;font-weight:700;color:var(--ink);margin-bottom:8px;display:flex;align-items:center;gap:5px;white-space:nowrap;}
   .mr-status-badge{
-    display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;
-    border-radius:999px;padding:4px 12px;margin-bottom:8px;
+    display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;
+    border-radius:999px;padding:3px 9px;margin-bottom:8px;
     animation:mrBadgeIn .3s ease;
   }
   @keyframes mrBadgeIn{from{opacity:0;transform:scale(.85);}to{opacity:1;transform:scale(1);}}
   .mr-status-arrived{background:linear-gradient(135deg,#dcfce7,#bbf7d0);color:#166534;}
   .mr-status-pending{background:var(--slate-soft);color:var(--slate);}
-  .mr-note-input{
-    width:100%;box-sizing:border-box;font-family:'Tajawal',sans-serif;font-size:12.5px;
-    border:1px solid var(--line);border-radius:8px;padding:8px 10px;resize:vertical;min-height:44px;
-    background:var(--paper-raised);color:var(--ink);transition:border-color .15s ease;
+  .mr-method-select{
+    width:100%;box-sizing:border-box;font-family:'Tajawal',sans-serif;font-size:12px;
+    border:1px solid var(--line);border-radius:8px;padding:7px 8px;
+    background:var(--paper-raised);color:var(--ink);cursor:pointer;transition:border-color .15s ease;
   }
-  .mr-note-input:focus{outline:none;border-color:var(--brass);}
-  .mr-note-input:disabled{background:var(--paper);color:var(--ink-soft);cursor:not-allowed;}
-  .mr-checkbox-label{
-    display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:var(--ink);cursor:pointer;
+  .mr-method-select:focus{outline:none;border-color:var(--brass);}
+  .mr-method-select:disabled{background:var(--paper);color:var(--ink-soft);cursor:not-allowed;}
+  .mr-method-other{
+    width:100%;box-sizing:border-box;font-family:'Tajawal',sans-serif;font-size:12px;
+    border:1px solid var(--brass);border-radius:8px;padding:7px 8px;margin-top:6px;
+    background:var(--paper-raised);color:var(--ink);
   }
-  .mr-checkbox-label:has(input:disabled){cursor:default;color:var(--ink-soft);}
-  .mr-checkbox{width:17px;height:17px;accent-color:var(--brass);cursor:pointer;flex:none;}
-  .mr-checkbox:disabled{cursor:not-allowed;}
-  .mr-box-simple.mr-checked{background:var(--green-soft);border-color:#86efac;}
+  .mr-method-other:focus{outline:none;box-shadow:0 0 0 2px var(--brass-soft);}
+  .mr-box.mr-checked{background:var(--green-soft);border-color:#86efac;}
+  @media(max-width:640px){
+    .mr-boxes-row{flex-direction:column;}
+    .mr-box{min-width:0;}
+  }
 
   .closure-card{
     background:#fffbeb;border:1.5px solid #fde68a;border-radius:12px;
@@ -5637,7 +5641,8 @@ const DEFAULT_APP_SETTINGS = {
   lwUnfoldedCustomGroups: null,   // مجموعات مخصَّصة مفرودة يدوياً
   lwZeroSectionUnfolded: null,    // حالة طي/فرد قسم "صفرية"
   doveNotifiedClosureKeys: null,  // قضايا سبق إشعارها بـ"🕊️ انتهت" — لمنع التكرار
-  lastImportInfo: null            // تاريخ ووقت + اسم آخر ملف استيراد ناجح (لصندوق "آخر استيراد")
+  lastImportInfo: null,           // تاريخ ووقت + اسم آخر ملف استيراد ناجح (لصندوق "آخر استيراد")
+  mrDeliveryMethods: null         // قائمة "طرق الإرسال" بصفحة المراسلات — تكبر تلقائياً كل ما أُضيفت طريقة "أخرى" جديدة
 };
 let appSettings = {...DEFAULT_APP_SETTINGS};
 
@@ -8697,6 +8702,30 @@ function getMrRecords(){
   return Object.keys(masterCache).filter(k => masterCache[k]["مراسلات"] && masterCache[k]["مراسلات"]["نشط"]);
 }
 
+// قائمة "طرق الإرسال" المشتركة لكل خانات المراسلات الثلاث (حسم/مكافأة/حوافز)
+// — تبدأ بثلاث طرق أساسية، وتكبر تلقائياً بأي طريقة جديدة يكتبها المستخدم
+// عبر خيار "أخرى" (بطلب المستخدم)، مزامَنة عبر Firebase فتُشارَك عبر الأجهزة.
+const MR_DEFAULT_DELIVERY_METHODS = ["بريد", "باليد", "توصيله"];
+function getMrDeliveryMethods(){
+  if(appSettings.mrDeliveryMethods && appSettings.mrDeliveryMethods.length) return appSettings.mrDeliveryMethods;
+  return MR_DEFAULT_DELIVERY_METHODS;
+}
+async function addMrDeliveryMethod(value){
+  value = (value || "").trim();
+  if(!value) return;
+  const list = [...getMrDeliveryMethods()];
+  if(list.includes(value)) return; // موجودة أصلاً — لا داعي للتكرار
+  list.push(value);
+  await saveAppSettingField('mrDeliveryMethods', list);
+}
+async function setMrFieldMethod(key, field, value){
+  const master = masterCache;
+  if(!master[key] || !master[key]["مراسلات"]) return;
+  master[key]["مراسلات"][field] = value;
+  await saveMaster([key]);
+  masterCache = master;
+}
+
 let mrEditUnlocked = false;
 
 async function toggleMrEditMode(){
@@ -8723,12 +8752,13 @@ async function addCaseToCorrespondence(key){
     showToast("ℹ️ هذي القضية موجودة أصلاً بالمراسلات", "warn");
     return;
   }
+  const oldMr = master[key]["مراسلات"] || {};
   master[key]["مراسلات"] = {
     "نشط": true,
     "أضيفت_في": getAccurateNow().getTime(),
-    "ملاحظة_الحسم": (master[key]["مراسلات"] && master[key]["مراسلات"]["ملاحظة_الحسم"]) || "",
-    "مكافأة": false,
-    "حوافز": false
+    "حسم_طريقة": oldMr["حسم_طريقة"] || "",
+    "مكافأة_طريقة": oldMr["مكافأة_طريقة"] || "",
+    "حوافز_طريقة": oldMr["حوافز_طريقة"] || ""
   };
   await saveMaster([key]);
   masterCache = master;
@@ -8747,25 +8777,6 @@ async function removeCaseFromCorrespondence(key){
   await forceSaveKey(key);
   masterCache = master;
   showToast("🗑️ أُزيلت من المراسلات", "ok");
-  renderMrList();
-}
-
-async function updateMrNote(key, text){
-  const master = masterCache;
-  if(!master[key]) master[key] = {};
-  if(!master[key]["مراسلات"]) return;
-  master[key]["مراسلات"]["ملاحظة_الحسم"] = text;
-  await saveMaster([key]);
-  masterCache = master;
-}
-
-async function toggleMrCheckbox(key, field){
-  if(!mrEditUnlocked) return;
-  const master = masterCache;
-  if(!master[key] || !master[key]["مراسلات"]) return;
-  master[key]["مراسلات"][field] = !master[key]["مراسلات"][field];
-  await forceSaveKey(key);
-  masterCache = master;
   renderMrList();
 }
 
@@ -8790,6 +8801,30 @@ function renderMrList(){
   emptyEl.style.display = "none";
 
   const fmtDate = (ms)=> ms ? new Date(ms).toLocaleDateString('ar-EG', {day:'2-digit', month:'2-digit', year:'numeric'}) : "—";
+  const methods = getMrDeliveryMethods();
+  const disabledAttr = mrEditUnlocked ? "" : "disabled";
+
+  // خانة واحدة موحَّدة الشكل (تُستخدَم للثلاث خانات معاً) — عنوان + قائمة
+  // منسدلة "طريقة الإرسال" (بريد/باليد/توصيله/أخرى...)، وحقل نص يظهر فقط
+  // عند اختيار "أخرى" لإدخال طريقة جديدة تُضاف تلقائياً لباقي القوائم لاحقاً.
+  function buildMrBox({icon, title, key, field, value, extraHtml}){
+    const isOther = value && !methods.includes(value);
+    const optionsHtml = [`<option value="">— اختر —</option>`]
+      .concat(methods.map(m => `<option value="${escapeAttr(m)}" ${value===m?"selected":""}>${escapeAttr(m)}</option>`))
+      .concat([`<option value="__other__" ${isOther?"selected":""}>أخرى...</option>`])
+      .join("");
+    return `
+      <div class="mr-box ${value ? "mr-checked" : ""}">
+        <div class="mr-box-title">${icon} ${title}</div>
+        ${extraHtml || ""}
+        <select class="mr-method-select mr-method-action" data-key="${escapeAttr(key)}" data-field="${field}" ${disabledAttr}>
+          ${optionsHtml}
+        </select>
+        <input type="text" class="mr-method-other mr-method-other-action" data-key="${escapeAttr(key)}" data-field="${field}"
+          value="${isOther ? escapeAttr(value) : ""}" placeholder="اكتب الطريقة..."
+          style="display:${isOther ? "block" : "none"};" ${disabledAttr}>
+      </div>`;
+  }
 
   listEl.innerHTML = keys.map(key=>{
     const row = getRowByKey(key);
@@ -8801,10 +8836,7 @@ function renderMrList(){
     const statusHtml = arrived
       ? `<span class="mr-status-badge mr-status-arrived">✅ وصل — يوجد محصّل/متاح</span>`
       : `<span class="mr-status-badge mr-status-pending">⏳ لم يصل بعد</span>`;
-    const noteVal = escapeAttr(mr["ملاحظة_الحسم"] || "");
-    const disabledAttr = mrEditUnlocked ? "" : "disabled";
-    const mukafaaChecked = mr["مكافأة"] ? "checked" : "";
-    const hawafizChecked = mr["حوافز"] ? "checked" : "";
+
     return `
     <div class="mr-card" data-key="${escapeAttr(key)}">
       <div class="mr-card-header">
@@ -8816,25 +8848,10 @@ function renderMrList(){
       </div>
       <div class="mr-card-date">📅 أُضيفت بالمراسلات: ${fmtDate(mr["أضيفت_في"])}</div>
 
-      <div class="mr-box">
-        <div class="mr-box-title">📮 كتاب الحسم</div>
-        ${statusHtml}
-        <textarea class="mr-note-input mr-note-action" data-key="${escapeAttr(key)}" ${disabledAttr}
-          placeholder="ملاحظات (مثلاً: باليد للمالية، بريد أردني...)">${noteVal}</textarea>
-      </div>
-
-      <div class="mr-box mr-box-simple ${mr["مكافأة"] ? "mr-checked" : ""}">
-        <label class="mr-checkbox-label">
-          <input type="checkbox" class="mr-checkbox mr-check-action" data-key="${escapeAttr(key)}" data-field="مكافأة" ${mukafaaChecked} ${disabledAttr}>
-          💰 كتاب حجز المكافأة
-        </label>
-      </div>
-
-      <div class="mr-box mr-box-simple ${mr["حوافز"] ? "mr-checked" : ""}">
-        <label class="mr-checkbox-label">
-          <input type="checkbox" class="mr-checkbox mr-check-action" data-key="${escapeAttr(key)}" data-field="حوافز" ${hawafizChecked} ${disabledAttr}>
-          🎁 كتاب حجز الحوافز
-        </label>
+      <div class="mr-boxes-row">
+        ${buildMrBox({icon:"📮", title:"كتاب الحسم", key, field:"حسم_طريقة", value:mr["حسم_طريقة"], extraHtml:statusHtml})}
+        ${buildMrBox({icon:"💰", title:"حجز مكافأة", key, field:"مكافأة_طريقة", value:mr["مكافأة_طريقة"]})}
+        ${buildMrBox({icon:"🎁", title:"حجز حوافز", key, field:"حوافز_طريقة", value:mr["حوافز_طريقة"]})}
       </div>
     </div>`;
   }).join("");
@@ -8843,15 +8860,31 @@ function renderMrList(){
   listEl.querySelectorAll(".mr-delete-action").forEach(btn=>{
     btn.onclick = ()=> removeCaseFromCorrespondence(btn.dataset.key);
   });
-  listEl.querySelectorAll(".mr-check-action").forEach(cb=>{
-    cb.onchange = ()=> toggleMrCheckbox(cb.dataset.key, cb.dataset.field);
+  listEl.querySelectorAll(".mr-method-action").forEach(sel=>{
+    sel.onchange = async ()=>{
+      const key = sel.dataset.key, field = sel.dataset.field;
+      const otherInput = sel.closest(".mr-box").querySelector(".mr-method-other-action");
+      if(sel.value === "__other__"){
+        otherInput.style.display = "block";
+        otherInput.value = "";
+        otherInput.focus();
+        return; // ننتظر الكتابة والتأكيد بالخروج من الحقل (blur) قبل الحفظ
+      }
+      otherInput.style.display = "none";
+      await setMrFieldMethod(key, field, sel.value);
+      renderMrList();
+    };
   });
-  listEl.querySelectorAll(".mr-note-action").forEach(ta=>{
-    let debounceTimer = null;
-    ta.addEventListener("input", ()=>{
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(()=> updateMrNote(ta.dataset.key, ta.value), 800);
+  listEl.querySelectorAll(".mr-method-other-action").forEach(inp=>{
+    inp.addEventListener("blur", async ()=>{
+      const val = inp.value.trim();
+      const key = inp.dataset.key, field = inp.dataset.field;
+      if(!val){ renderMrList(); return; } // رجع فارغاً بلا كتابة شي — رجوع لحالة "بلا اختيار"
+      await addMrDeliveryMethod(val); // تُضاف تلقائياً لقائمة الخيارات المشتركة للمستقبل
+      await setMrFieldMethod(key, field, val);
+      renderMrList();
     });
+    inp.addEventListener("keydown", (e)=>{ if(e.key === "Enter") inp.blur(); });
   });
 }
 
