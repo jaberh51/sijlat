@@ -590,10 +590,11 @@
   .mr-delete-btn:hover{transform:scale(1.08);background:#fecaca;}
   .mr-card-date{font-size:10.5px;color:var(--ink-soft);margin-bottom:12px;}
 
-  .mr-boxes-row{display:flex;gap:10px;flex-wrap:wrap;}
+  .mr-boxes-row{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch;}
   .mr-box{
     background:var(--paper);border:1px solid var(--line);border-radius:12px;
-    padding:10px 12px;flex:1 1 0;min-width:130px;transition:background .15s ease, border-color .15s ease;
+    padding:10px 12px;flex:1 1 0;min-width:0;overflow:hidden;
+    transition:background .15s ease, border-color .15s ease;
   }
   .mr-box-title{font-size:11.5px;font-weight:700;color:var(--ink);margin-bottom:8px;display:flex;align-items:center;gap:5px;white-space:nowrap;}
   .mr-status-badge{
@@ -1766,6 +1767,7 @@ if('serviceWorker' in navigator){
       <div class="fu-page-title">📬 المراسلات</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn secondary" id="mrEditToggleBtn">🔒 تعديل / حذف</button>
+        <button class="btn" id="mrConfirmBtn" style="display:none;">✅ اعتماد وإقفال</button>
         <button class="btn secondary" id="correspondencePageClose">✕ إغلاق والعودة</button>
       </div>
     </div>
@@ -5794,6 +5796,7 @@ document.getElementById("generalNotesPageClose").onclick = goHome;
 // ===== أحداث صفحة المراسلات =====
 document.getElementById("correspondencePageClose").onclick = goHome;
 document.getElementById("mrEditToggleBtn").onclick = toggleMrEditMode;
+document.getElementById("mrConfirmBtn").onclick = lockMrEditMode;
 document.getElementById("mrSortSelect").onchange = renderMrList;
 
 const _mrRunSearch = debounce((q)=>{
@@ -8691,6 +8694,7 @@ function goCorrespondence(){
   document.body.classList.remove("mode-remittances");
   mrEditUnlocked = false;
   document.getElementById("mrEditToggleBtn").textContent = "🔒 تعديل / حذف";
+  document.getElementById("mrConfirmBtn").style.display = "none";
   document.getElementById("mrSearchInput").value = "";
   document.getElementById("mrSearchResults").style.display = "none";
   renderMrList();
@@ -8728,11 +8732,19 @@ async function setMrFieldMethod(key, field, value){
 
 let mrEditUnlocked = false;
 
+// يقفل وضع التعديل — يُستدعى إما من زر "🔒 تعديل/حذف" (بالضغط عليه مرة ثانية
+// أثناء التفعيل) أو من زر "✅ اعتماد وإقفال" الصريح (بطلب المستخدم — تأكيد
+// واضح لإنهاء التعديل بدل ترك المربعات مفتوحة إلى أن يتذكّر المستخدم إقفالها).
+function lockMrEditMode(){
+  mrEditUnlocked = false;
+  document.getElementById("mrEditToggleBtn").textContent = "🔒 تعديل / حذف";
+  document.getElementById("mrConfirmBtn").style.display = "none";
+  renderMrList();
+}
+
 async function toggleMrEditMode(){
   if(mrEditUnlocked){
-    mrEditUnlocked = false;
-    document.getElementById("mrEditToggleBtn").textContent = "🔒 تعديل / حذف";
-    renderMrList();
+    lockMrEditMode();
     return;
   }
   const pwd = await askInput("أدخل كلمة السر لتفعيل التعديل والحذف", {type:"password"});
@@ -8740,8 +8752,9 @@ async function toggleMrEditMode(){
   const ok = await verifyPassword(pwd, LW_STEP_PASS_HASH);
   if(!ok){ showToast("⚠️ كلمة سر خاطئة", "warn"); return; }
   mrEditUnlocked = true;
-  document.getElementById("mrEditToggleBtn").textContent = "🔓 وضع التعديل مفعَّل — اضغط للإغلاق";
-  showToast("🔓 التعديل والحذف مفعَّلان الآن بهذي الصفحة", "ok");
+  document.getElementById("mrEditToggleBtn").textContent = "🔓 وضع التعديل مفعَّل";
+  document.getElementById("mrConfirmBtn").style.display = "inline-flex";
+  showToast("🔓 التعديل والحذف مفعَّلان الآن — اضغط \"اعتماد وإقفال\" بعد الانتهاء", "ok");
   renderMrList();
 }
 
@@ -8834,8 +8847,8 @@ function renderMrList(){
     const avail = getRowAvail(row);
     const arrived = (collected !== null && collected > 0.009) || (avail !== null && avail > 0.009);
     const statusHtml = arrived
-      ? `<span class="mr-status-badge mr-status-arrived">✅ وصل — يوجد محصّل/متاح</span>`
-      : `<span class="mr-status-badge mr-status-pending">⏳ لم يصل بعد</span>`;
+      ? `<span class="mr-status-badge mr-status-arrived" title="يوجد محصّل أو متاح بهذي القضية">✅ وصل</span>`
+      : `<span class="mr-status-badge mr-status-pending" title="لا يوجد محصّل أو متاح بعد">⏳ لم يصل</span>`;
 
     return `
     <div class="mr-card" data-key="${escapeAttr(key)}">
