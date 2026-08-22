@@ -8847,8 +8847,25 @@ async function removeCaseFromCorrespondence(key){
   if(!confirmed) return;
   const master = masterCache;
   if(master[key]) delete master[key]["مراسلات"];
-  await forceSaveKey(key);
   masterCache = master;
+  // نكتب أمر الحذف مباشرة وصراحة لـ Firebase (بلا الاعتماد على آلية المقارنة
+  // التلقائية قبل/بعد) — اكتُشف إن forceSaveKey (المصمَّمة أصلاً لضمان أن
+  // "قيماً جديدة" لا تُتجاهَل صامتة) تفشل بالاتجاه المعاكس بالضبط: تمسح
+  // معرفة "القيمة قبل الحذف" قبل المقارنة، فلا تكتشف اختفاء الحقل إطلاقاً،
+  // ولا يُرسَل أي أمر حذف فعلي — فتبقى البيانات بـFirebase وترجع بعد أي
+  // إعادة تحميل. الكتابة المباشرة هنا تتجاوز هذا القصور تماماً وتضمن الحذف.
+  try{
+    if(fbDb){
+      const fb = window.__fbModular;
+      await fb.set(fb.ref(fbDb, 'master_cases/' + encodeFbKey(key) + '/مراسلات'), null);
+    }
+    try{ await idbSet('master_cases', JSON.stringify(masterCache)); }catch(e){}
+    if(_lastKnownSnapshot[key]) delete _lastKnownSnapshot[key]["مراسلات"];
+  }catch(e){
+    console.error("فشل حذف القضية من المراسلات على Firebase:", e);
+    showToast("⚠️ تعذّر الحذف من الخادم — حاول مرة ثانية", "warn");
+    return;
+  }
   showToast("🗑️ أُزيلت من المراسلات", "ok");
   renderMrList();
 }
