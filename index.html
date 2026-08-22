@@ -535,6 +535,85 @@
   .closure-arrow{transition:transform .2s ease;font-size:16px;}
   .closure-arrow.open{transform:rotate(180deg);}
   .closure-list{display:flex;flex-direction:column;gap:10px;margin-top:14px;}
+
+  /* ===== صفحة المراسلات — تصميم مميّز بطلب المستخدم ===== */
+  .mr-page .fu-page-inner{max-width:820px;}
+  .mr-add-box{position:relative;margin-bottom:14px;}
+  .mr-search-results{
+    position:absolute;top:calc(100% + 4px);right:0;left:0;z-index:50;
+    background:var(--paper-raised);border:1.5px solid var(--brass);border-radius:12px;
+    box-shadow:0 8px 24px rgba(0,0,0,.15);max-height:280px;overflow-y:auto;
+  }
+  .mr-search-item{
+    display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;
+    border-bottom:1px solid var(--line);transition:background .12s ease;
+  }
+  .mr-search-item:last-child{border-bottom:none;}
+  .mr-search-item:hover{background:#fdf6e9;}
+  .mr-search-caseno{font-weight:700;color:var(--brass);white-space:nowrap;}
+  .mr-search-party{color:var(--ink-soft);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;}
+  .mr-search-hint{font-size:10px;color:var(--ink-soft);margin-inline-start:auto;white-space:nowrap;}
+  .mr-search-empty{padding:14px;text-align:center;color:var(--ink-soft);font-size:12.5px;}
+  .mr-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;}
+  .mr-count{font-size:12px;color:var(--ink-soft);font-weight:700;}
+  .mr-list{display:flex;flex-direction:column;gap:14px;}
+
+  .mr-card{
+    background:linear-gradient(135deg,var(--paper-raised),#fdfaf3);
+    border:1.5px solid var(--line);border-radius:16px;padding:16px 18px;
+    box-shadow:0 2px 8px rgba(30,39,51,.06);
+    transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    position:relative;overflow:hidden;
+  }
+  .mr-card::before{
+    content:"✉️";position:absolute;left:-6px;top:-10px;font-size:64px;opacity:.05;
+    transform:rotate(-15deg);pointer-events:none;
+  }
+  .mr-card:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(30,39,51,.12);border-color:var(--brass);}
+  .mr-card-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px;}
+  .mr-card-title{display:flex;align-items:center;gap:10px;min-width:0;}
+  .mr-card-caseno{
+    font-family:'Amiri',serif;font-weight:700;font-size:16px;color:var(--brass);
+    background:var(--brass-soft);border-radius:8px;padding:3px 10px;white-space:nowrap;
+  }
+  .mr-card-party{font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .mr-delete-btn{
+    background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:8px;
+    width:30px;height:30px;flex:none;cursor:pointer;font-size:14px;
+    display:flex;align-items:center;justify-content:center;transition:transform .12s ease;
+  }
+  .mr-delete-btn:hover{transform:scale(1.08);background:#fecaca;}
+  .mr-card-date{font-size:10.5px;color:var(--ink-soft);margin-bottom:12px;}
+
+  .mr-box{
+    background:var(--paper);border:1px solid var(--line);border-radius:12px;
+    padding:10px 14px;margin-bottom:10px;
+  }
+  .mr-box:last-child{margin-bottom:0;}
+  .mr-box-title{font-size:12.5px;font-weight:700;color:var(--ink);margin-bottom:8px;display:flex;align-items:center;gap:6px;}
+  .mr-status-badge{
+    display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;
+    border-radius:999px;padding:4px 12px;margin-bottom:8px;
+    animation:mrBadgeIn .3s ease;
+  }
+  @keyframes mrBadgeIn{from{opacity:0;transform:scale(.85);}to{opacity:1;transform:scale(1);}}
+  .mr-status-arrived{background:linear-gradient(135deg,#dcfce7,#bbf7d0);color:#166534;}
+  .mr-status-pending{background:var(--slate-soft);color:var(--slate);}
+  .mr-note-input{
+    width:100%;box-sizing:border-box;font-family:'Tajawal',sans-serif;font-size:12.5px;
+    border:1px solid var(--line);border-radius:8px;padding:8px 10px;resize:vertical;min-height:44px;
+    background:var(--paper-raised);color:var(--ink);transition:border-color .15s ease;
+  }
+  .mr-note-input:focus{outline:none;border-color:var(--brass);}
+  .mr-note-input:disabled{background:var(--paper);color:var(--ink-soft);cursor:not-allowed;}
+  .mr-checkbox-label{
+    display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:var(--ink);cursor:pointer;
+  }
+  .mr-checkbox-label:has(input:disabled){cursor:default;color:var(--ink-soft);}
+  .mr-checkbox{width:17px;height:17px;accent-color:var(--brass);cursor:pointer;flex:none;}
+  .mr-checkbox:disabled{cursor:not-allowed;}
+  .mr-box-simple.mr-checked{background:var(--green-soft);border-color:#86efac;}
+
   .closure-card{
     background:#fffbeb;border:1.5px solid #fde68a;border-radius:12px;
     padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
@@ -1572,6 +1651,7 @@ if('serviceWorker' in navigator){
       <button class="btn secondary" id="viewSettingsBtn" style="font-size:11.5px;padding:6px 14px;">⚙️ الإعدادات</button>
       <button class="btn secondary" id="autoRulesBtn" style="font-size:11.5px;padding:6px 14px;position:relative;">🔔 اقتراحات ذكية<span id="autoRulesBadgeCount" class="auto-rules-badge" style="display:none;"></span></button>
       <button class="btn secondary" id="viewGeneralNotesBtn" style="font-size:11.5px;padding:6px 14px;">📝 ملاحظات عامة</button>
+      <button class="btn secondary" id="viewCorrespondenceBtn" style="font-size:11.5px;padding:6px 14px;">📬 المراسلات</button>
       <button class="btn secondary" id="signOutBtn" style="font-size:11.5px;padding:6px 14px;">🔒 تسجيل الخروج</button>
     </div>
   </div>
@@ -1667,6 +1747,36 @@ if('serviceWorker' in navigator){
         <button class="btn" id="generalNoteAddBtn" style="flex:none;">➕ إضافة</button>
       </div>
       <div id="generalNotesList" style="display:flex;flex-direction:column;gap:8px;"></div>
+    </div>
+  </div>
+</div>
+
+<div id="correspondencePage" class="fu-page mr-page" style="display:none;">
+  <div class="fu-page-inner">
+    <div class="fu-page-header">
+      <div class="fu-page-title">📬 المراسلات</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn secondary" id="mrEditToggleBtn">🔒 تعديل / حذف</button>
+        <button class="btn secondary" id="correspondencePageClose">✕ إغلاق والعودة</button>
+      </div>
+    </div>
+    <div class="fu-page-section">
+      <div class="mr-add-box">
+        <input type="text" id="mrSearchInput" class="fu-search-input" placeholder="ابحث برقم القضية أو اسم الطرف، ثم دبل-كليك على النتيجة لإضافتها...">
+        <div id="mrSearchResults" class="mr-search-results" style="display:none;"></div>
+      </div>
+      <div class="mr-toolbar">
+        <select id="mrSortSelect" class="cases-select">
+          <option value="desc">🕐 الأحدث أولاً</option>
+          <option value="asc">🕐 الأقدم أولاً</option>
+        </select>
+        <span class="mr-count" id="mrCount"></span>
+      </div>
+      <div id="mrList" class="mr-list"></div>
+      <div class="empty-state" id="mrEmptyState" style="display:none;">
+        <div class="big">📭 لا توجد قضايا بالمراسلات بعد</div>
+        <div>ابحث عن قضية بالمربع أعلاه وأضفها بالدبل-كليك</div>
+      </div>
     </div>
   </div>
 </div>
@@ -5657,6 +5767,7 @@ function renderSettingsPage(){
 
 document.getElementById("viewSettingsBtn").onclick = goSettings;
 document.getElementById("viewGeneralNotesBtn").onclick = goGeneralNotes;
+document.getElementById("viewCorrespondenceBtn").onclick = goCorrespondence;
 document.getElementById("closureSection").onclick = goClosureNeeded;
 document.getElementById("closureNeededPageClose").onclick = goHome;
 document.getElementById("pinnedCasesBadge").onclick = ()=>{
@@ -5669,6 +5780,45 @@ document.getElementById("pinnedCasesPanelClose").onclick = ()=>{
   document.getElementById("pinnedCasesPanel").style.display = "none";
 };
 document.getElementById("generalNotesPageClose").onclick = goHome;
+
+// ===== أحداث صفحة المراسلات =====
+document.getElementById("correspondencePageClose").onclick = goHome;
+document.getElementById("mrEditToggleBtn").onclick = toggleMrEditMode;
+document.getElementById("mrSortSelect").onchange = renderMrList;
+
+document.getElementById("mrSearchInput").addEventListener("input", (e)=>{
+  const q = e.target.value.trim();
+  const resultsEl = document.getElementById("mrSearchResults");
+  if(!q){ resultsEl.style.display = "none"; resultsEl.innerHTML = ""; return; }
+  const activeKeys = new Set(getMrRecords());
+  const matches = getDedupedRAW().filter(r=>{
+    if(activeKeys.has(caseKey(r))) return false; // مضافة أصلاً — لا داعي تظهر بنتائج البحث
+    return (r["رقم الدعوى"]||"").includes(q) ||
+           getDefendantForRow(r).includes(q) ||
+           getPlaintiffForRow(r).includes(q);
+  }).slice(0, 15);
+  if(!matches.length){
+    resultsEl.style.display = "block";
+    resultsEl.innerHTML = `<div class="mr-search-empty">لا نتائج مطابقة</div>`;
+    return;
+  }
+  resultsEl.style.display = "block";
+  resultsEl.innerHTML = matches.map(r=>{
+    const key = caseKey(r);
+    return `<div class="mr-search-item" data-key="${escapeAttr(key)}">
+      <span class="mr-search-caseno">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}</span>
+      <span class="mr-search-party">${escapeAttr(getDefendantForRow(r))}</span>
+      <span class="mr-search-hint">دبل-كليك للإضافة</span>
+    </div>`;
+  }).join("");
+});
+
+document.getElementById("mrSearchResults").addEventListener("dblclick", (e)=>{
+  const item = e.target.closest(".mr-search-item");
+  if(!item || !item.dataset.key) return;
+  addCaseToCorrespondence(item.dataset.key);
+});
+
 document.getElementById("generalNoteAddBtn").onclick = async ()=>{
   const input = document.getElementById("generalNoteInput");
   if(!input.value.trim()) return;
@@ -8378,6 +8528,7 @@ function goHome(){
   document.getElementById("settingsPage").style.display = "none";
   document.getElementById("closureNeededPage").style.display = "none";
   document.getElementById("generalNotesPage").style.display = "none";
+  document.getElementById("correspondencePage").style.display = "none";
   document.body.style.overflow = "";
   currentSection = null;
   document.body.classList.remove("mode-remittances");
@@ -8399,6 +8550,7 @@ function goTrash(){
   document.getElementById("settingsPage").style.display = "none";
   document.getElementById("closureNeededPage").style.display = "none";
   document.getElementById("generalNotesPage").style.display = "none";
+  document.getElementById("correspondencePage").style.display = "none";
   document.getElementById("trashPage").style.display = "block";
   document.body.style.overflow = "hidden";
   currentSection = "trash";
@@ -8418,6 +8570,7 @@ function goAuditLog(){
   document.getElementById("settingsPage").style.display = "none";
   document.getElementById("closureNeededPage").style.display = "none";
   document.getElementById("generalNotesPage").style.display = "none";
+  document.getElementById("correspondencePage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "block";
   document.body.style.overflow = "hidden";
   currentSection = "auditlog";
@@ -8436,6 +8589,7 @@ function goSettings(){
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
   document.getElementById("generalNotesPage").style.display = "none";
+  document.getElementById("correspondencePage").style.display = "none";
   document.getElementById("closureNeededPage").style.display = "none";
   document.getElementById("settingsPage").style.display = "block";
   document.body.style.overflow = "hidden";
@@ -8455,6 +8609,7 @@ function goClosureNeeded(){
   document.getElementById("trashPage").style.display = "none";
   document.getElementById("auditLogPage").style.display = "none";
   document.getElementById("generalNotesPage").style.display = "none";
+  document.getElementById("correspondencePage").style.display = "none";
   document.getElementById("settingsPage").style.display = "none";
   document.getElementById("closureNeededPage").style.display = "block";
   document.body.style.overflow = "hidden";
@@ -8475,11 +8630,206 @@ function goGeneralNotes(){
   document.getElementById("auditLogPage").style.display = "none";
   document.getElementById("settingsPage").style.display = "none";
   document.getElementById("closureNeededPage").style.display = "none";
+  document.getElementById("correspondencePage").style.display = "none";
   document.getElementById("generalNotesPage").style.display = "block";
   document.body.style.overflow = "hidden";
   currentSection = "generalnotes";
   document.body.classList.remove("mode-remittances");
   renderGeneralNotesList();
+}
+
+// ===== صفحة المراسلات (بطلب المستخدم) =====
+// تتبّع 3 أنواع كتب مرتبطة بقضايا مختارة يدوياً من صفحة القضايا/البحث:
+// كتاب الحسم (حالته تُكتشَف تلقائياً من وجود محصّل/متاح)، كتاب حجز المكافأة،
+// كتاب حجز الحوافز. كل البيانات تُخزَّن داخل نفس سجل القضية بـmasterCache
+// تحت حقل "مراسلات" — فتبقى مرتبطة بالقضية أينما ظهرت، وتُحذَف تلقائياً لو
+// حُذفت القضية نفسها (تُحذف مع بقية سجل القضية كوحدة واحدة كالمعتاد).
+function goCorrespondence(){
+  document.getElementById("homePage").style.display = "none";
+  document.getElementById("mainWrap").style.display = "none";
+  document.getElementById("followupPage").style.display = "none";
+  document.getElementById("lawyerPage").style.display = "none";
+  document.getElementById("casesPage").style.display = "none";
+  document.getElementById("analysisPage").style.display = "none";
+  document.getElementById("backupsPage").style.display = "none";
+  document.getElementById("trashPage").style.display = "none";
+  document.getElementById("auditLogPage").style.display = "none";
+  document.getElementById("settingsPage").style.display = "none";
+  document.getElementById("closureNeededPage").style.display = "none";
+  document.getElementById("generalNotesPage").style.display = "none";
+  document.getElementById("correspondencePage").style.display = "block";
+  document.body.style.overflow = "hidden";
+  currentSection = "correspondence";
+  document.body.classList.remove("mode-remittances");
+  mrEditUnlocked = false;
+  document.getElementById("mrEditToggleBtn").textContent = "🔒 تعديل / حذف";
+  document.getElementById("mrSearchInput").value = "";
+  document.getElementById("mrSearchResults").style.display = "none";
+  renderMrList();
+}
+
+function getMrRecords(){
+  // كل القضايا الحاملة لحقل "مراسلات" نشط — بحث مباشر بالماستر (أسرع من
+  // فلترة كل RAW_DATA، والقضايا هنا قليلة العدد نسبياً دائماً)
+  return Object.keys(masterCache).filter(k => masterCache[k]["مراسلات"] && masterCache[k]["مراسلات"]["نشط"]);
+}
+
+let mrEditUnlocked = false;
+
+async function toggleMrEditMode(){
+  if(mrEditUnlocked){
+    mrEditUnlocked = false;
+    document.getElementById("mrEditToggleBtn").textContent = "🔒 تعديل / حذف";
+    renderMrList();
+    return;
+  }
+  const pwd = await askInput("أدخل كلمة السر لتفعيل التعديل والحذف", {type:"password"});
+  if(pwd === null) return;
+  const ok = await verifyPassword(pwd, LW_STEP_PASS_HASH);
+  if(!ok){ showToast("⚠️ كلمة سر خاطئة", "warn"); return; }
+  mrEditUnlocked = true;
+  document.getElementById("mrEditToggleBtn").textContent = "🔓 وضع التعديل مفعَّل — اضغط للإغلاق";
+  showToast("🔓 التعديل والحذف مفعَّلان الآن بهذي الصفحة", "ok");
+  renderMrList();
+}
+
+async function addCaseToCorrespondence(key){
+  const master = masterCache;
+  if(!master[key]) master[key] = {};
+  if(master[key]["مراسلات"] && master[key]["مراسلات"]["نشط"]){
+    showToast("ℹ️ هذي القضية موجودة أصلاً بالمراسلات", "warn");
+    return;
+  }
+  master[key]["مراسلات"] = {
+    "نشط": true,
+    "أضيفت_في": getAccurateNow().getTime(),
+    "ملاحظة_الحسم": (master[key]["مراسلات"] && master[key]["مراسلات"]["ملاحظة_الحسم"]) || "",
+    "مكافأة": false,
+    "حوافز": false
+  };
+  await saveMaster([key]);
+  masterCache = master;
+  showToast("✓ أُضيفت للمراسلات", "ok");
+  document.getElementById("mrSearchInput").value = "";
+  document.getElementById("mrSearchResults").style.display = "none";
+  renderMrList();
+}
+
+async function removeCaseFromCorrespondence(key){
+  if(!mrEditUnlocked) return;
+  const confirmed = await askConfirm("هل تريد حذف هذي القضية من المراسلات؟\n\n(هذا لا يحذف القضية نفسها من النظام، فقط يزيلها من قائمة المراسلات)");
+  if(!confirmed) return;
+  const master = masterCache;
+  if(master[key]) delete master[key]["مراسلات"];
+  await forceSaveKey(key);
+  masterCache = master;
+  showToast("🗑️ أُزيلت من المراسلات", "ok");
+  renderMrList();
+}
+
+async function updateMrNote(key, text){
+  const master = masterCache;
+  if(!master[key]) master[key] = {};
+  if(!master[key]["مراسلات"]) return;
+  master[key]["مراسلات"]["ملاحظة_الحسم"] = text;
+  await saveMaster([key]);
+  masterCache = master;
+}
+
+async function toggleMrCheckbox(key, field){
+  if(!mrEditUnlocked) return;
+  const master = masterCache;
+  if(!master[key] || !master[key]["مراسلات"]) return;
+  master[key]["مراسلات"][field] = !master[key]["مراسلات"][field];
+  await forceSaveKey(key);
+  masterCache = master;
+  renderMrList();
+}
+
+function renderMrList(){
+  const listEl = document.getElementById("mrList");
+  const emptyEl = document.getElementById("mrEmptyState");
+  const countEl = document.getElementById("mrCount");
+  const sortDir = document.getElementById("mrSortSelect").value;
+
+  const keys = getMrRecords().sort((a,b)=>{
+    const ta = masterCache[a]["مراسلات"]["أضيفت_في"] || 0;
+    const tb = masterCache[b]["مراسلات"]["أضيفت_في"] || 0;
+    return sortDir === "asc" ? ta - tb : tb - ta;
+  });
+
+  countEl.textContent = keys.length ? `${arabicCount(keys.length)} بالمراسلات` : "";
+  if(!keys.length){
+    listEl.innerHTML = "";
+    emptyEl.style.display = "block";
+    return;
+  }
+  emptyEl.style.display = "none";
+
+  const fmtDate = (ms)=> ms ? new Date(ms).toLocaleDateString('ar-EG', {day:'2-digit', month:'2-digit', year:'numeric'}) : "—";
+
+  listEl.innerHTML = keys.map(key=>{
+    const row = getRowByKey(key);
+    if(!row) return ""; // القضية حُذفت من النظام أصلاً — تجاهل صامت
+    const mr = masterCache[key]["مراسلات"];
+    const collected = getRowCollected(row);
+    const avail = getRowAvail(row);
+    const arrived = (collected !== null && collected > 0.009) || (avail !== null && avail > 0.009);
+    const statusHtml = arrived
+      ? `<span class="mr-status-badge mr-status-arrived">✅ وصل — يوجد محصّل/متاح</span>`
+      : `<span class="mr-status-badge mr-status-pending">⏳ لم يصل بعد</span>`;
+    const noteVal = escapeAttr(mr["ملاحظة_الحسم"] || "");
+    const disabledAttr = mrEditUnlocked ? "" : "disabled";
+    const mukafaaChecked = mr["مكافأة"] ? "checked" : "";
+    const hawafizChecked = mr["حوافز"] ? "checked" : "";
+    return `
+    <div class="mr-card" data-key="${escapeAttr(key)}">
+      <div class="mr-card-header">
+        <div class="mr-card-title">
+          <span class="mr-card-caseno">${escapeAttr(shortCaseNo(row["رقم الدعوى"]))}</span>
+          <span class="mr-card-party">${escapeAttr(getDefendantForRow(row))}</span>
+        </div>
+        ${mrEditUnlocked ? `<button class="mr-delete-btn mr-delete-action" data-key="${escapeAttr(key)}" title="حذف من المراسلات">🗑️</button>` : ""}
+      </div>
+      <div class="mr-card-date">📅 أُضيفت بالمراسلات: ${fmtDate(mr["أضيفت_في"])}</div>
+
+      <div class="mr-box">
+        <div class="mr-box-title">📮 كتاب الحسم</div>
+        ${statusHtml}
+        <textarea class="mr-note-input mr-note-action" data-key="${escapeAttr(key)}" ${disabledAttr}
+          placeholder="ملاحظات (مثلاً: باليد للمالية، بريد أردني...)">${noteVal}</textarea>
+      </div>
+
+      <div class="mr-box mr-box-simple ${mr["مكافأة"] ? "mr-checked" : ""}">
+        <label class="mr-checkbox-label">
+          <input type="checkbox" class="mr-checkbox mr-check-action" data-key="${escapeAttr(key)}" data-field="مكافأة" ${mukafaaChecked} ${disabledAttr}>
+          💰 كتاب حجز المكافأة
+        </label>
+      </div>
+
+      <div class="mr-box mr-box-simple ${mr["حوافز"] ? "mr-checked" : ""}">
+        <label class="mr-checkbox-label">
+          <input type="checkbox" class="mr-checkbox mr-check-action" data-key="${escapeAttr(key)}" data-field="حوافز" ${hawafizChecked} ${disabledAttr}>
+          🎁 كتاب حجز الحوافز
+        </label>
+      </div>
+    </div>`;
+  }).join("");
+
+  // ربط الأحداث بعد البناء (بدل onclick مباشر لتفادي مشاكل تهريب النص بالـkey)
+  listEl.querySelectorAll(".mr-delete-action").forEach(btn=>{
+    btn.onclick = ()=> removeCaseFromCorrespondence(btn.dataset.key);
+  });
+  listEl.querySelectorAll(".mr-check-action").forEach(cb=>{
+    cb.onchange = ()=> toggleMrCheckbox(cb.dataset.key, cb.dataset.field);
+  });
+  listEl.querySelectorAll(".mr-note-action").forEach(ta=>{
+    let debounceTimer = null;
+    ta.addEventListener("input", ()=>{
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(()=> updateMrNote(ta.dataset.key, ta.value), 800);
+    });
+  });
 }
 
 function goBackups(){
@@ -8509,6 +8859,7 @@ function goRemittances(){
   document.getElementById("settingsPage").style.display = "none";
   document.getElementById("closureNeededPage").style.display = "none";
   document.getElementById("generalNotesPage").style.display = "none";
+  document.getElementById("correspondencePage").style.display = "none";
   document.body.style.overflow = "";
   currentSection = "remittances";
   document.body.classList.add("mode-remittances");
@@ -8532,6 +8883,7 @@ function goFollowups(){
   document.getElementById("settingsPage").style.display = "none";
   document.getElementById("closureNeededPage").style.display = "none";
   document.getElementById("generalNotesPage").style.display = "none";
+  document.getElementById("correspondencePage").style.display = "none";
   document.body.style.overflow = "hidden";
   currentSection = "followups";
   document.body.classList.remove("mode-remittances");
@@ -8549,6 +8901,7 @@ function goLawyer(){
   document.getElementById("settingsPage").style.display = "none";
   document.getElementById("closureNeededPage").style.display = "none";
   document.getElementById("generalNotesPage").style.display = "none";
+  document.getElementById("correspondencePage").style.display = "none";
   document.body.style.overflow = "hidden";
   currentSection = "lawyer";
   document.body.classList.remove("mode-remittances");
@@ -10195,6 +10548,7 @@ function goCases(){
   document.getElementById("settingsPage").style.display = "none";
   document.getElementById("closureNeededPage").style.display = "none";
   document.getElementById("generalNotesPage").style.display = "none";
+  document.getElementById("correspondencePage").style.display = "none";
   document.getElementById("casesPage").style.display = "block";
   document.body.style.overflow = "hidden";
   currentSection = "cases";
@@ -10654,6 +11008,7 @@ function goAnalysis(){
   document.getElementById("settingsPage").style.display = "none";
   document.getElementById("closureNeededPage").style.display = "none";
   document.getElementById("generalNotesPage").style.display = "none";
+  document.getElementById("correspondencePage").style.display = "none";
   document.getElementById("analysisPage").style.display = "block";
   document.body.style.overflow = "hidden";
   currentSection = "analysis";
