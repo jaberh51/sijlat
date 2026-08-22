@@ -590,35 +590,40 @@
   .mr-delete-btn:hover{transform:scale(1.08);background:#fecaca;}
   .mr-card-date{font-size:10.5px;color:var(--ink-soft);margin-bottom:12px;}
 
-  .mr-boxes-row{display:flex;gap:10px;flex-wrap:wrap;align-items:stretch;}
+  .mr-boxes-row{display:flex;gap:6px;flex-wrap:wrap;align-items:stretch;}
   .mr-box{
-    background:var(--paper);border:1px solid var(--line);border-radius:12px;
-    padding:10px 12px;flex:1 1 0;min-width:0;overflow:hidden;
+    background:var(--paper);border:1px solid var(--line);border-radius:10px;
+    padding:6px 7px;flex:1 1 0;min-width:0;overflow:hidden;
     transition:background .15s ease, border-color .15s ease;
   }
-  .mr-box-title{font-size:11.5px;font-weight:700;color:var(--ink);margin-bottom:8px;display:flex;align-items:center;gap:5px;white-space:nowrap;}
+  .mr-box-title{font-size:10px;font-weight:700;color:var(--ink);margin-bottom:5px;display:flex;align-items:center;gap:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   .mr-status-badge{
-    display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;
-    border-radius:999px;padding:3px 9px;margin-bottom:8px;
+    display:inline-flex;align-items:center;gap:3px;font-size:9px;font-weight:700;
+    border-radius:999px;padding:2px 7px;margin-bottom:5px;
     animation:mrBadgeIn .3s ease;
   }
   @keyframes mrBadgeIn{from{opacity:0;transform:scale(.85);}to{opacity:1;transform:scale(1);}}
   .mr-status-arrived{background:linear-gradient(135deg,#dcfce7,#bbf7d0);color:#166534;}
   .mr-status-pending{background:var(--slate-soft);color:var(--slate);}
   .mr-method-select{
-    width:100%;box-sizing:border-box;font-family:'Tajawal',sans-serif;font-size:12px;
-    border:1px solid var(--line);border-radius:8px;padding:7px 8px;
+    width:100%;box-sizing:border-box;font-family:'Tajawal',sans-serif;font-size:10.5px;
+    border:1px solid var(--line);border-radius:6px;padding:5px 6px;
     background:var(--paper-raised);color:var(--ink);cursor:pointer;transition:border-color .15s ease;
   }
   .mr-method-select:focus{outline:none;border-color:var(--brass);}
   .mr-method-select:disabled{background:var(--paper);color:var(--ink-soft);cursor:not-allowed;}
   .mr-method-other{
-    width:100%;box-sizing:border-box;font-family:'Tajawal',sans-serif;font-size:12px;
-    border:1px solid var(--brass);border-radius:8px;padding:7px 8px;margin-top:6px;
+    width:100%;box-sizing:border-box;font-family:'Tajawal',sans-serif;font-size:10.5px;
+    border:1px solid var(--brass);border-radius:6px;padding:5px 6px;margin-top:5px;
     background:var(--paper-raised);color:var(--ink);
   }
   .mr-method-other:focus{outline:none;box-shadow:0 0 0 2px var(--brass-soft);}
   .mr-box.mr-checked{background:var(--green-soft);border-color:#86efac;}
+  .mr-card-draft{border-color:var(--brass);box-shadow:0 0 0 2px var(--brass-soft);}
+  .mr-draft-badge{
+    font-size:10px;font-weight:700;color:var(--brass);background:var(--brass-soft);
+    border-radius:6px;padding:2px 8px;white-space:nowrap;
+  }
   @media(max-width:640px){
     .mr-boxes-row{flex-direction:column;}
     .mr-box{min-width:0;}
@@ -8771,7 +8776,8 @@ async function addCaseToCorrespondence(key){
     "أضيفت_في": getAccurateNow().getTime(),
     "حسم_طريقة": oldMr["حسم_طريقة"] || "",
     "مكافأة_طريقة": oldMr["مكافأة_طريقة"] || "",
-    "حوافز_طريقة": oldMr["حوافز_طريقة"] || ""
+    "حوافز_طريقة": oldMr["حوافز_طريقة"] || "",
+    "مؤكَّد": false // قضية جديدة تفتح مباشرة بلا كلمة سر — تُقفَل فقط بعد "✅ اعتماد" الخاص فيها
   };
   await saveMaster([key]);
   masterCache = master;
@@ -8790,6 +8796,19 @@ async function removeCaseFromCorrespondence(key){
   await forceSaveKey(key);
   masterCache = master;
   showToast("🗑️ أُزيلت من المراسلات", "ok");
+  renderMrList();
+}
+
+// اعتماد قضية واحدة (بطلب المستخدم): قضية مُضافة حديثاً تبقى مفتوحة تلقائياً
+// بلا كلمة سر لحين ما يضغط هذا الزر بالذات — عندها فقط تُقفَل، وأي تعديل
+// لاحق عليها يحتاج المرور بزر "🔒 تعديل/حذف" العام (كلمة سر).
+async function confirmMrCase(key){
+  const master = masterCache;
+  if(!master[key] || !master[key]["مراسلات"]) return;
+  master[key]["مراسلات"]["مؤكَّد"] = true;
+  await forceSaveKey(key);
+  masterCache = master;
+  showToast("✅ اعتُمدت القضية وأُقفلت", "ok");
   renderMrList();
 }
 
@@ -8815,13 +8834,13 @@ function renderMrList(){
 
   const fmtDate = (ms)=> ms ? new Date(ms).toLocaleDateString('ar-EG', {day:'2-digit', month:'2-digit', year:'numeric'}) : "—";
   const methods = getMrDeliveryMethods();
-  const disabledAttr = mrEditUnlocked ? "" : "disabled";
 
   // خانة واحدة موحَّدة الشكل (تُستخدَم للثلاث خانات معاً) — عنوان + قائمة
   // منسدلة "طريقة الإرسال" (بريد/باليد/توصيله/أخرى...)، وحقل نص يظهر فقط
   // عند اختيار "أخرى" لإدخال طريقة جديدة تُضاف تلقائياً لباقي القوائم لاحقاً.
-  function buildMrBox({icon, title, key, field, value, extraHtml}){
+  function buildMrBox({icon, title, key, field, value, extraHtml, disabled}){
     const isOther = value && !methods.includes(value);
+    const disabledAttr = disabled ? "disabled" : "";
     const optionsHtml = [`<option value="">— اختر —</option>`]
       .concat(methods.map(m => `<option value="${escapeAttr(m)}" ${value===m?"selected":""}>${escapeAttr(m)}</option>`))
       .concat([`<option value="__other__" ${isOther?"selected":""}>أخرى...</option>`])
@@ -8850,28 +8869,39 @@ function renderMrList(){
       ? `<span class="mr-status-badge mr-status-arrived" title="يوجد محصّل أو متاح بهذي القضية">✅ وصل</span>`
       : `<span class="mr-status-badge mr-status-pending" title="لا يوجد محصّل أو متاح بعد">⏳ لم يصل</span>`;
 
+    // قضية غير مؤكَّدة بعد (أُضيفت حديثاً) تبقى مفتوحة تلقائياً بلا كلمة سر؛
+    // بعد "✅ اعتماد" الخاص فيها تُقفَل، ولا تُفتَح إلا عبر وضع التعديل العام
+    const isConfirmed = !!mr["مؤكَّد"];
+    const cardUnlocked = mrEditUnlocked || !isConfirmed;
+    const showPerCardConfirm = !isConfirmed && !mrEditUnlocked;
+
     return `
-    <div class="mr-card" data-key="${escapeAttr(key)}">
+    <div class="mr-card ${!isConfirmed ? "mr-card-draft" : ""}" data-key="${escapeAttr(key)}">
       <div class="mr-card-header">
         <div class="mr-card-title">
           <span class="mr-card-caseno">${escapeAttr(shortCaseNo(row["رقم الدعوى"]))}</span>
           <span class="mr-card-party">${escapeAttr(getDefendantForRow(row))}</span>
+          ${!isConfirmed ? `<span class="mr-draft-badge">✏️ غير معتمَدة</span>` : ""}
         </div>
         ${mrEditUnlocked ? `<button class="mr-delete-btn mr-delete-action" data-key="${escapeAttr(key)}" title="حذف من المراسلات">🗑️</button>` : ""}
       </div>
       <div class="mr-card-date">📅 أُضيفت بالمراسلات: ${fmtDate(mr["أضيفت_في"])}</div>
 
       <div class="mr-boxes-row">
-        ${buildMrBox({icon:"📮", title:"كتاب الحسم", key, field:"حسم_طريقة", value:mr["حسم_طريقة"], extraHtml:statusHtml})}
-        ${buildMrBox({icon:"💰", title:"حجز مكافأة", key, field:"مكافأة_طريقة", value:mr["مكافأة_طريقة"]})}
-        ${buildMrBox({icon:"🎁", title:"حجز حوافز", key, field:"حوافز_طريقة", value:mr["حوافز_طريقة"]})}
+        ${buildMrBox({icon:"📮", title:"كتاب الحسم", key, field:"حسم_طريقة", value:mr["حسم_طريقة"], extraHtml:statusHtml, disabled:!cardUnlocked})}
+        ${buildMrBox({icon:"💰", title:"حجز مكافأة", key, field:"مكافأة_طريقة", value:mr["مكافأة_طريقة"], disabled:!cardUnlocked})}
+        ${buildMrBox({icon:"🎁", title:"حجز حوافز", key, field:"حوافز_طريقة", value:mr["حوافز_طريقة"], disabled:!cardUnlocked})}
       </div>
+      ${showPerCardConfirm ? `<button class="btn mr-confirm-action" data-key="${escapeAttr(key)}" style="margin-top:10px;width:100%;">✅ اعتماد هذي القضية</button>` : ""}
     </div>`;
   }).join("");
 
   // ربط الأحداث بعد البناء (بدل onclick مباشر لتفادي مشاكل تهريب النص بالـkey)
   listEl.querySelectorAll(".mr-delete-action").forEach(btn=>{
     btn.onclick = ()=> removeCaseFromCorrespondence(btn.dataset.key);
+  });
+  listEl.querySelectorAll(".mr-confirm-action").forEach(btn=>{
+    btn.onclick = ()=> confirmMrCase(btn.dataset.key);
   });
   listEl.querySelectorAll(".mr-method-action").forEach(sel=>{
     sel.onchange = async ()=>{
