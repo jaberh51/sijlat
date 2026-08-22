@@ -5791,8 +5791,7 @@ document.getElementById("correspondencePageClose").onclick = goHome;
 document.getElementById("mrEditToggleBtn").onclick = toggleMrEditMode;
 document.getElementById("mrSortSelect").onchange = renderMrList;
 
-document.getElementById("mrSearchInput").addEventListener("input", (e)=>{
-  const q = e.target.value.trim();
+const _mrRunSearch = debounce((q)=>{
   const resultsEl = document.getElementById("mrSearchResults");
   if(!q){ resultsEl.style.display = "none"; resultsEl.innerHTML = ""; return; }
   const activeKeys = new Set(getMrRecords());
@@ -5816,6 +5815,16 @@ document.getElementById("mrSearchInput").addEventListener("input", (e)=>{
       <button type="button" class="mr-search-add-btn" data-key="${escapeAttr(key)}">➕ إضافة</button>
     </div>`;
   }).join("");
+}, 250);
+
+// مؤخَّر (debounce) عمداً — بلا هذا كان الفلترة الكاملة (قد تصل 800+ قضية،
+// مع حساب اسم كل طرف من جديد) تُنفَّذ فوراً مع كل حرف يُكتَب، بلا أي تأخير؛
+// هذا الحِمل اللحظي على المعالج كان يتعارض مع تركيب الحروف العربية (IME)
+// على بعض أجهزة أندرويد — الإنجليزي (حرف بحرف بسيط) يمر بلا مشاكل، بينما
+// العربي (يحتاج تركيباً أعقد) يتقطّع أو تختلط حروفه. التأخير البسيط (250ms
+// بعد التوقف عن الكتابة) يحل هذا تماماً بلا أي أثر ملحوظ على سرعة البحث.
+document.getElementById("mrSearchInput").addEventListener("input", (e)=>{
+  _mrRunSearch(e.target.value.trim());
 });
 
 document.getElementById("mrSearchResults").addEventListener("dblclick", (e)=>{
