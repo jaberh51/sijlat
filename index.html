@@ -8940,7 +8940,7 @@ function renderMrList(){
       </div>
 
       <div class="mr-boxes-row">
-        ${buildMrBox({icon:"📮", title:"كتاب الحسم", key, field:"حسم_طريقة", value:mr["حسم_طريقة"], extraHtml:statusHtml, disabled:!cardUnlocked})}
+        ${buildMrBox({icon:"📮", title:"كتاب الحسم", key, field:"حسم_طريقة", value:mr["حسم_طريقة"], extraHtml:statusHtml, disabled: arrived || !cardUnlocked})}
         ${buildMrBox({icon:"💰", title:"حجز مكافأة", key, field:"مكافأة_طريقة", value:mr["مكافأة_طريقة"], disabled:!cardUnlocked})}
         ${buildMrBox({icon:"🎁", title:"حجز حوافز", key, field:"حوافز_طريقة", value:mr["حوافز_طريقة"], disabled:!cardUnlocked, extraOptionValue:MR_HAWAFIZ_NA_VALUE})}
       </div>
