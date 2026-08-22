@@ -8839,16 +8839,31 @@ function renderMrList(){
   // كخانة معطَّلة/غير فعّالة.
   const MR_HAWAFIZ_NA_VALUE = "🚫 غير متاح لهذا الملف";
 
-  function isMrComplete(mr){
-    return !!(mr["حسم_طريقة"] && mr["مكافأة_طريقة"] && mr["حوافز_طريقة"]);
+  // هل وصل مبلغ فعلياً لهذي القضية (محصّل أو متاح) — يُحسَب من بيانات القضية
+  // الحقيقية مباشرة، لا من أي حقل مخزَّن بالمراسلات.
+  function isRowArrived(key){
+    const row = getRowByKey(key);
+    if(!row) return false;
+    const collected = getRowCollected(row);
+    const avail = getRowAvail(row);
+    return (collected !== null && collected > 0.009) || (avail !== null && avail > 0.009);
+  }
+
+  // خانة "كتاب الحسم" تُحسَب مكتملة لو وصل مبلغ فعلياً (الشارة التلقائية
+  // "✅ وصل" دليل قاطع بذاته، بغضّ النظر عن تسجيل طريقة الإرسال) — أو لو
+  // اختير يدوياً طريقة إرسال (بطلب المستخدم: توضيح منطقي، الشارة أهم من
+  // اختيار الطريقة لغرض اعتبار الخانة "مكتملة").
+  function isMrComplete(mr, arrived){
+    const hasmOk = arrived || !!mr["حسم_طريقة"];
+    return !!(hasmOk && mr["مكافأة_طريقة"] && mr["حوافز_طريقة"]);
   }
 
   const keys = getMrRecords().sort((a,b)=>{
     // القضايا غير المكتملة (خاناتها الثلاث لم تُعبَّأ كلها بعد) تُقدَّم دائماً
     // لأعلى القائمة (بطلب المستخدم)، بغضّ النظر عن فلتر الترتيب بالتاريخ —
     // الترتيب بالتاريخ يُطبَّق بعدها كترتيب ثانوي داخل كل مجموعة (مكتملة/غير مكتملة).
-    const aComplete = isMrComplete(masterCache[a]["مراسلات"]) ? 1 : 0;
-    const bComplete = isMrComplete(masterCache[b]["مراسلات"]) ? 1 : 0;
+    const aComplete = isMrComplete(masterCache[a]["مراسلات"], isRowArrived(a)) ? 1 : 0;
+    const bComplete = isMrComplete(masterCache[b]["مراسلات"], isRowArrived(b)) ? 1 : 0;
     if(aComplete !== bComplete) return aComplete - bComplete;
     const ta = masterCache[a]["مراسلات"]["أضيفت_في"] || 0;
     const tb = masterCache[b]["مراسلات"]["أضيفت_في"] || 0;
@@ -8906,7 +8921,7 @@ function renderMrList(){
     // قضية غير مكتملة (خاناتها الثلاث لم تُعبَّأ كلها بعد) تبقى مفتوحة دائماً
     // بلا كلمة سر مهما كانت حالة "مؤكَّد" (بطلب المستخدم) — تُقفَل واحتمال
     // "اعتماد/حفظ" فقط بعد اكتمال الثلاث خانات معاً.
-    const isComplete = isMrComplete(mr);
+    const isComplete = isMrComplete(mr, arrived);
     const isConfirmed = !!mr["مؤكَّد"];
     const cardUnlocked = !isComplete || !isConfirmed || (mrEditUnlocked && !mrClosedOverride.has(key));
     const showSaveBtn = isComplete && cardUnlocked;
