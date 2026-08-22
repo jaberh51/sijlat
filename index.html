@@ -561,34 +561,40 @@
   .mr-search-empty{padding:14px;text-align:center;color:var(--ink-soft);font-size:12.5px;}
   .mr-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;}
   .mr-count{font-size:12px;color:var(--ink-soft);font-weight:700;}
-  .mr-list{display:flex;flex-direction:column;gap:14px;}
+  .mr-list{display:flex;flex-direction:column;gap:8px;}
 
   .mr-card{
     background:linear-gradient(135deg,var(--paper-raised),#fdfaf3);
-    border:1.5px solid var(--line);border-radius:16px;padding:16px 18px;
-    box-shadow:0 2px 8px rgba(30,39,51,.06);
+    border:1.5px solid var(--line);border-radius:12px;padding:8px 10px;
+    box-shadow:0 1px 4px rgba(30,39,51,.05);
     transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
     position:relative;overflow:hidden;
   }
   .mr-card::before{
-    content:"✉️";position:absolute;left:-6px;top:-10px;font-size:64px;opacity:.05;
+    content:"✉️";position:absolute;left:-8px;top:-12px;font-size:40px;opacity:.05;
     transform:rotate(-15deg);pointer-events:none;
   }
-  .mr-card:hover{transform:translateY(-2px);box-shadow:0 8px 20px rgba(30,39,51,.12);border-color:var(--brass);}
-  .mr-card-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px;}
-  .mr-card-title{display:flex;align-items:center;gap:10px;min-width:0;}
+  .mr-card:hover{box-shadow:0 4px 12px rgba(30,39,51,.1);border-color:var(--brass);}
+  .mr-card-header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;}
+  .mr-card-title{display:flex;align-items:center;gap:7px;min-width:0;}
   .mr-card-caseno{
-    font-family:'Amiri',serif;font-weight:700;font-size:16px;color:var(--brass);
-    background:var(--brass-soft);border-radius:8px;padding:3px 10px;white-space:nowrap;
+    font-family:'Amiri',serif;font-weight:700;font-size:13px;color:var(--brass);
+    background:var(--brass-soft);border-radius:6px;padding:1px 7px;white-space:nowrap;
   }
-  .mr-card-party{font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .mr-card-party{font-weight:700;font-size:12.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .mr-card-actions{display:flex;align-items:center;gap:6px;flex:none;}
+  .mr-save-btn{
+    background:var(--brass-soft);color:var(--brass);border:1px solid var(--brass);border-radius:7px;
+    width:26px;height:26px;flex:none;cursor:pointer;font-size:13px;
+    display:flex;align-items:center;justify-content:center;transition:transform .12s ease;
+  }
+  .mr-save-btn:hover{transform:scale(1.1);background:var(--brass);color:#fff;}
   .mr-delete-btn{
-    background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:8px;
-    width:30px;height:30px;flex:none;cursor:pointer;font-size:14px;
+    background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:7px;
+    width:26px;height:26px;flex:none;cursor:pointer;font-size:12px;
     display:flex;align-items:center;justify-content:center;transition:transform .12s ease;
   }
   .mr-delete-btn:hover{transform:scale(1.08);background:#fecaca;}
-  .mr-card-date{font-size:10.5px;color:var(--ink-soft);margin-bottom:12px;}
 
   .mr-boxes-row{display:flex;gap:6px;flex-wrap:wrap;align-items:stretch;}
   .mr-box{
@@ -619,11 +625,9 @@
   }
   .mr-method-other:focus{outline:none;box-shadow:0 0 0 2px var(--brass-soft);}
   .mr-box.mr-checked{background:var(--green-soft);border-color:#86efac;}
+  .mr-box.mr-box-disabled{background:var(--slate-soft);border-color:var(--line);opacity:.65;}
+  .mr-box.mr-box-disabled .mr-box-title{color:var(--ink-soft);}
   .mr-card-draft{border-color:var(--brass);box-shadow:0 0 0 2px var(--brass-soft);}
-  .mr-draft-badge{
-    font-size:10px;font-weight:700;color:var(--brass);background:var(--brass-soft);
-    border-radius:6px;padding:2px 8px;white-space:nowrap;
-  }
   @media(max-width:640px){
     .mr-boxes-row{flex-direction:column;}
     .mr-box{min-width:0;}
@@ -1772,7 +1776,6 @@ if('serviceWorker' in navigator){
       <div class="fu-page-title">📬 المراسلات</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn secondary" id="mrEditToggleBtn">🔒 تعديل / حذف</button>
-        <button class="btn" id="mrConfirmBtn" style="display:none;">✅ اعتماد وإقفال</button>
         <button class="btn secondary" id="correspondencePageClose">✕ إغلاق والعودة</button>
       </div>
     </div>
@@ -5801,7 +5804,6 @@ document.getElementById("generalNotesPageClose").onclick = goHome;
 // ===== أحداث صفحة المراسلات =====
 document.getElementById("correspondencePageClose").onclick = goHome;
 document.getElementById("mrEditToggleBtn").onclick = toggleMrEditMode;
-document.getElementById("mrConfirmBtn").onclick = lockMrEditMode;
 document.getElementById("mrSortSelect").onchange = renderMrList;
 
 const _mrRunSearch = debounce((q)=>{
@@ -8698,17 +8700,24 @@ function goCorrespondence(){
   currentSection = "correspondence";
   document.body.classList.remove("mode-remittances");
   mrEditUnlocked = false;
+  mrClosedOverride = new Set();
   document.getElementById("mrEditToggleBtn").textContent = "🔒 تعديل / حذف";
-  document.getElementById("mrConfirmBtn").style.display = "none";
   document.getElementById("mrSearchInput").value = "";
   document.getElementById("mrSearchResults").style.display = "none";
   renderMrList();
 }
 
 function getMrRecords(){
-  // كل القضايا الحاملة لحقل "مراسلات" نشط — بحث مباشر بالماستر (أسرع من
-  // فلترة كل RAW_DATA، والقضايا هنا قليلة العدد نسبياً دائماً)
-  return Object.keys(masterCache).filter(k => masterCache[k]["مراسلات"] && masterCache[k]["مراسلات"]["نشط"]);
+  // كل القضايا الحاملة لحقل "مراسلات" نشط، باستثناء أي قضية حالتها "فصل"
+  // (بطلب المستخدم — تختفي تلقائياً من القائمة فور انتهائها قضائياً، بلا
+  // حذف بياناتها المخزَّنة؛ لو رجعت حالتها لأي سبب تظهر من جديد بكل بياناتها).
+  return Object.keys(masterCache).filter(k=>{
+    const mr = masterCache[k]["مراسلات"];
+    if(!mr || !mr["نشط"]) return false;
+    const row = getRowByKey(k);
+    const status = row ? (row["حالة الدعوى"]||"").trim() : "";
+    return status !== "فصل";
+  });
 }
 
 // قائمة "طرق الإرسال" المشتركة لكل خانات المراسلات الثلاث (حسم/مكافأة/حوافز)
@@ -8736,14 +8745,17 @@ async function setMrFieldMethod(key, field, value){
 }
 
 let mrEditUnlocked = false;
+// قضايا مؤكَّدة سابقاً أُعيد فتحها عبر وضع التعديل العام، لكن حُفظت وأُقفلت
+// فردياً بالضغط على 💾 الخاصة فيها — تبقى مقفلة حتى لو باقي القضايا لسا
+// مفتوحة بنفس وضع التعديل (بطلب المستخدم: حفظ قضية وحدة لا يقفل البقية).
+let mrClosedOverride = new Set();
 
 // يقفل وضع التعديل — يُستدعى إما من زر "🔒 تعديل/حذف" (بالضغط عليه مرة ثانية
-// أثناء التفعيل) أو من زر "✅ اعتماد وإقفال" الصريح (بطلب المستخدم — تأكيد
-// واضح لإنهاء التعديل بدل ترك المربعات مفتوحة إلى أن يتذكّر المستخدم إقفالها).
+// أثناء التفعيل) أو تلقائياً بعد حفظ كل القضايا المفتوحة يدوياً.
 function lockMrEditMode(){
   mrEditUnlocked = false;
+  mrClosedOverride = new Set();
   document.getElementById("mrEditToggleBtn").textContent = "🔒 تعديل / حذف";
-  document.getElementById("mrConfirmBtn").style.display = "none";
   renderMrList();
 }
 
@@ -8757,9 +8769,9 @@ async function toggleMrEditMode(){
   const ok = await verifyPassword(pwd, LW_STEP_PASS_HASH);
   if(!ok){ showToast("⚠️ كلمة سر خاطئة", "warn"); return; }
   mrEditUnlocked = true;
-  document.getElementById("mrEditToggleBtn").textContent = "🔓 وضع التعديل مفعَّل";
-  document.getElementById("mrConfirmBtn").style.display = "inline-flex";
-  showToast("🔓 التعديل والحذف مفعَّلان الآن — اضغط \"اعتماد وإقفال\" بعد الانتهاء", "ok");
+  mrClosedOverride = new Set();
+  document.getElementById("mrEditToggleBtn").textContent = "🔓 وضع التعديل مفعَّل — اضغط للإغلاق";
+  showToast("🔓 التعديل والحذف مفعَّلان الآن — اضغط 💾 على أي قضية لحفظها وإقفالها بمفردها", "ok");
   renderMrList();
 }
 
@@ -8799,16 +8811,19 @@ async function removeCaseFromCorrespondence(key){
   renderMrList();
 }
 
-// اعتماد قضية واحدة (بطلب المستخدم): قضية مُضافة حديثاً تبقى مفتوحة تلقائياً
-// بلا كلمة سر لحين ما يضغط هذا الزر بالذات — عندها فقط تُقفَل، وأي تعديل
-// لاحق عليها يحتاج المرور بزر "🔒 تعديل/حذف" العام (كلمة سر).
-async function confirmMrCase(key){
+// حفظ/إقفال قضية واحدة بمفردها (بطلب المستخدم — زر 💾 صغير أعلى كل بطاقة):
+// - قضية جديدة (غير معتمَدة بعد): تُعتمَد وتُقفَل.
+// - قضية مؤكَّدة سابقاً أُعيدت للفتح عبر وضع التعديل العام: تُقفَل هي بس
+//   (تُضاف لقائمة "أُغلقت فردياً")، بلا أي تأثير على باقي القضايا المفتوحة
+//   بنفس وضع التعديل.
+async function saveMrCard(key){
   const master = masterCache;
   if(!master[key] || !master[key]["مراسلات"]) return;
   master[key]["مراسلات"]["مؤكَّد"] = true;
   await forceSaveKey(key);
   masterCache = master;
-  showToast("✅ اعتُمدت القضية وأُقفلت", "ok");
+  mrClosedOverride.add(key);
+  showToast("💾 حُفظت القضية", "ok");
   renderMrList();
 }
 
@@ -8818,7 +8833,23 @@ function renderMrList(){
   const countEl = document.getElementById("mrCount");
   const sortDir = document.getElementById("mrSortSelect").value;
 
+  // "غير متاح لهذا الملف" — قيمة خاصة بخانة "حجز الحوافز" فقط (بطلب المستخدم:
+  // بعض الجهات المالية لا توفر هذا النوع من الحجز أصلاً). اختيارها يُعتبَر
+  // "تعبئة" فعلية للخانة (تدخل ضمن حساب "اكتمال" القضية)، مع تمييزها بصرياً
+  // كخانة معطَّلة/غير فعّالة.
+  const MR_HAWAFIZ_NA_VALUE = "🚫 غير متاح لهذا الملف";
+
+  function isMrComplete(mr){
+    return !!(mr["حسم_طريقة"] && mr["مكافأة_طريقة"] && mr["حوافز_طريقة"]);
+  }
+
   const keys = getMrRecords().sort((a,b)=>{
+    // القضايا غير المكتملة (خاناتها الثلاث لم تُعبَّأ كلها بعد) تُقدَّم دائماً
+    // لأعلى القائمة (بطلب المستخدم)، بغضّ النظر عن فلتر الترتيب بالتاريخ —
+    // الترتيب بالتاريخ يُطبَّق بعدها كترتيب ثانوي داخل كل مجموعة (مكتملة/غير مكتملة).
+    const aComplete = isMrComplete(masterCache[a]["مراسلات"]) ? 1 : 0;
+    const bComplete = isMrComplete(masterCache[b]["مراسلات"]) ? 1 : 0;
+    if(aComplete !== bComplete) return aComplete - bComplete;
     const ta = masterCache[a]["مراسلات"]["أضيفت_في"] || 0;
     const tb = masterCache[b]["مراسلات"]["أضيفت_في"] || 0;
     return sortDir === "asc" ? ta - tb : tb - ta;
@@ -8832,21 +8863,24 @@ function renderMrList(){
   }
   emptyEl.style.display = "none";
 
-  const fmtDate = (ms)=> ms ? new Date(ms).toLocaleDateString('ar-EG', {day:'2-digit', month:'2-digit', year:'numeric'}) : "—";
   const methods = getMrDeliveryMethods();
 
   // خانة واحدة موحَّدة الشكل (تُستخدَم للثلاث خانات معاً) — عنوان + قائمة
   // منسدلة "طريقة الإرسال" (بريد/باليد/توصيله/أخرى...)، وحقل نص يظهر فقط
   // عند اختيار "أخرى" لإدخال طريقة جديدة تُضاف تلقائياً لباقي القوائم لاحقاً.
-  function buildMrBox({icon, title, key, field, value, extraHtml, disabled}){
-    const isOther = value && !methods.includes(value);
+  // extraOption: خيار إضافي خاص (يُستخدَم فقط لخانة "حجز الحوافز" — راجع
+  // MR_HAWAFIZ_NA_VALUE أعلاه).
+  function buildMrBox({icon, title, key, field, value, extraHtml, disabled, extraOptionValue}){
+    const isNA = extraOptionValue && value === extraOptionValue;
+    const isOther = value && !isNA && !methods.includes(value);
     const disabledAttr = disabled ? "disabled" : "";
     const optionsHtml = [`<option value="">— اختر —</option>`]
       .concat(methods.map(m => `<option value="${escapeAttr(m)}" ${value===m?"selected":""}>${escapeAttr(m)}</option>`))
       .concat([`<option value="__other__" ${isOther?"selected":""}>أخرى...</option>`])
+      .concat(extraOptionValue ? [`<option value="${escapeAttr(extraOptionValue)}" ${isNA?"selected":""}>${escapeAttr(extraOptionValue)}</option>`] : [])
       .join("");
     return `
-      <div class="mr-box ${value ? "mr-checked" : ""}">
+      <div class="mr-box ${value && !isNA ? "mr-checked" : ""} ${isNA ? "mr-box-disabled" : ""}">
         <div class="mr-box-title">${icon} ${title}</div>
         ${extraHtml || ""}
         <select class="mr-method-select mr-method-action" data-key="${escapeAttr(key)}" data-field="${field}" ${disabledAttr}>
@@ -8867,32 +8901,34 @@ function renderMrList(){
     const arrived = (collected !== null && collected > 0.009) || (avail !== null && avail > 0.009);
     const statusHtml = arrived
       ? `<span class="mr-status-badge mr-status-arrived" title="يوجد محصّل أو متاح بهذي القضية">✅ وصل</span>`
-      : `<span class="mr-status-badge mr-status-pending" title="لا يوجد محصّل أو متاح بعد">⏳ لم يصل</span>`;
+      : ""; // بلا مبلغ محصَّل أو متاح بعد — لا تظهر أي شارة إطلاقاً (بطلب المستخدم)
 
-    // قضية غير مؤكَّدة بعد (أُضيفت حديثاً) تبقى مفتوحة تلقائياً بلا كلمة سر؛
-    // بعد "✅ اعتماد" الخاص فيها تُقفَل، ولا تُفتَح إلا عبر وضع التعديل العام
+    // قضية غير مكتملة (خاناتها الثلاث لم تُعبَّأ كلها بعد) تبقى مفتوحة دائماً
+    // بلا كلمة سر مهما كانت حالة "مؤكَّد" (بطلب المستخدم) — تُقفَل واحتمال
+    // "اعتماد/حفظ" فقط بعد اكتمال الثلاث خانات معاً.
+    const isComplete = isMrComplete(mr);
     const isConfirmed = !!mr["مؤكَّد"];
-    const cardUnlocked = mrEditUnlocked || !isConfirmed;
-    const showPerCardConfirm = !isConfirmed && !mrEditUnlocked;
+    const cardUnlocked = !isComplete || !isConfirmed || (mrEditUnlocked && !mrClosedOverride.has(key));
+    const showSaveBtn = isComplete && cardUnlocked;
 
     return `
-    <div class="mr-card ${!isConfirmed ? "mr-card-draft" : ""}" data-key="${escapeAttr(key)}">
+    <div class="mr-card ${!isConfirmed || !isComplete ? "mr-card-draft" : ""}" data-key="${escapeAttr(key)}">
       <div class="mr-card-header">
         <div class="mr-card-title">
           <span class="mr-card-caseno">${escapeAttr(shortCaseNo(row["رقم الدعوى"]))}</span>
           <span class="mr-card-party">${escapeAttr(getDefendantForRow(row))}</span>
-          ${!isConfirmed ? `<span class="mr-draft-badge">✏️ غير معتمَدة</span>` : ""}
         </div>
-        ${mrEditUnlocked ? `<button class="mr-delete-btn mr-delete-action" data-key="${escapeAttr(key)}" title="حذف من المراسلات">🗑️</button>` : ""}
+        <div class="mr-card-actions">
+          ${showSaveBtn ? `<button class="mr-save-btn mr-confirm-action" data-key="${escapeAttr(key)}" title="حفظ وإقفال هذي القضية">💾</button>` : ""}
+          ${mrEditUnlocked ? `<button class="mr-delete-btn mr-delete-action" data-key="${escapeAttr(key)}" title="حذف من المراسلات">🗑️</button>` : ""}
+        </div>
       </div>
-      <div class="mr-card-date">📅 أُضيفت بالمراسلات: ${fmtDate(mr["أضيفت_في"])}</div>
 
       <div class="mr-boxes-row">
         ${buildMrBox({icon:"📮", title:"كتاب الحسم", key, field:"حسم_طريقة", value:mr["حسم_طريقة"], extraHtml:statusHtml, disabled:!cardUnlocked})}
         ${buildMrBox({icon:"💰", title:"حجز مكافأة", key, field:"مكافأة_طريقة", value:mr["مكافأة_طريقة"], disabled:!cardUnlocked})}
-        ${buildMrBox({icon:"🎁", title:"حجز حوافز", key, field:"حوافز_طريقة", value:mr["حوافز_طريقة"], disabled:!cardUnlocked})}
+        ${buildMrBox({icon:"🎁", title:"حجز حوافز", key, field:"حوافز_طريقة", value:mr["حوافز_طريقة"], disabled:!cardUnlocked, extraOptionValue:MR_HAWAFIZ_NA_VALUE})}
       </div>
-      ${showPerCardConfirm ? `<button class="btn mr-confirm-action" data-key="${escapeAttr(key)}" style="margin-top:10px;width:100%;">✅ اعتماد هذي القضية</button>` : ""}
     </div>`;
   }).join("");
 
@@ -8901,7 +8937,7 @@ function renderMrList(){
     btn.onclick = ()=> removeCaseFromCorrespondence(btn.dataset.key);
   });
   listEl.querySelectorAll(".mr-confirm-action").forEach(btn=>{
-    btn.onclick = ()=> confirmMrCase(btn.dataset.key);
+    btn.onclick = ()=> saveMrCard(btn.dataset.key);
   });
   listEl.querySelectorAll(".mr-method-action").forEach(sel=>{
     sel.onchange = async ()=>{
