@@ -558,6 +558,17 @@
     font-family:'Tajawal',sans-serif;transition:filter .12s ease;
   }
   .mr-search-add-btn:hover, .mr-search-add-btn:active{filter:brightness(1.1);}
+  .mr-search-goto-btn{
+    margin-inline-start:auto;flex:none;background:var(--slate-soft);color:var(--slate);
+    border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-size:11.5px;font-weight:700;
+    cursor:pointer;font-family:'Tajawal',sans-serif;transition:filter .12s ease;white-space:nowrap;
+  }
+  .mr-search-goto-btn:hover, .mr-search-goto-btn:active{filter:brightness(.96);}
+  @keyframes mrCardFlash{
+    0%, 100%{box-shadow:0 1px 4px rgba(30,39,51,.05);border-color:var(--line);}
+    15%, 45%, 75%{box-shadow:0 0 0 4px var(--brass-soft);border-color:var(--brass);}
+  }
+  .mr-card-flash{animation:mrCardFlash 2.2s ease;}
   .mr-search-empty{padding:14px;text-align:center;color:var(--ink-soft);font-size:12.5px;}
   .mr-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;}
   .mr-count{font-size:12px;color:var(--ink-soft);font-weight:700;}
@@ -5806,13 +5817,32 @@ document.getElementById("correspondencePageClose").onclick = goHome;
 document.getElementById("mrEditToggleBtn").onclick = toggleMrEditMode;
 document.getElementById("mrSortSelect").onchange = renderMrList;
 
-const _mrRunSearch = debounce((q)=>{
+// تطبيع الأرقام العربية الهندية (٠١٢٣٤٥٦٧٨٩) إلى أرقام غربية عادية (0-9) —
+// بطلب المستخدم: يبحث برقم القضية بأي من الرقمين، بما إن أرقام القضايا
+// بالبيانات نفسها دائماً غربية.
+function normalizeEasternDigits(str){
+  const easternDigits = "٠١٢٣٤٥٦٧٨٩";
+  return String(str || "").replace(/[٠-٩]/g, ch => String(easternDigits.indexOf(ch)));
+}
+
+// إضاءة مؤقتة لبطاقة قضية موجودة أصلاً بالمراسلات (بطلب المستخدم) — بدل
+// إخفائها من نتائج البحث، نمرِّر لها ونوميض عليها لثوانٍ لتلقطها بسهولة.
+function flashMrCard(key){
+  const card = document.querySelector(`.mr-card[data-key="${CSS.escape(key)}"]`);
+  if(!card) return;
+  card.scrollIntoView({behavior:"smooth", block:"center"});
+  card.classList.add("mr-card-flash");
+  setTimeout(()=> card.classList.remove("mr-card-flash"), 2200);
+}
+
+const _mrRunSearch = debounce((qRaw)=>{
   const resultsEl = document.getElementById("mrSearchResults");
+  const q = normalizeEasternDigits(qRaw);
   if(!q){ resultsEl.style.display = "none"; resultsEl.innerHTML = ""; return; }
   const activeKeys = new Set(getMrRecords());
   const matches = getDedupedRAW().filter(r=>{
-    if(activeKeys.has(caseKey(r))) return false; // مضافة أصلاً — لا داعي تظهر بنتائج البحث
-    return (r["رقم الدعوى"]||"").includes(q) ||
+    const caseNo = normalizeEasternDigits(r["رقم الدعوى"]||"");
+    return caseNo.includes(q) ||
            getDefendantForRow(r).includes(q) ||
            getPlaintiffForRow(r).includes(q);
   }).slice(0, 15);
@@ -5824,10 +5854,13 @@ const _mrRunSearch = debounce((q)=>{
   resultsEl.style.display = "block";
   resultsEl.innerHTML = matches.map(r=>{
     const key = caseKey(r);
-    return `<div class="mr-search-item" data-key="${escapeAttr(key)}">
+    const alreadyAdded = activeKeys.has(key);
+    return `<div class="mr-search-item" data-key="${escapeAttr(key)}" data-existing="${alreadyAdded ? "1" : "0"}">
       <span class="mr-search-caseno">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}</span>
       <span class="mr-search-party">${escapeAttr(getDefendantForRow(r))}</span>
-      <button type="button" class="mr-search-add-btn" data-key="${escapeAttr(key)}">➕ إضافة</button>
+      ${alreadyAdded
+        ? `<button type="button" class="mr-search-goto-btn" data-key="${escapeAttr(key)}">📍 موجودة — اذهب إليها</button>`
+        : `<button type="button" class="mr-search-add-btn" data-key="${escapeAttr(key)}">➕ إضافة</button>`}
     </div>`;
   }).join("");
 }, 250);
@@ -5845,6 +5878,7 @@ document.getElementById("mrSearchInput").addEventListener("input", (e)=>{
 document.getElementById("mrSearchResults").addEventListener("dblclick", (e)=>{
   const item = e.target.closest(".mr-search-item");
   if(!item || !item.dataset.key) return;
+  if(item.dataset.existing === "1"){ flashMrCard(item.dataset.key); return; }
   addCaseToCorrespondence(item.dataset.key);
 });
 
@@ -5852,9 +5886,10 @@ document.getElementById("mrSearchResults").addEventListener("dblclick", (e)=>{
 // بثبات على أغلب متصفحات أندرويد بالجوال؛ اللمس المزدوج فيها غير مدعوم
 // افتراضياً كحدث dblclick حقيقي). الدبل-كليك يبقى شغّالاً للفأرة/الكمبيوتر.
 document.getElementById("mrSearchResults").addEventListener("click", (e)=>{
-  const btn = e.target.closest(".mr-search-add-btn");
-  if(!btn || !btn.dataset.key) return;
-  addCaseToCorrespondence(btn.dataset.key);
+  const addBtn = e.target.closest(".mr-search-add-btn");
+  if(addBtn && addBtn.dataset.key){ addCaseToCorrespondence(addBtn.dataset.key); return; }
+  const gotoBtn = e.target.closest(".mr-search-goto-btn");
+  if(gotoBtn && gotoBtn.dataset.key){ flashMrCard(gotoBtn.dataset.key); return; }
 });
 
 document.getElementById("generalNoteAddBtn").onclick = async ()=>{
@@ -8708,15 +8743,22 @@ function goCorrespondence(){
 }
 
 function getMrRecords(){
-  // كل القضايا الحاملة لحقل "مراسلات" نشط، باستثناء أي قضية حالتها "فصل"
-  // (بطلب المستخدم — تختفي تلقائياً من القائمة فور انتهائها قضائياً، بلا
-  // حذف بياناتها المخزَّنة؛ لو رجعت حالتها لأي سبب تظهر من جديد بكل بياناتها).
+  // كل القضايا الحاملة لحقل "مراسلات" نشط، باستثناء:
+  // - أي قضية حالتها "فصل" (تختفي تلقائياً فور انتهائها قضائياً)
+  // - أي قضية متبقّيها الفعلي أقل من 50 دينار (بطلب المستخدم — مبلغ صغير
+  //   لا يستأهل متابعة مراسلات بعد الآن)
+  // بلا حذف أي بيانات مخزَّنة بأي الحالتين — لو تغيّرت الحالة/المتبقي لاحقاً
+  // (نادر لكن ممكن)، تظهر القضية من جديد بكل تفاصيلها المحفوظة.
   return Object.keys(masterCache).filter(k=>{
     const mr = masterCache[k]["مراسلات"];
     if(!mr || !mr["نشط"]) return false;
     const row = getRowByKey(k);
-    const status = row ? (row["حالة الدعوى"]||"").trim() : "";
-    return status !== "فصل";
+    if(!row) return true; // نُبقيها ظاهرة لو تعذّر إيجاد الصف (حالة نادرة) بدل إخفائها بالخطأ
+    const status = (row["حالة الدعوى"]||"").trim();
+    if(status === "فصل") return false;
+    const fin = getFinancialForRow(row);
+    if(fin.remaining !== null && fin.remaining < 50) return false;
+    return true;
   });
 }
 
