@@ -5834,26 +5834,33 @@ function normalizeEasternDigits(str){
   return String(str || "").replace(/[٠-٩]/g, ch => String(easternDigits.indexOf(ch)));
 }
 
-// تثبيت مؤقت لقضية بأعلى قائمة المراسلات (بطلب المستخدم — بدل التمرير لمكانها
-// وسط قائمة طويلة، تُرفَع للمقدمة مباشرة). يُحترَم هذا التثبيت داخل renderMrList
-// أثناء الترتيب، ويُلغى تلقائياً بعد 30 ثانية (نفس مدة الإضاءة)، فترجع القضية
-// لترتيبها الطبيعي (غير مكتملة/تاريخ) من تلقاء نفسها.
-let mrPinnedKey = null;
+// تثبيت مؤقت لعدة قضايا معاً بأعلى قائمة المراسلات (بطلب المستخدم — بدل
+// التمرير لمكانها وسط قائمة طويلة، تُرفَع للمقدمة مباشرة). خريطة مفتاح←وقت
+// التثبيت، تدعم عدة قضايا مثبَّتة بنفس الوقت — الأحدث استدعاءً يعلو الأقدم
+// (بطلب المستخدم: "استدعاء قضية أخرى ينزل السابق تحت الجديد"). كل قضية لها
+// مؤقت ساعة مستقل خاص فيها — ترجع كل وحدة لموقعها الطبيعي بمفردها بعد ساعة
+// من استدعائها هي بالذات، بلا انتظار غيرها.
+let mrPinnedKeys = new Map(); // key -> وقت التثبيت (ms)
+let mrPinTimers = new Map();  // key -> معرِّف المؤقت (لإلغاء المؤقت القديم لو أُعيد استدعاء نفس القضية)
 
-// إضاءة + تثبيت مؤقت لبطاقة قضية موجودة أصلاً بالمراسلات (بطلب المستخدم) —
-// بدل إخفائها من نتائج البحث، نرفعها للمقدمة ونوميض عليها لتلقطها فوراً بلا تمرير.
+// إضاءة + تثبيت مؤقت (ساعة كاملة) لبطاقة قضية موجودة أصلاً بالمراسلات
+// (بطلب المستخدم) — بدل إخفائها من نتائج البحث، نرفعها للمقدمة ونوميض
+// عليها لتلقطها فوراً بلا تمرير.
 function flashMrCard(key){
-  mrPinnedKey = key;
+  if(mrPinTimers.has(key)) clearTimeout(mrPinTimers.get(key)); // استدعاء متكرر لنفس القضية يجدِّد الساعة من جديد
+  mrPinnedKeys.set(key, Date.now()); // وقت تثبيت جديد — يعلو أي قضية مثبَّتة سابقاً
   renderMrList();
   const card = document.querySelector(`.mr-card[data-key="${CSS.escape(key)}"]`);
   if(card){
     card.scrollIntoView({behavior:"smooth", block:"center"});
     card.classList.add("mr-card-flash");
   }
-  setTimeout(()=>{
-    mrPinnedKey = null;
-    renderMrList(); // ترجع القضية لترتيبها الطبيعي تلقائياً
-  }, 30000);
+  const timerId = setTimeout(()=>{
+    mrPinnedKeys.delete(key);
+    mrPinTimers.delete(key);
+    renderMrList(); // ترجع هذي القضية بمفردها لترتيبها الطبيعي، بلا التأثير على غيرها
+  }, 3600000); // ساعة كاملة
+  mrPinTimers.set(key, timerId);
 }
 
 const _mrRunSearch = debounce((qRaw)=>{
@@ -8764,7 +8771,9 @@ function goCorrespondence(){
   document.body.classList.remove("mode-remittances");
   mrEditUnlocked = false;
   mrClosedOverride = new Set();
-  mrPinnedKey = null;
+  // ملاحظة: mrPinnedKeys/mrPinTimers لا تُصفَّر هنا عمداً — التثبيت مصمَّم
+  // ليدوم ساعة كاملة عبر تنقّلك بين صفحات النظام، لا يُلغى بمجرد مغادرة
+  // صفحة المراسلات والعودة إليها (فقط بانتهاء ساعته الخاصة، أو بإغلاق التطبيق).
   document.getElementById("mrEditToggleBtn").textContent = "🔒 تعديل / حذف";
   document.getElementById("mrSearchInput").value = "";
   document.getElementById("mrSearchResults").style.display = "none";
@@ -8960,11 +8969,16 @@ function renderMrList(){
   }
 
   const keys = getMrRecords().sort((a,b)=>{
-    // قضية مثبَّتة مؤقتاً (بعد "📍 موجودة — اذهب إليها" بالبحث) تُقدَّم دائماً
-    // فوق أي شيء آخر، بلا استثناء — أولوية مطلقة (بطلب المستخدم).
-    if(mrPinnedKey && (a === mrPinnedKey || b === mrPinnedKey)){
-      if(a === mrPinnedKey && b !== mrPinnedKey) return -1;
-      if(b === mrPinnedKey && a !== mrPinnedKey) return 1;
+    // قضايا مثبَّتة مؤقتاً (بعد "📍 موجودة — اذهب إليها" بالبحث) تُقدَّم دائماً
+    // فوق أي شيء آخر، بلا استثناء — أولوية مطلقة (بطلب المستخدم). عدة قضايا
+    // مثبَّتة معاً تُرتَّب فيما بينها بالأحدث تثبيتاً أولاً (الأقدم ينزل تحت
+    // كل قضية جديدة تُستدعى بعده، بالضبط زي ما طلب المستخدم).
+    const aPinnedAt = mrPinnedKeys.get(a);
+    const bPinnedAt = mrPinnedKeys.get(b);
+    if(aPinnedAt !== undefined || bPinnedAt !== undefined){
+      if(aPinnedAt !== undefined && bPinnedAt === undefined) return -1;
+      if(bPinnedAt !== undefined && aPinnedAt === undefined) return 1;
+      return bPinnedAt - aPinnedAt; // الأحدث تثبيتاً يعلو الأقدم
     }
     // القضايا غير المكتملة (خاناتها الثلاث لم تُعبَّأ كلها بعد) تُقدَّم دائماً
     // لأعلى القائمة (بطلب المستخدم)، بغضّ النظر عن فلتر الترتيب بالتاريخ —
