@@ -8366,8 +8366,6 @@ function readExcelFileAsRows(file){
 }
 
 document.getElementById("updateBtn").onclick = async ()=>{
-  showToast(`🔍 تتبّع 0: ضُغط الزر — عدد الملفات المنتظرة=${pendingFiles.length}`, "ok");
-  await new Promise(r => setTimeout(r, 900));
   if(!pendingFiles.length){
     render();
     importStatusEl.className = "result-count";
@@ -8391,12 +8389,6 @@ document.getElementById("updateBtn").onclick = async ()=>{
 
 // النواة الفعلية لمعالجة دفعة ملفات استيراد — تعرض تأكيداً فورياً (askConfirm)
 // لأي ملف قديم/مكرَّر حسب النوع بدل حظره صامتاً، فيقرر المستخدم فوراً.
-// أداة تتبّع مؤقتة (لتشخيص "الفشل الصامت" بالاستيراد) — تُحذَف فور حل المشكلة
-async function _trace(msg, kind){
-  showToast(msg, kind);
-  await new Promise(r => setTimeout(r, 900));
-}
-
 async function runImportBatch(filesToImport){
   importStatusEl.className = "result-count";
   const totalFiles = filesToImport.length;
@@ -8416,15 +8408,12 @@ async function runImportBatch(filesToImport){
     importStatusEl.textContent = `جارٍ معالجة الملف ${i+1} من ${totalFiles}: "${file.name}"...`;
     try{
       const rows = await readExcelFileAsRows(file);
-      await _trace(`🔍 تتبّع 1: قُرئ الملف — ${rows.length} صف`, "ok");
 
       // ===== طبقة 1: رفض الأقدم من هامش الـ10 دقائق حسب تاريخ الملف نفسه
       // (lastModified) — على القضايا والرديات معاً (بطلب المستخدم) =====
       const kind = detectFileKind(rows);
       const lastFileMod = getLastFileModified(kind);
-      await _trace(`🔍 تتبّع 2: النوع=${kind}, آخر تاريخ محفوظ=${lastFileMod}`, "ok");
       if(lastFileMod !== null && file.lastModified < lastFileMod - IMPORT_DATE_GRACE_MS){
-        await _trace(`🔍 تتبّع: رُفض بالطبقة 1 (تاريخ الملف قديم)`, "warn");
         rejected.push(`⛔ "${file.name}": ممنوع تحميل ملف قديم — حمّل ملف ${FILE_KIND_LABEL[kind]} بتاريخ أحدث.`);
         continue; // تخطّي هذا الملف تماماً — لا معالجة ولا دمج إطلاقاً
       }
@@ -8435,7 +8424,6 @@ async function runImportBatch(filesToImport){
         const contentDate = getFileContentDate(rows);
         const lastDate = getLastImportDate();
         if(contentDate !== null && lastDate !== null && contentDate < lastDate - IMPORT_DATE_GRACE_MS){
-          await _trace(`🔍 تتبّع: رُفض بالطبقة 2 (تاريخ المحتوى قديم)`, "warn");
           rejected.push(`⛔ "${file.name}": ممنوع تحميل ملف قديم — حمّل ملف ${FILE_KIND_LABEL[kind]} بتاريخ أحدث.`);
           continue; // تخطّي هذا الملف تماماً — لا معالجة ولا دمج إطلاقاً
         }
@@ -8449,17 +8437,13 @@ async function runImportBatch(filesToImport){
       if(file.name.includes("تقرير المفصل") || file.name.includes("المفصل")){
         const refTime = lastImportInfo ? new Date(lastImportInfo.date).getTime() : null;
         if(refTime !== null && !isNaN(refTime) && file.lastModified < refTime - IMPORT_DATE_GRACE_MS){
-          await _trace(`🔍 تتبّع: رُفض بالطبقة 3 (اسم الملف "المفصل" وتاريخه أقدم)`, "warn");
           rejected.push(`⛔ "${file.name}": ممنوع تحميل ملف قديم — حمّل ملف حديث.`);
           continue; // تخطّي هذا الملف تماماً — لا معالجة ولا دمج إطلاقاً
         }
       }
-      await _trace(`🔍 تتبّع 3: اجتاز كل طبقات الرفض — سيُعالَج الآن`, "ok");
 
       const mergeStats = mergeRowsIntoRawData(rows);
-      await _trace(`🔍 تتبّع 4: دُمج بـRAW_DATA — جديد=${mergeStats.added}, محدَّث=${mergeStats.updated}`, "ok");
       const masterStats = await saveMasterFromRows(rows);
-      await _trace(`🔍 تتبّع 5: حُفظ بالماستر — ${masterStats ? JSON.stringify(masterStats) : "null!"}`, "ok");
       combined.added += mergeStats.added;
       combined.updated += mergeStats.updated;
       combined.addedTxn += mergeStats.addedTxn;
@@ -8484,7 +8468,6 @@ async function runImportBatch(filesToImport){
         }
       }
     }catch(err){
-      await _trace(`🔍 تتبّع: استثناء! ${err && err.message ? err.message : err} — ${err && err.stack ? String(err.stack).slice(0,200) : ""}`, "warn");
       failed.push(`${file.name} (${err.message || err})`);
       // نتابع بقية الملفات ولا نتوقف عند فشل ملف واحد
     }
@@ -8514,7 +8497,29 @@ async function runImportBatch(filesToImport){
   }
   buildChips();
   buildFilters();
-  render();
+  // ===== إصلاح جذري: render() تحدِّث فقط صفحة "الرديات" الرئيسية (mainWrap)
+  // — لو كانت صفحة أخرى مفتوحة فعلياً وقت الاستيراد (القضايا، متابعة
+  // المحامي، المتابعات، التحليل، المراسلات)، كانت تبقى بلا أي تحديث ظاهر
+  // على الشاشة رغم أن البيانات انحفظت فعلياً وبنجاح بالخلفية — بالضبط ما
+  // كان يبدو "وكأن الاستيراد لم يحصل إطلاقاً". نفس نمط processAccumulatedBatches
+  // المستخدَم أصلاً بالتحميل التدريجي من Firebase، مطبَّق هنا أيضاً.
+  if(currentSection === "lawyer" && document.getElementById("lawyerPage").style.display !== "none"){
+    renderLwActionsBox();
+    renderLwStatsBox();
+  } else if(currentSection === "cases" && document.getElementById("casesPage").style.display !== "none"){
+    casesAllRows = getCasesRows();
+    applyCasesFilter(true);
+    renderClosureNeededBox();
+  } else if(currentSection === "followups" && document.getElementById("followupPage").style.display !== "none"){
+    renderFollowupList();
+    renderFuStatsBox();
+  } else if(currentSection === "analysis" && document.getElementById("analysisPage").style.display !== "none"){
+    renderAnalysisPage();
+  } else if(currentSection === "correspondence" && document.getElementById("correspondencePage").style.display !== "none"){
+    renderMrList();
+  } else {
+    render(); // الصفحة الرئيسية (الرديات) أو الشاشة الرئيسية
+  }
   RAW_DATA_UNIQUE_COUNT = dedupeByCase(RAW_DATA).length;
   const uniqueCount = RAW_DATA_UNIQUE_COUNT;
   document.getElementById("fileBadge").textContent = `عدد القضايا: ${uniqueCount}`;
