@@ -7865,41 +7865,6 @@ function restoreFinancialFromMaster(){
   return mergeRowsIntoRawData(synthetic);
 }
 
-// ===== مزامنة نهائية إجبارية بعد الاستيراد (حل جذري لمشكلة "القيم ترجع
-// بعد الريفرش") — بطلب المستخدم =====
-// السبب الجذري المؤكَّد: صف العرض الفوري (RAW_DATA) وسجل الحفظ الحقيقي
-// (masterCache) كانا يطبّقان نفس "حمايات التراجع الصامت" بشكل منفصل تماماً،
-// وأحياناً يختلفان بالقرار (واحد يقبل قيمة، الثاني يرفضها) — فتظهر القيمة
-// الجديدة فوراً على الشاشة، بينما المحفوظ فعلياً (وما يراه أي جهاز آخر، أو
-// نفس الجهاز بعد ريفرش) يبقى القديم. هذا يقضي على احتمال الانحراف نهائياً:
-// بعد اكتمال الحفظ الحقيقي لكل قضايا هذا الاستيراد، نَنسخ القيم النهائية
-// (بعد تطبيق أي حماية) من masterCache مباشرة إلى صفوف RAW_DATA المعروضة —
-// فتتطابق الشاشة مع الحقيقة المحفوظة من اللحظة الأولى، بلا أي احتمال ارتداد
-// لاحقاً عند الريفرش أو من أي جهاز آخر.
-const RAW_MASTER_FIELD_MAP = [
-  ["حالة الدعوى", "الحالة"],
-  ["المحكمة", "المحكمة"],
-  ["تاريخ ورود الدعوى", "تاريخ الورود"],
-  ["مجموع المبالغ المطلوبة", "مجموع المبالغ المطلوبة"],
-  ["مجموع المبالغ المقبوضة فعليا", "مجموع المبالغ المقبوضة فعليا"],
-  ["مجموع المبالغ المتبقية", "مجموع المبالغ المتبقية"],
-  ["مجموع المبالغ المتاحة للقبض", "مجموع المبالغ المتاحة للقبض"]
-];
-function syncRawDataFromMaster(keys){
-  keys.forEach(key=>{
-    if(!key) return;
-    const masterRec = masterCache[key];
-    if(!masterRec) return;
-    const row = getRowByKey(key);
-    if(!row) return;
-    RAW_MASTER_FIELD_MAP.forEach(([rowField, masterField])=>{
-      const val = masterRec[masterField];
-      if(val === undefined) return;
-      row[rowField] = val;
-    });
-  });
-}
-
 function mergeRowsIntoRawData(newRows){
   let added = 0, updated = 0, skippedDuplicateTxn = 0, addedTxn = 0;
   const newTxnDetails = []; // تفاصيل كل معاملة مالية جديدة — لعرضها لاحقاً في نافذة تنبيه
@@ -8479,9 +8444,6 @@ async function runImportBatch(filesToImport){
 
       const mergeStats = mergeRowsIntoRawData(rows);
       const masterStats = await saveMasterFromRows(rows);
-      // مزامنة إجبارية أخيرة (راجع الشرح أعلى syncRawDataFromMaster) — تضمن
-      // تطابق الشاشة مع الحفظ الحقيقي فوراً، بلا أي احتمال ارتداد لاحقاً.
-      syncRawDataFromMaster([...new Set(rows.map(r => caseKey(r)).filter(Boolean))]);
       combined.added += mergeStats.added;
       combined.updated += mergeStats.updated;
       combined.addedTxn += mergeStats.addedTxn;
