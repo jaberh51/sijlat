@@ -2706,7 +2706,11 @@ async function fbLoadAllCasesViaREST(){
   const token = fbAuth && fbAuth.currentUser ? await fbAuth.currentUser.getIdToken() : null;
   const dbUrl = fbDb.app.options.databaseURL;
   const url = `${dbUrl}/master_cases.json` + (token ? `?auth=${token}` : "");
-  const res = await fetch(url);
+  // cache: 'no-store' إجباري — بلاه، قد يعيد المتصفح استجابة مخزَّنة محلياً من
+  // طلب سابق لنفس الرابط بدل جلب البيانات الفعلية الحالية من الخادم، فتظهر
+  // بيانات قديمة رغم نجاح استيراد أحدث للتو (هذا بالضبط ما كان يسبِّب رجوع
+  // قيم قديمة بعد الريفرش).
+  const res = await fetch(url, {cache: "no-store"});
   if(!res.ok) throw new Error(`REST fetch failed: ${res.status} ${res.statusText}`);
   const data = await res.json();
   const all = {};
