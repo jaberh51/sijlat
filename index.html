@@ -565,8 +565,8 @@
   }
   .mr-search-goto-btn:hover, .mr-search-goto-btn:active{filter:brightness(.96);}
   @keyframes mrCardFlash{
-    0%, 100%{box-shadow:0 1px 4px rgba(30,39,51,.05);border-color:var(--line);}
-    15%, 45%, 75%{box-shadow:0 0 0 4px var(--brass-soft);border-color:var(--brass);}
+    0%, 100%{box-shadow:0 1px 4px rgba(30,39,51,.05);border-color:var(--line);background:linear-gradient(135deg,var(--paper-raised),#fdfaf3);}
+    15%, 45%, 75%{box-shadow:0 0 0 4px #fde68a;border-color:#f59e0b;background:#fef9c3;}
   }
   .mr-card-flash{animation:mrCardFlash 2.2s ease;}
   .mr-search-empty{padding:14px;text-align:center;color:var(--ink-soft);font-size:12.5px;}
@@ -9062,7 +9062,13 @@ function renderMrList(){
       }
       otherInput.style.display = "none";
       await setMrFieldMethod(key, field, sel.value);
-      renderMrList();
+      // "غير متاح لهذا الملف" قرار نهائي بذاته (خانة حجز الحوافز فقط) — لا
+      // يحتاج خطوة تجميد يدوية إضافية، يُجمَّد تلقائياً بمجرد اختياره.
+      if(field === "حوافز_طريقة" && sel.value === MR_HAWAFIZ_NA_VALUE){
+        await freezeMrField(key, "حوافز"); // يستدعي renderMrList() داخلياً
+      } else {
+        renderMrList();
+      }
     };
   });
   listEl.querySelectorAll(".mr-method-other-action").forEach(inp=>{
