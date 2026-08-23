@@ -7936,6 +7936,16 @@ function mergeRowsIntoRawData(newRows){
       // تحديث الصف الموجود مباشرة في مكانه (in-place) — نفس المرجع المخزَّن في
       // RAW_DATA بالفعل، فلا حاجة للبحث عن فهرسه بـ indexOf (كان O(n) أيضاً).
       let changed = false;
+      // ===== إصلاح جذري: المرجع المستخدَم لكل فحوصات "التراجع المشبوه" أدناه
+      // هو دائماً القيمة المحفوظة فعلياً بالماستر (masterCache)، وليس قيمة
+      // existingRow الحالية بـRAW_DATA — لأن الاثنين قد ينحرفان عن بعض (مثلاً
+      // ردية استُوردت سابقاً بهذي الجلسة نفسها بلا ريفرش لاحق، فتبقى RAW_DATA
+      // تعرض رقماً أعلى مؤقتاً بينما الماستر محدَّث فعلياً بالرقم الأدق).
+      // بلا هذا التوحيد، فحص هنا قد "يقبل" قيمة والفحص المطابق بـ
+      // saveMasterFromRows "يرفضها" (أو العكس) لأنهما يقارنان بمرجعين
+      // مختلفين — فتظهر القيمة فوراً بالعرض، لكنها "ترتد" لقيمة أخرى فور أي
+      // ريفرش لاحق يعيد بناء RAW_DATA من الماستر الحقيقي.
+      const masterRec = masterCache[key] || {};
       nonFinFields.forEach(field=>{
         const val = nr[field];
         if(val === undefined || String(val).trim() === "" || existingRow[field] === val) return;
@@ -7943,19 +7953,19 @@ function mergeRowsIntoRawData(newRows){
         // صامتاً من ملف قديم — القرار النهائي محفوظ فعلاً بالماستر (المستخدم
         // يراجعه هناك عبر نافذة التعارض)؛ هنا فقط نُبقي RAW_DATA (المعروض
         // فوراً بلا إعادة تحميل) متوافقاً مع نفس القرار الآمن.
-        if(field === "حالة الدعوى" && existingRow[field] === "فصل" && val === "قيد التنفيذ") return;
+        if(field === "حالة الدعوى" && masterRec["الحالة"] === "فصل" && val === "قيد التنفيذ") return;
         // نفس الحماية لباقي المبالغ الإجمالية الثلاثة — القرار النهائي محفوظ
         // فعلاً بالماستر (نافذة التعارض)؛ هنا فقط نُبقي RAW_DATA متوافقاً معه.
         if(field === "مجموع المبالغ المطلوبة" || field === "مجموع المبالغ المقبوضة فعليا"){
-          const newNum = parseNum(val), oldNum = parseNum(existingRow[field]);
+          const newNum = parseNum(val), oldNum = parseNum(masterRec[field]);
           if(newNum !== null && oldNum !== null && newNum < oldNum - 0.01) return; // نقصان مشبوه
         }
         if(field === "مجموع المبالغ المتبقية"){
-          const newNum = parseNum(val), oldNum = parseNum(existingRow[field]);
+          const newNum = parseNum(val), oldNum = parseNum(masterRec[field]);
           if(newNum !== null && oldNum !== null && newNum > oldNum + 0.01) return; // زيادة مشبوهة
         }
         if(field === "مجموع المبالغ المتاحة للقبض"){
-          const newNum = parseNum(val), oldNum = parseNum(existingRow[field]);
+          const newNum = parseNum(val), oldNum = parseNum(masterRec[field]);
           if(newNum !== null && oldNum !== null && newNum > oldNum + 0.01) return; // زيادة مشبوهة (نفس منطق "المتاح" بالماستر)
         }
         existingRow[field] = val;
