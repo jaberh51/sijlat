@@ -2590,6 +2590,14 @@ function decodeFbKey(encoded){
 // onBatch مع كل دفعة جديدة فور وصولها ليُحدَّث العرض تدريجياً بلا انتظار الكل.
 const FB_BATCH_SIZE = 50;
 const FB_MAX_BATCHES = 200; // حد أقصى مطلق (= ١٠٬٠٠٠ قضية) — يمنع أي حلقة لانهائية نهائياً
+// كان التوقف عند أول فشل بجلب أي دفعة (مثلاً بسبب اضطراب لحظي بالاتصال) يُنهي
+// التحميل بصمت تام معتبراً القضايا الواصلة لحد تلك اللحظة "كل البيانات" —
+// بلا أي محاولة إعادة، وبلا أي مؤشر يخبر المستخدم أن التحميل ناقص فعلياً
+// (هذا بالضبط ما كان يسبِّب اختلاف عدد القضايا بين جهازين لهما نفس البيانات
+// الحقيقية على Firebase). الآن: 3 محاولات لكل دفعة (بفاصل بسيط بينها) قبل
+// الاستسلام، وإن فشلت الدفعة نهائياً بعد المحاولات الثلاث، يُعرَض تحذير صريح
+// بدل الصمت — ليعرف المستخدم إن العدد المعروض قد لا يكون كاملاً.
+let lastLoadIncomplete = false;
 async function fbLoadCasesProgressive(onBatch){
   if(!fbDb) return {};
   const fb = window.__fbModular;
@@ -2597,13 +2605,27 @@ async function fbLoadCasesProgressive(onBatch){
   let all = {};
   let cursorKey = null;
   let iterations = 0;
+  lastLoadIncomplete = false;
   while(iterations < FB_MAX_BATCHES){
     iterations++;
     const q = cursorKey
       ? fb.query(casesRef, fb.orderByKey(), fb.endBefore(cursorKey), fb.limitToLast(FB_BATCH_SIZE))
       : fb.query(casesRef, fb.orderByKey(), fb.limitToLast(FB_BATCH_SIZE));
-    let snap;
-    try{ snap = await fb.get(q); }catch(e){ break; } // مثلاً لا اتصال إنترنت أو رفض صلاحية
+    let snap = null;
+    let lastErr = null;
+    for(let attempt = 1; attempt <= 3; attempt++){
+      try{ snap = await fb.get(q); lastErr = null; break; }
+      catch(e){
+        lastErr = e;
+        if(attempt < 3) await new Promise(r => setTimeout(r, 600 * attempt)); // فاصل متصاعد بسيط بين المحاولات
+      }
+    }
+    if(lastErr){
+      // فشلت هذي الدفعة رغم 3 محاولات — نتوقف، لكن بلا صمت هالمرة
+      console.error("فشل تحميل دفعة قضايا من Firebase بعد 3 محاولات:", lastErr);
+      lastLoadIncomplete = true;
+      break;
+    }
     if(!snap.exists()) break;
     const keys = [];
     const batch = {};
@@ -4353,6 +4375,12 @@ async function bootstrapMasterCache(){
       // تهيئة "آخر حالة معروفة" لكل القضايا — مرجع "قبل" صحيح لسجل التدقيق
       // الدقيق لأي تعديل يحدث من الآن فصاعداً في هذه الجلسة
       _lastKnownSnapshot = JSON.parse(JSON.stringify(masterCache));
+      // تحذير صريح (بدل الصمت السابق) لو توقّف التحميل التدريجي مبكراً بسبب
+      // فشل دفعة معيّنة رغم 3 محاولات — العدد المعروض بالنظام قد يكون ناقصاً
+      // فعلياً، والمستخدم يحتاج يعرف هذا بدل الثقة برقم غير مكتمل بصمت.
+      if(lastLoadIncomplete){
+        showToast("⚠️ الاتصال غير مستقر — بعض القضايا قد لا تكون ظاهرة بعد. حدِّث الصفحة لما يتحسّن الاتصال", "warn");
+      }
     });
   } else {
     window._masterCacheFullSyncPromise = Promise.resolve();
