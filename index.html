@@ -5834,14 +5834,26 @@ function normalizeEasternDigits(str){
   return String(str || "").replace(/[٠-٩]/g, ch => String(easternDigits.indexOf(ch)));
 }
 
-// إضاءة مؤقتة لبطاقة قضية موجودة أصلاً بالمراسلات (بطلب المستخدم) — بدل
-// إخفائها من نتائج البحث، نمرِّر لها ونوميض عليها لثوانٍ لتلقطها بسهولة.
+// تثبيت مؤقت لقضية بأعلى قائمة المراسلات (بطلب المستخدم — بدل التمرير لمكانها
+// وسط قائمة طويلة، تُرفَع للمقدمة مباشرة). يُحترَم هذا التثبيت داخل renderMrList
+// أثناء الترتيب، ويُلغى تلقائياً بعد 30 ثانية (نفس مدة الإضاءة)، فترجع القضية
+// لترتيبها الطبيعي (غير مكتملة/تاريخ) من تلقاء نفسها.
+let mrPinnedKey = null;
+
+// إضاءة + تثبيت مؤقت لبطاقة قضية موجودة أصلاً بالمراسلات (بطلب المستخدم) —
+// بدل إخفائها من نتائج البحث، نرفعها للمقدمة ونوميض عليها لتلقطها فوراً بلا تمرير.
 function flashMrCard(key){
+  mrPinnedKey = key;
+  renderMrList();
   const card = document.querySelector(`.mr-card[data-key="${CSS.escape(key)}"]`);
-  if(!card) return;
-  card.scrollIntoView({behavior:"smooth", block:"center"});
-  card.classList.add("mr-card-flash");
-  setTimeout(()=> card.classList.remove("mr-card-flash"), 30000);
+  if(card){
+    card.scrollIntoView({behavior:"smooth", block:"center"});
+    card.classList.add("mr-card-flash");
+  }
+  setTimeout(()=>{
+    mrPinnedKey = null;
+    renderMrList(); // ترجع القضية لترتيبها الطبيعي تلقائياً
+  }, 30000);
 }
 
 const _mrRunSearch = debounce((qRaw)=>{
@@ -8752,6 +8764,7 @@ function goCorrespondence(){
   document.body.classList.remove("mode-remittances");
   mrEditUnlocked = false;
   mrClosedOverride = new Set();
+  mrPinnedKey = null;
   document.getElementById("mrEditToggleBtn").textContent = "🔒 تعديل / حذف";
   document.getElementById("mrSearchInput").value = "";
   document.getElementById("mrSearchResults").style.display = "none";
@@ -8947,6 +8960,12 @@ function renderMrList(){
   }
 
   const keys = getMrRecords().sort((a,b)=>{
+    // قضية مثبَّتة مؤقتاً (بعد "📍 موجودة — اذهب إليها" بالبحث) تُقدَّم دائماً
+    // فوق أي شيء آخر، بلا استثناء — أولوية مطلقة (بطلب المستخدم).
+    if(mrPinnedKey && (a === mrPinnedKey || b === mrPinnedKey)){
+      if(a === mrPinnedKey && b !== mrPinnedKey) return -1;
+      if(b === mrPinnedKey && a !== mrPinnedKey) return 1;
+    }
     // القضايا غير المكتملة (خاناتها الثلاث لم تُعبَّأ كلها بعد) تُقدَّم دائماً
     // لأعلى القائمة (بطلب المستخدم)، بغضّ النظر عن فلتر الترتيب بالتاريخ —
     // الترتيب بالتاريخ يُطبَّق بعدها كترتيب ثانوي داخل كل مجموعة (مكتملة/غير مكتملة).
