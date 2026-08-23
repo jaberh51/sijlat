@@ -8366,6 +8366,8 @@ function readExcelFileAsRows(file){
 }
 
 document.getElementById("updateBtn").onclick = async ()=>{
+  showToast(`🔍 تتبّع 0: ضُغط الزر — عدد الملفات المنتظرة=${pendingFiles.length}`, "ok");
+  await new Promise(r => setTimeout(r, 900));
   if(!pendingFiles.length){
     render();
     importStatusEl.className = "result-count";
