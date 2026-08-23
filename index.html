@@ -565,10 +565,11 @@
   }
   .mr-search-goto-btn:hover, .mr-search-goto-btn:active{filter:brightness(.96);}
   @keyframes mrCardFlash{
-    0%, 100%{box-shadow:0 1px 4px rgba(30,39,51,.05);border-color:var(--line);background:linear-gradient(135deg,var(--paper-raised),#fdfaf3);}
-    15%, 45%, 75%{box-shadow:0 0 0 4px #fde68a;border-color:#f59e0b;background:#fef9c3;}
+    0%{box-shadow:0 1px 4px rgba(30,39,51,.05);border-color:var(--line);background:linear-gradient(135deg,var(--paper-raised),#fdfaf3);}
+    3%, 92%{box-shadow:0 0 0 4px #fde68a;border-color:#f59e0b;background:#fef9c3;}
+    100%{box-shadow:0 1px 4px rgba(30,39,51,.05);border-color:var(--line);background:linear-gradient(135deg,var(--paper-raised),#fdfaf3);}
   }
-  .mr-card-flash{animation:mrCardFlash 2.2s ease;}
+  .mr-card-flash{animation:mrCardFlash 30s ease;}
   .mr-search-empty{padding:14px;text-align:center;color:var(--ink-soft);font-size:12.5px;}
   .mr-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;}
   .mr-count{font-size:12px;color:var(--ink-soft);font-weight:700;}
@@ -5840,7 +5841,7 @@ function flashMrCard(key){
   if(!card) return;
   card.scrollIntoView({behavior:"smooth", block:"center"});
   card.classList.add("mr-card-flash");
-  setTimeout(()=> card.classList.remove("mr-card-flash"), 2200);
+  setTimeout(()=> card.classList.remove("mr-card-flash"), 30000);
 }
 
 const _mrRunSearch = debounce((qRaw)=>{
