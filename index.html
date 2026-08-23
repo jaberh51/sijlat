@@ -2621,20 +2621,11 @@ async function fbLoadCasesProgressive(onBatch){
       }
     }
     if(lastErr){
-      // فشلت هذي الدفعة رغم 3 محاولات — قد يكون حظراً دائماً للاتصال اللحظي
-      // بهذي الشبكة تحديداً (لا فائدة من إعادة المحاولة بنفس الطريقة أكثر
-      // من كذا). نتحوَّل فوراً لمسار REST الاحتياطي (نفس الحل المستخدَم
-      // أصلاً للحفظ) ليجلب كل القضايا دفعة واحدة عبر HTTPS القياسي.
-      console.error("فشل تحميل دفعة قضايا من Firebase بعد 3 محاولات، جارٍ المحاولة عبر REST:", lastErr);
-      try{
-        const restData = await fbLoadAllCasesViaREST();
-        Object.assign(all, restData);
-        if(onBatch) onBatch(restData, all);
-        lastLoadIncomplete = false; // نجح المسار الاحتياطي — البيانات مكتملة فعلياً رغم فشل الاتصال اللحظي
-      }catch(restErr){
-        console.error("فشل مسار REST الاحتياطي أيضاً:", restErr);
-        lastLoadIncomplete = true;
-      }
+      // فشلت هذي الدفعة رغم 3 محاولات — نتوقف، مع تحذير صريح بدل الصمت.
+      // (المسار الاحتياطي عبر REST أُزيل بطلب المستخدم بعد ثغرة كاش سبَّبت
+      // رجوع بيانات قديمة — راجع الذاكرة/سجل التطوير لتفاصيل هذا القرار).
+      console.error("فشل تحميل دفعة قضايا من Firebase بعد 3 محاولات:", lastErr);
+      lastLoadIncomplete = true;
       break;
     }
     if(!snap.exists()) break;
@@ -2696,32 +2687,13 @@ function restoreFromFirebase(val){
 // deletedKeys: مفاتيح حُذفت محلياً ويجب حذف عقدتها من Firebase أيضاً (تعيين
 // المسار إلى null في Multi-path Update يحذف تلك العقدة تحديداً في Firebase)
 // ===== حل احتياطي لمشكلة شبكات تحظر اتصال Firebase اللحظي (WebSocket)
-// تحديداً بينما تسمح بتصفّح عادي — بعض أجهزة الراوتر/الشبكات تفعل هذا
-// بثبات دائم (مو اضطراباً عارضاً)، فإعادة محاولة نفس الطريقة المحظورة عدة
-// مرات لا تفيد إطلاقاً. نُطبِّق هذا لكل من التحميل والحفظ معاً: نُحاول
-// الاتصال اللحظي أولاً (سريع بالحالة الطبيعية)، ولو تأخَّر/فشل، نتحوَّل
-// فوراً لطلب REST عبر HTTPS القياسي (نفس البروتوكول المستخدَم لتصفّح أي
-// موقع عادي — نادراً ما يُحظَر حتى بالشبكات المقيَّدة). =====
-async function fbLoadAllCasesViaREST(){
-  const token = fbAuth && fbAuth.currentUser ? await fbAuth.currentUser.getIdToken() : null;
-  const dbUrl = fbDb.app.options.databaseURL;
-  const url = `${dbUrl}/master_cases.json` + (token ? `?auth=${token}` : "");
-  // cache: 'no-store' إجباري — بلاه، قد يعيد المتصفح استجابة مخزَّنة محلياً من
-  // طلب سابق لنفس الرابط بدل جلب البيانات الفعلية الحالية من الخادم، فتظهر
-  // بيانات قديمة رغم نجاح استيراد أحدث للتو (هذا بالضبط ما كان يسبِّب رجوع
-  // قيم قديمة بعد الريفرش).
-  const res = await fetch(url, {cache: "no-store"});
-  if(!res.ok) throw new Error(`REST fetch failed: ${res.status} ${res.statusText}`);
-  const data = await res.json();
-  const all = {};
-  if(data){
-    Object.keys(data).forEach(k=>{
-      all[decodeFbKey(k)] = restoreFromFirebase(data[k]);
-    });
-  }
-  return all;
-}
-
+// تحديداً بينما تسمح بتصفّح عادي — بعض أجهزة الراوتر/الشبكات تفعل هذا. بدل
+// الفشل التام، نُحاول الاتصال اللحظي أولاً (سريع بالحالة الطبيعية)، ولو
+// تأخَّر/فشل، نتحوَّل فوراً لطلب REST عبر HTTPS القياسي (نفس البروتوكول
+// المستخدَم لتصفّح أي موقع عادي). يُطبَّق على الحفظ فقط — النسخة المقابلة
+// له بالتحميل أُزيلت لاحقاً بطلب المستخدم (ثغرة كاش سبَّبت رجوع بيانات
+// قديمة على جهاز أثناء الاستخدام العادي؛ أخطر من فائدتها لحالة الحظر
+// النادرة، فحماية القيم الحقيقية أولى من محاولة تغطية كل سيناريوهات الشبكة). =====
 async function fbUpdateViaREST(updates){
   const token = fbAuth && fbAuth.currentUser ? await fbAuth.currentUser.getIdToken() : null;
   const dbUrl = fbDb.app.options.databaseURL;
