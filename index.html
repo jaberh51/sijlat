@@ -7901,6 +7901,22 @@ function mergeRowsIntoRawData(newRows){
         sigIndex.get(key).add(sig);
         if(!sigByCaseNoIndex.has(caseNoOnly)) sigByCaseNoIndex.set(caseNoOnly, new Set());
         sigByCaseNoIndex.get(caseNoOnly).add(sig);
+        // ===== إصلاح جذري: خصم مبلغ هذي المعاملة من "المتاح" فوراً على صف
+        // المعلومات المعروض حالياً بـRAW_DATA — بلا هذا، saveMasterFromRows
+        // كانت تخصم المبلغ بشكل صحيح على الماستر المحفوظ (Firebase)، لكن
+        // العرض الفوري (قبل أي ريفرش) يبقى يعرض "المتاح" القديم غير المخصوم،
+        // لأن getRowAvail يقرأ حقل الصف بـRAW_DATA أولاً قبل الرجوع للماستر —
+        // فيظهر رقم أعلى مؤقتاً حتى يُعاد بناء RAW_DATA بالكامل من الماستر
+        // عند أي ريفرش لاحق (وهو ما كان يبدو وكأن البيانات "رجعت لقيمة قديمة"،
+        // بينما الحقيقة كانت العكس تماماً: العرض الفوري لم يتحدَّث بعد).
+        const infoRow = getRowByKey(key);
+        const txnAmt = parseFloat(String(nr["المبلغ المحول"]||"0").replace(/,/g,"")) || 0;
+        if(infoRow && txnAmt > 0){
+          const currentAvailNum = parseNum(infoRow["مجموع المبالغ المتاحة للقبض"]);
+          if(currentAvailNum !== null){
+            infoRow["مجموع المبالغ المتاحة للقبض"] = String(Math.max(0, currentAvailNum - txnAmt));
+          }
+        }
       } else {
         skippedDuplicateTxn++;
       }
