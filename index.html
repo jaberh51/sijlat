@@ -510,14 +510,6 @@
     display:inline-block;margin-inline-start:6px;font-size:10.5px;font-weight:700;
     background:#dcfce7;color:#166534;border:1px solid #86efac;border-radius:6px;padding:2px 7px;
   }
-  .cases-anomaly-box{
-    background:linear-gradient(135deg,#fef2f2,#fee2e2);
-    border:1.5px solid #fca5a5;border-radius:12px;
-    padding:12px 20px;margin-top:10px;font-size:13.5px;font-weight:700;color:#991b1b;
-  }
-  .cases-anomaly-badge{
-    display:inline-block;font-size:12px;cursor:help;
-  }
   .cases-type-badge{
     display:inline-block;margin-inline-start:6px;font-size:10px;font-weight:700;
     border-radius:6px;padding:2px 7px;white-space:nowrap;
@@ -2168,9 +2160,6 @@ if('serviceWorker' in navigator){
         </div>
         <div id="casesFinishedBox" class="cases-finished-box" style="display:none;">
           ✅ <span id="casesFinishedCount">0</span> قضية انتهت مالياً بالكامل (المطلوب = المحصّل، ولا يوجد متبقٍ أو متاح)
-        </div>
-        <div id="casesAnomalyBox" class="cases-anomaly-box" style="display:none;">
-          ⚠️ <span id="casesAnomalyCount">0</span> قضية فيها تناقض بيانات — تستاهل مراجعة (مرّر المؤشر على ⚠️ بجدول القضايا لمعرفة السبب)
         </div>
       </div>
 
@@ -4439,34 +4428,6 @@ async function saveMasterFromRows(rows){
     const totalRemaining = (r["مجموع المبالغ المتبقية"] && String(r["مجموع المبالغ المتبقية"]).trim()) || existing["مجموع المبالغ المتبقية"] || "";
     const totalAvailable = (r["مجموع المبالغ المتاحة للقبض"] && String(r["مجموع المبالغ المتاحة للقبض"]).trim()) || existing["مجموع المبالغ المتاحة للقبض"] || "";
 
-    // ===== حماية "ذكية" جديدة (بطلب المستخدم — بديل غير قابل للتضارب) =====
-    // بدل رفض القيمة الجديدة (اللي كانت تخلق تضارباً بين الشاشة والحفظ)،
-    // نطبّق القيمة دائماً، لكن نضع "علامة تنبيه" واضحة على القضية لو التغيير
-    // كبير بشكل مريب — تظهر بنفس نظام شارات ⚠️ الموجود أصلاً بصفحة القضايا
-    // (detectCaseAnomalies)، فتراجعها بنفسك وتقرر بلا أي قرار صامت من النظام.
-    // حد "المريب": نقصان بالمطلوب/المحصّل، أو زيادة بالمتبقي/المتاح — بمبلغ
-    // أكبر من 5 دنانير (لتفادي إزعاجك بفروقات تقريب بسيطة لا تستاهل تنبيهاً).
-    const importAlertParts = [];
-    const SUSPICIOUS_THRESHOLD = 5;
-    function checkSuspicious(label, newRaw, oldRaw, direction){
-      if(!newRaw || newRaw === oldRaw) return;
-      const newNum = parseNum(newRaw), oldNum = parseNum(oldRaw);
-      if(newNum === null || oldNum === null) return;
-      const diff = newNum - oldNum;
-      if(direction === "decrease" && diff < -SUSPICIOUS_THRESHOLD){
-        importAlertParts.push(`${label}: ${oldNum.toFixed(2)} ← ${newNum.toFixed(2)} (نقص ${Math.abs(diff).toFixed(2)})`);
-      } else if(direction === "increase" && diff > SUSPICIOUS_THRESHOLD){
-        importAlertParts.push(`${label}: ${oldNum.toFixed(2)} ← ${newNum.toFixed(2)} (زاد ${diff.toFixed(2)})`);
-      }
-    }
-    checkSuspicious("المطلوب", totalRequested, existing["مجموع المبالغ المطلوبة"], "decrease");
-    checkSuspicious("المحصّل", totalCollected, existing["مجموع المبالغ المقبوضة فعليا"], "decrease");
-    checkSuspicious("المتبقي", totalRemaining, existing["مجموع المبالغ المتبقية"], "increase");
-    checkSuspicious("المتاح", totalAvailable, existing["مجموع المبالغ المتاحة للقبض"], "increase");
-    if(importedStatus && existing["الحالة"] === "فصل" && importedStatus === "قيد التنفيذ"){
-      importAlertParts.push(`الحالة: فصل ← قيد التنفيذ`);
-    }
-
     const record = {
       "رقم القضية": shortCaseNo(r["رقم الدعوى"]),
       "المدعون": plaintiffs,
@@ -4481,16 +4442,6 @@ async function saveMasterFromRows(rows){
       "مجموع المبالغ المتبقية": totalRemaining,
       "مجموع المبالغ المتاحة للقبض": totalAvailable
     };
-    // علامة التنبيه الذكي (راجع الشرح أعلى checkSuspicious) — تُحفَظ كحقل
-    // عادي بالسجل، تُعرَض عبر detectCaseAnomalies بصفحة القضايا، وتُمسَح
-    // تلقائياً أول ما يستورَد نفس الحقل بقيمة غير مريبة لاحقاً (أدناه).
-    if(importAlertParts.length){
-      record["تنبيه_استيراد"] = importAlertParts.join(" | ");
-      record["تنبيه_استيراد_تاريخ"] = getAccurateNow().getTime();
-    } else if(existing["تنبيه_استيراد"] !== undefined){
-      record["تنبيه_استيراد"] = existing["تنبيه_استيراد"]; // نُبقي تنبيهاً سابقاً لم يُراجَع بعد
-      record["تنبيه_استيراد_تاريخ"] = existing["تنبيه_استيراد_تاريخ"];
-    }
 
     const hasFin = FINANCIAL_FIELDS.some(f => r[f] !== undefined && String(r[f]).trim() !== "");
     let transactions = existing["معاملات مالية"] ? [...existing["معاملات مالية"]] : [];
@@ -9830,43 +9781,6 @@ function getRowCollected(r){
   return fin.total > 0 ? fin.total : (rec ? parseNum(rec["مجموع المبالغ المقبوضة فعليا"]) : null);
 }
 
-// اكتشاف تلقائي لأنماط بيانات غريبة/غير منطقية (بطلب المستخدم — محاكاة على
-// 20,000 حالة اصطناعية بنفس صيغة الحساب الفعلية لاكتشاف كل الأنماط الممكنة
-// منطقياً). تُرجع مصفوفة بأسباب الشذوذ الموجودة لهذه القضية تحديداً (فارغة
-// إن لم يوجد أي شذوذ) — تُستخدَم لكل من الشارة داخل الصف وصندوق الملخّص.
-function detectCaseAnomalies(r){
-  const reasons = [];
-  const fin = getFinancialForRow(r);
-  const req = fin.requested;
-  const collected = getRowCollected(r);
-  const rem = fin.remaining;
-  const avail = getRowAvail(r);
-  const status = (r["حالة الدعوى"]||"").trim();
-
-  if(rem !== null && rem < -0.01){
-    reasons.push("متبقي سالب — المتاح المستورَد أعلى من الفرق الفعلي المتبقي على القضية");
-  }
-  if(avail !== null && req !== null && avail > req + 0.01){
-    reasons.push("المتاح أعلى من كل المبلغ المطلوب أصلاً — تحقّق من صحة الرقمين");
-  }
-  if(collected !== null && req !== null && collected > req + 0.01){
-    reasons.push("المحصّل أعلى من المطلوب — إما المطلوب قديم ولم يُحدَّث، أو خطأ بالبيانات");
-  }
-  if(status === "فصل" && rem !== null && rem > 0.01){
-    reasons.push("القضية \"فصل\" لكن لا يزال عليها متبقٍّ حسب سجلّاتنا");
-  }
-  if(status === "فصل" && avail !== null && avail > 0.01){
-    reasons.push("القضية \"فصل\" وفيها مبلغ متاح لم يُسحَب بعد");
-  }
-  // تنبيه استيراد ذكي (راجع checkSuspicious بـsaveMasterFromRows) — تغيير
-  // كبير مريب وصل من ملف استيراد، يستاهل مراجعتك الشخصية قبل الوثوق فيه.
-  const rec = masterCache[caseKey(r)];
-  if(rec && rec["تنبيه_استيراد"]){
-    reasons.push(`⚡ تغيير كبير بآخر استيراد: ${rec["تنبيه_استيراد"]}`);
-  }
-  return reasons;
-}
-
 // استخراج {year, num} من رقم الدعوى الموحّد "رقم - سنة" للترتيب حسب السنة ثم الرقم
 function getCaseYearNum(r){
   const norm = shortCaseNo(r["رقم الدعوى"]); // صيغة موحّدة: "رقم - سنة"
@@ -10464,25 +10378,6 @@ function renderCasesFinishedBox(){
   }
 }
 
-// اكتشاف تلقائي لأنماط بيانات "غريبة" (بطلب المستخدم — محاكاة على 20,000
-// حالة اصطناعية حدَّدت خمسة أنماط، راجع detectCaseAnomalies) — يُحسَب على
-// كل القضايا المطابقة للفلتر الحالي (مو فقط صفحة العرض)، ليبقى العدّاد
-// دقيقاً بغضّ النظر عن الترقيم.
-function renderCasesAnomalyBox(){
-  const box = document.getElementById("casesAnomalyBox");
-  const countEl = document.getElementById("casesAnomalyCount");
-  let count = 0;
-  casesFilteredRows.forEach(r=>{
-    if(detectCaseAnomalies(r).length > 0) count++;
-  });
-  if(count > 0){
-    box.style.display = "block";
-    countEl.textContent = count;
-  } else {
-    box.style.display = "none";
-  }
-}
-
 function renderCasesPage(){
   const tbody = document.getElementById("casesTbody");
   const emptyEl = document.getElementById("casesEmpty");
@@ -10544,10 +10439,6 @@ function renderCasesPage(){
     const statusClass = status === "قيد التنفيذ" ? "cases-badge-exec" :
                         status === "فصل" ? "cases-badge-closed" : "cases-badge-other";
     const remClass = rem !== null && rem > 0 ? "amt-col-remaining-due" : "amt-col-remaining-ok";
-    // اكتشاف تلقائي لأنماط بيانات غريبة/غير منطقية — راجع detectCaseAnomalies
-    // (محاكاة على 20,000 حالة اصطناعية حدَّدت الأنماط الخمسة المفحوصة هناك)
-    const anomalyReasons = detectCaseAnomalies(r);
-    const isAnomaly = anomalyReasons.length > 0;
     const justIncreased = isRecentlyIncreased(key);
     const availClass = (avail !== null && avail > 0 ? "amt-col-avail" : "amt-col-remaining-ok") + (justIncreased ? " amt-avail-flash" : "");
     // قضية منتهية مالياً: المطلوب = المحصّل (فالمتبقي صفر) والمتاح صفر أيضاً —
@@ -10621,7 +10512,7 @@ function renderCasesPage(){
       <td data-col="الحالة"><span class="cases-badge ${statusClass}${statusSmallClass}">${escapeAttr(status)}</span></td>
       <td class="amt-col amt-req" data-col="📋 المطلوب">${fmt(req)}</td>
       <td class="amt-col amt-col-collected" data-col="✓ المحصّل">${fmt(collected)}</td>
-      <td class="amt-col ${remClass}" data-col="⏳ المتبقي">${isAnomaly ? `<span class="cases-anomaly-badge" title="${escapeAttr(anomalyReasons.join(' — '))}">⚠️</span> ` : ""}${fmt(rem)}${remEditHtml}</td>
+      <td class="amt-col ${remClass}" data-col="⏳ المتبقي">${fmt(rem)}${remEditHtml}</td>
       <td class="amt-col ${availClass}" data-col="💰 المتاح للقبض">${fmt(avail)}</td>
       <td class="cases-action-col">
         ${removeBtnHtml}
@@ -10758,7 +10649,6 @@ function renderCasesPage(){
   renderCasesPrintBtn();
   renderCasesAvailBox();
   renderCasesFinishedBox();
-  renderCasesAnomalyBox();
 }
 
 function renderCasesPrintBtn(){
