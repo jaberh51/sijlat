@@ -1968,6 +1968,7 @@ if('serviceWorker' in navigator){
     <button class="btn secondary" id="resetBtn">إعادة تعيين</button>
   </div>
   <div class="result-count" id="importStatus"></div>
+  <button class="btn secondary" id="importBypassBtn" style="display:none;margin-bottom:10px;">🔓 تجاوز لمرة واحدة وتحميل الملف على أي حال (يطلب كلمة سر)</button>
   <div class="result-count" id="masterBadge" style="margin-bottom:16px;"></div>
 
   <div class="result-count" id="resultCount"></div>
@@ -4425,21 +4426,46 @@ async function saveMasterFromRows(rows){
       defendants = parsed.defendants;
     }
     const importedStatus = (r["حالة الدعوى"] && String(r["حالة الدعوى"]).trim()) || "";
-    // بطلب المستخدم النهائي: أُلغيت الحماية اللي كانت تُبقي "فصل" رغم رجوع
-    // الملف "قيد التنفيذ" — أي قيمة مستورَدة تُطبَّق مباشرة بلا فحص.
+    // القيمة المستورَدة تُطبَّق دائماً مباشرة بلا أي رفض — القرار الوحيد
+    // النهائي، بلا أي تضارب محتمل مع أي مكان آخر بالكود (راجع الشرح الكامل
+    // بالذاكرة/سجل التطوير: تكرار نفس منطق الرفض بمكانين منفصلين هو ما كان
+    // يسبِّب "القيم ترجع بعد الريفرش" — لن يتكرر هذا الخطأ المعماري مرة ثانية).
     let status = importedStatus || existing["الحالة"] || "";
     const court = (r["المحكمة"] && String(r["المحكمة"]).trim()) || existing["المحكمة"] || "";
     const date = (r["تاريخ ورود الدعوى"] && String(r["تاريخ ورود الدعوى"]).trim()) || existing["تاريخ الورود"] || "";
 
-    // بطلب المستخدم النهائي: أُلغيت كل حمايات "التراجع الصامت" الأربعة
-    // (المطلوب/المحصّل/المتبقي/المتاح) — كل قيمة تصل من ملف الاستيراد
-    // تُطبَّق مباشرة بلا أي فحص أو رفض. هذي كانت السبب المؤكَّد وراء ظهور
-    // بيانات تُقبَل مؤقتاً على الشاشة ثم "ترتد" لقيمة مختلفة بعد أي ريفرش
-    // أو من أي جهاز آخر — حذفها يضمن تطابقاً تاماً دائماً، بلا أي استثناء.
     const totalRequested = (r["مجموع المبالغ المطلوبة"] && String(r["مجموع المبالغ المطلوبة"]).trim()) || existing["مجموع المبالغ المطلوبة"] || "";
     const totalCollected = (r["مجموع المبالغ المقبوضة فعليا"] && String(r["مجموع المبالغ المقبوضة فعليا"]).trim()) || existing["مجموع المبالغ المقبوضة فعليا"] || "";
     const totalRemaining = (r["مجموع المبالغ المتبقية"] && String(r["مجموع المبالغ المتبقية"]).trim()) || existing["مجموع المبالغ المتبقية"] || "";
     const totalAvailable = (r["مجموع المبالغ المتاحة للقبض"] && String(r["مجموع المبالغ المتاحة للقبض"]).trim()) || existing["مجموع المبالغ المتاحة للقبض"] || "";
+
+    // ===== حماية "ذكية" جديدة (بطلب المستخدم — بديل غير قابل للتضارب) =====
+    // بدل رفض القيمة الجديدة (اللي كانت تخلق تضارباً بين الشاشة والحفظ)،
+    // نطبّق القيمة دائماً، لكن نضع "علامة تنبيه" واضحة على القضية لو التغيير
+    // كبير بشكل مريب — تظهر بنفس نظام شارات ⚠️ الموجود أصلاً بصفحة القضايا
+    // (detectCaseAnomalies)، فتراجعها بنفسك وتقرر بلا أي قرار صامت من النظام.
+    // حد "المريب": نقصان بالمطلوب/المحصّل، أو زيادة بالمتبقي/المتاح — بمبلغ
+    // أكبر من 5 دنانير (لتفادي إزعاجك بفروقات تقريب بسيطة لا تستاهل تنبيهاً).
+    const importAlertParts = [];
+    const SUSPICIOUS_THRESHOLD = 5;
+    function checkSuspicious(label, newRaw, oldRaw, direction){
+      if(!newRaw || newRaw === oldRaw) return;
+      const newNum = parseNum(newRaw), oldNum = parseNum(oldRaw);
+      if(newNum === null || oldNum === null) return;
+      const diff = newNum - oldNum;
+      if(direction === "decrease" && diff < -SUSPICIOUS_THRESHOLD){
+        importAlertParts.push(`${label}: ${oldNum.toFixed(2)} ← ${newNum.toFixed(2)} (نقص ${Math.abs(diff).toFixed(2)})`);
+      } else if(direction === "increase" && diff > SUSPICIOUS_THRESHOLD){
+        importAlertParts.push(`${label}: ${oldNum.toFixed(2)} ← ${newNum.toFixed(2)} (زاد ${diff.toFixed(2)})`);
+      }
+    }
+    checkSuspicious("المطلوب", totalRequested, existing["مجموع المبالغ المطلوبة"], "decrease");
+    checkSuspicious("المحصّل", totalCollected, existing["مجموع المبالغ المقبوضة فعليا"], "decrease");
+    checkSuspicious("المتبقي", totalRemaining, existing["مجموع المبالغ المتبقية"], "increase");
+    checkSuspicious("المتاح", totalAvailable, existing["مجموع المبالغ المتاحة للقبض"], "increase");
+    if(importedStatus && existing["الحالة"] === "فصل" && importedStatus === "قيد التنفيذ"){
+      importAlertParts.push(`الحالة: فصل ← قيد التنفيذ`);
+    }
 
     const record = {
       "رقم القضية": shortCaseNo(r["رقم الدعوى"]),
@@ -4455,6 +4481,16 @@ async function saveMasterFromRows(rows){
       "مجموع المبالغ المتبقية": totalRemaining,
       "مجموع المبالغ المتاحة للقبض": totalAvailable
     };
+    // علامة التنبيه الذكي (راجع الشرح أعلى checkSuspicious) — تُحفَظ كحقل
+    // عادي بالسجل، تُعرَض عبر detectCaseAnomalies بصفحة القضايا، وتُمسَح
+    // تلقائياً أول ما يستورَد نفس الحقل بقيمة غير مريبة لاحقاً (أدناه).
+    if(importAlertParts.length){
+      record["تنبيه_استيراد"] = importAlertParts.join(" | ");
+      record["تنبيه_استيراد_تاريخ"] = getAccurateNow().getTime();
+    } else if(existing["تنبيه_استيراد"] !== undefined){
+      record["تنبيه_استيراد"] = existing["تنبيه_استيراد"]; // نُبقي تنبيهاً سابقاً لم يُراجَع بعد
+      record["تنبيه_استيراد_تاريخ"] = existing["تنبيه_استيراد_تاريخ"];
+    }
 
     const hasFin = FINANCIAL_FIELDS.some(f => r[f] !== undefined && String(r[f]).trim() !== "");
     let transactions = existing["معاملات مالية"] ? [...existing["معاملات مالية"]] : [];
@@ -8034,6 +8070,7 @@ document.getElementById("resetBtn").onclick = ()=>{
 document.getElementById("fileBadge").textContent = `آخر تحديث للبيانات: ${RAW_DATA.length} سجل`;
 
 let pendingFiles = []; // مصفوفة الملفات المختارة (يدعم اختيار عدة ملفات دفعة واحدة)
+let lastRejectedFiles = []; // آخر ملفات رُفضت (لزر "🔓 تجاوز لمرة واحدة")
 const importStatusEl = document.getElementById("importStatus");
 
 // حد أقصى آمن لحجم ملف الإكسل المستورد — يمنع تجميد/انهيار المتصفح عند اختيار
@@ -8319,6 +8356,7 @@ function readExcelFileAsRows(file){
 }
 
 document.getElementById("updateBtn").onclick = async ()=>{
+  document.getElementById("importBypassBtn").style.display = "none"; // يخفى عند بدء استيراد عادي جديد
   if(!pendingFiles.length){
     render();
     importStatusEl.className = "result-count";
@@ -8340,15 +8378,34 @@ document.getElementById("updateBtn").onclick = async ()=>{
   await runImportBatch(filesToRun);
 };
 
+// زر "🔓 تجاوز لمرة واحدة" (بطلب المستخدم) — يظهر فقط بعد رفض فعلي بآخر
+// محاولة استيراد. يطلب كلمة السر، وعند صحّتها يعيد معالجة **نفس الملفات
+// المرفوضة بالذات** متجاوزاً طبقات الرفض الثلاث لهذي المرة فقط — التجاوز
+// لا يُعطَّل أي حماية بشكل دائم، ولا يُطبَّق على أي استيراد لاحق تلقائياً.
+document.getElementById("importBypassBtn").onclick = async ()=>{
+  if(!lastRejectedFiles.length) return;
+  const pwd = await askInput("أدخل كلمة السر لتجاوز فحص التاريخ لمرة واحدة", {type:"password"});
+  if(pwd === null) return;
+  const ok = await verifyPassword(pwd, LW_STEP_PASS_HASH);
+  if(!ok){ showToast("⚠️ كلمة سر خاطئة", "warn"); return; }
+  const filesToRun = lastRejectedFiles;
+  document.getElementById("importBypassBtn").style.display = "none";
+  showToast(`🔓 جارٍ تحميل ${filesToRun.length} ملف متجاوَز التاريخ...`, "ok");
+  await runImportBatch(filesToRun, true);
+};
+
 // النواة الفعلية لمعالجة دفعة ملفات استيراد — تعرض تأكيداً فورياً (askConfirm)
 // لأي ملف قديم/مكرَّر حسب النوع بدل حظره صامتاً، فيقرر المستخدم فوراً.
-async function runImportBatch(filesToImport){
+// bypassDateChecks: تجاوز طبقات الرفض الثلاث (بطلب المستخدم — زر "🔓 تجاوز
+// لمرة واحدة" يظهر فقط بعد رفض فعلي، ويطلب كلمة سر قبل التفعيل).
+async function runImportBatch(filesToImport, bypassDateChecks){
   importStatusEl.className = "result-count";
   const totalFiles = filesToImport.length;
   const combined = {added:0, updated:0, addedTxn:0, skippedDuplicateTxn:0, newTxnDetails:[], unchangedCount:0, touchedCount:0};
   const succeeded = [];
   const failed = [];
   const rejected = []; // ملفات رُفضت بصرامة (أقدم من هامش الـ10 دقائق المسموح لنوعها)
+  lastRejectedFiles = []; // الملفات الفعلية (كائنات File) المرفوضة بهذي الدفعة — لزر التجاوز
 
   // نسخة احتياطية تلقائية صامتة قبل أي استيراد — حماية إضافية: لو حدث خطأ
   // غير متوقّع أثناء الدمج، تبقى نقطة رجوع كاملة لحالة ما قبل الاستيراد.
@@ -8366,18 +8423,20 @@ async function runImportBatch(filesToImport){
       // (lastModified) — على القضايا والرديات معاً (بطلب المستخدم) =====
       const kind = detectFileKind(rows);
       const lastFileMod = getLastFileModified(kind);
-      if(lastFileMod !== null && file.lastModified < lastFileMod - IMPORT_DATE_GRACE_MS){
+      if(!bypassDateChecks && lastFileMod !== null && file.lastModified < lastFileMod - IMPORT_DATE_GRACE_MS){
         rejected.push(`⛔ "${file.name}": ممنوع تحميل ملف قديم — حمّل ملف ${FILE_KIND_LABEL[kind]} بتاريخ أحدث.`);
+        lastRejectedFiles.push(file);
         continue; // تخطّي هذا الملف تماماً — لا معالجة ولا دمج إطلاقاً
       }
 
       // ===== طبقة 2: رفض الأقدم من هامش الـ10 دقائق حسب تاريخ المحتوى
       // الفعلي — رديات فقط (راجع الشرح أعلى الملف قرب detectFileKind) =====
-      if(kind === "remittances"){
+      if(!bypassDateChecks && kind === "remittances"){
         const contentDate = getFileContentDate(rows);
         const lastDate = getLastImportDate();
         if(contentDate !== null && lastDate !== null && contentDate < lastDate - IMPORT_DATE_GRACE_MS){
           rejected.push(`⛔ "${file.name}": ممنوع تحميل ملف قديم — حمّل ملف ${FILE_KIND_LABEL[kind]} بتاريخ أحدث.`);
+          lastRejectedFiles.push(file);
           continue; // تخطّي هذا الملف تماماً — لا معالجة ولا دمج إطلاقاً
         }
       }
@@ -8387,10 +8446,11 @@ async function runImportBatch(filesToImport){
       // آخر استيراد ناجح المعروض بصندوق "آخر استيراد" (lastImportInfo،
       // مزامَن عبر Firebase). يُطبَّق بغضّ النظر عن قضايا/رديات، فقط حسب اسم
       // الملف نفسه.
-      if(file.name.includes("تقرير المفصل") || file.name.includes("المفصل")){
+      if(!bypassDateChecks && (file.name.includes("تقرير المفصل") || file.name.includes("المفصل"))){
         const refTime = lastImportInfo ? new Date(lastImportInfo.date).getTime() : null;
         if(refTime !== null && !isNaN(refTime) && file.lastModified < refTime - IMPORT_DATE_GRACE_MS){
           rejected.push(`⛔ "${file.name}": ممنوع تحميل ملف قديم — حمّل ملف حديث.`);
+          lastRejectedFiles.push(file);
           continue; // تخطّي هذا الملف تماماً — لا معالجة ولا دمج إطلاقاً
         }
       }
@@ -8503,6 +8563,11 @@ async function runImportBatch(filesToImport){
       : `تم استيراد ${succeeded.length} من ${totalFiles} ملفات بنجاح — ${mergeMsg} (إجمالي القضايا الآن: ${uniqueCount}) — محفوظة في الملف الماستر`)
       + rejectedSuffix;
   }
+
+  // إظهار زر "🔓 تجاوز لمرة واحدة" فقط لو صار رفض فعلي بهذي الدفعة —
+  // يختفي تلقائياً لو ما فيه أي ملف مرفوض (بطلب المستخدم).
+  const bypassBtn = document.getElementById("importBypassBtn");
+  bypassBtn.style.display = lastRejectedFiles.length ? "block" : "none";
 
   // إظهار نافذة تعرض تفاصيل كل معاملة مالية جديدة اكتُشفت في هذا الاستيراد،
   // مرة واحدة فقط لكل استيراد — وتطير كحمامة عند الضغط على "تم"
@@ -9240,7 +9305,7 @@ let casesAllRows = [];
 // الدقيق من خوادم Firebase، وليس ساعة الجهاز. محفوظة عبر Firebase
 // (casesRecentIncrease)، فلا تُفقَد بإعادة تحميل الصفحة أو تبديل الجهاز،
 // لكنها تنتهي تلقائياً بعد 10 دقائق بغضّ النظر عن ذلك.
-const CASES_INCREASE_HIGHLIGHT_MS = 10 * 60 * 1000; // 10 دقائق
+const CASES_INCREASE_HIGHLIGHT_MS = 60 * 1000; // دقيقة واحدة
 
 // تحويل خريطة {مفتاح: قيمة} إلى مصفوفة أزواج [مفتاح, قيمة] قبل الحفظ بـ
 // Firebase — لأن مفاتيح خرائطنا هي caseKey (رقم القضية + المحكمة)، وقد تحوي
@@ -9792,6 +9857,12 @@ function detectCaseAnomalies(r){
   }
   if(status === "فصل" && avail !== null && avail > 0.01){
     reasons.push("القضية \"فصل\" وفيها مبلغ متاح لم يُسحَب بعد");
+  }
+  // تنبيه استيراد ذكي (راجع checkSuspicious بـsaveMasterFromRows) — تغيير
+  // كبير مريب وصل من ملف استيراد، يستاهل مراجعتك الشخصية قبل الوثوق فيه.
+  const rec = masterCache[caseKey(r)];
+  if(rec && rec["تنبيه_استيراد"]){
+    reasons.push(`⚡ تغيير كبير بآخر استيراد: ${rec["تنبيه_استيراد"]}`);
   }
   return reasons;
 }
