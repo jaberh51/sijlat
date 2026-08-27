@@ -3281,6 +3281,24 @@ function markKeyDeletedFromMaster(key){
   _pendingFbDeletions.add(key);
 }
 
+// ===== تحصين عام ضد "خلل حذف الحقل الصامت" (اكتُشف بمحاكاة 1000 مسار
+// مزامنة — راجع الذاكرة/سجل التطوير) =====
+// computeFieldDiff يقارن الحقول الموجودة "قبل" و"بعد" فقط — لو حقل معيّن
+// غائب من الاثنين معاً (لأنه اختفى للتو، ولا أثر له بالمرجع "قبل" لأي سبب:
+// forceSaveKey مسحت المرجع، أو القضية لم تُحمَّل بعد بشكل كامل)، الحذف لا
+// يُكتشَف كتغيير إطلاقاً — فلا يُرسَل أي أمر حذف لـFirebase، ويبقى الحقل
+// القديم محفوظاً هناك ليرجع يظهر لاحقاً على أي جهاز أو بعد أي ريفرش.
+// الحل: أي دالة تحذف حقلاً واحداً بمفرده يجب أن تستخدم deleteMasterField
+// أدناه بدل "delete" المباشر — تُسجِّل الحذف صراحة بلا اعتماد على اكتشاف
+// الفرق تلقائياً، فيُرسَل أمر الحذف لـFirebase دائماً بثقة تامة، بغضّ النظر
+// عن حالة أي مرجع محلي.
+let _pendingFieldDeletions = new Map(); // key -> Set(field names)
+function deleteMasterField(key, field){
+  if(masterCache[key]) delete masterCache[key][field];
+  if(!_pendingFieldDeletions.has(key)) _pendingFieldDeletions.set(key, new Set());
+  _pendingFieldDeletions.get(key).add(field);
+}
+
 // إعادة رسم الصفحة الظاهرة فعلياً حالياً بعد أي تغيير قادم من جهاز آخر
 function afterRemoteChange(){
   invalidateMasterCaseNoIndex();
@@ -4268,6 +4286,20 @@ async function saveMaster(changedKeys){
       changedKeys.forEach(k=>{
         const diff = computeFieldDiff(_lastKnownSnapshot[k], masterCache[k]);
         if(diff.length) fieldChangesByKey[k] = diff;
+        // إضافة صريحة لأي حذف حقل مُسجَّل عبر deleteMasterField — بلا انتظار
+        // computeFieldDiff (قد لا يكتشفه إطلاقاً لو غاب الحقل من "قبل" و"بعد"
+        // معاً، راجع الشرح أعلى deleteMasterField). لا تكرار: نتفادى إضافة
+        // نفس الحقل مرتين لو الفرق التلقائي اكتشفه أصلاً بنفسه.
+        const pendingFields = _pendingFieldDeletions.get(k);
+        if(pendingFields && pendingFields.size){
+          if(!fieldChangesByKey[k]) fieldChangesByKey[k] = [];
+          const alreadyCovered = new Set(fieldChangesByKey[k].map(f=>f.field));
+          pendingFields.forEach(field=>{
+            if(!alreadyCovered.has(field)){
+              fieldChangesByKey[k].push({field, before: undefined, after: null});
+            }
+          });
+        }
       });
       // ===== الحل الجذري لمشكلة التزامن بين الأجهزة: حفظ جزئي على مستوى
       // الحقل فقط — كل جهاز يكتب فقط الحقول التي لمسها فعلياً هو، بدل رفع
@@ -4280,7 +4312,13 @@ async function saveMaster(changedKeys){
       // احتياطية كاملة، حيث "الاستبدال الكامل المقصود" هو الهدف الصحيح فعلياً.
       ok = await fbSaveAllCases(masterCache, deletions);
     }
-    if(ok) _pendingFbDeletions.clear();
+    if(ok){
+      _pendingFbDeletions.clear();
+      // تصفير قائمة حذف الحقول المُعلَّقة لكل قضية حُفظت بنجاح — نجحت الآن
+      if(changedKeys && changedKeys.length){
+        changedKeys.forEach(k=> _pendingFieldDeletions.delete(k));
+      }
+    }
     else showToast("⚠️ تعذّر الحفظ سحابياً — حُفظ محلياً فقط. السبب: " + (_lastFbSaveError || "غير معروف"), "warn");
     // تسجيل الحدث في سجل التدقيق — بعد الحفظ الفعلي مباشرة، صامت تماماً.
     // الحفظ الكامل (بلا changedKeys محدَّدة، نادر — يحدث فقط عند استرجاع نسخة
@@ -5090,7 +5128,7 @@ async function addCaseNote(key, text){
   if(!master[key]) master[key] = {"رقم القضية": key.split("||")[0]};
   const notes = [...getCaseNotes(key), {text: text.trim(), date: getAccurateNow().toISOString()}];
   master[key]["ملاحظات"] = notes;
-  delete master[key]["ملاحظة"]; // ترحيل نهائي — تفادي ازدواج الحقلين معاً
+  deleteMasterField(key, "ملاحظة"); // ترحيل نهائي — تفادي ازدواج الحقلين معاً
   await saveMaster([key]);
   masterCache = master; invalidateMasterCaseNoIndex();
 }
@@ -5210,8 +5248,8 @@ async function removeLawyerAction(key){
       محامي_خطوات: master[key]["محامي_خطوات"],
       محامي_طرف2: master[key]["محامي_طرف2"]
     });
-    delete master[key]["محامي_اجراء"];
-    delete master[key]["محامي_خطوات"]; // حذف الخطوات أيضاً عند حذف الإجراء
+    deleteMasterField(key, "محامي_اجراء");
+    deleteMasterField(key, "محامي_خطوات"); // حذف الخطوات أيضاً عند حذف الإجراء
     // ملاحظة: "نوع_العمل" و"محامي_طرف2" يبقيان في مكانهما (سلوك سابق لم
     // يتغيّر) — فقط الإجراء والخطوات يُحذَفان من القضية النشطة، لكن نسخة
     // كاملة منهما جميعاً محفوظة في سلة المهملات لو احتجت الاسترجاع الكامل.
@@ -6922,7 +6960,7 @@ function renderLwActionsBox(){
         await moveToTrash("طرف ثانٍ", `${caseLabel} (طرف: ${masterCache[key]["محامي_طرف2"].name || ''})`, {
           key, field: "محامي_طرف2", value: masterCache[key]["محامي_طرف2"]
         });
-        delete masterCache[key]["محامي_طرف2"];
+        deleteMasterField(key, "محامي_طرف2");
       }
       await saveMaster([key]);
       renderLwActionsBox();
@@ -8922,27 +8960,10 @@ async function removeCaseFromCorrespondence(key){
   if(!mrEditUnlocked) return;
   const confirmed = await askConfirm("هل تريد حذف هذي القضية من المراسلات؟\n\n(هذا لا يحذف القضية نفسها من النظام، فقط يزيلها من قائمة المراسلات)");
   if(!confirmed) return;
-  const master = masterCache;
-  if(master[key]) delete master[key]["مراسلات"];
-  masterCache = master;
-  // نكتب أمر الحذف مباشرة وصراحة لـ Firebase (بلا الاعتماد على آلية المقارنة
-  // التلقائية قبل/بعد) — اكتُشف إن forceSaveKey (المصمَّمة أصلاً لضمان أن
-  // "قيماً جديدة" لا تُتجاهَل صامتة) تفشل بالاتجاه المعاكس بالضبط: تمسح
-  // معرفة "القيمة قبل الحذف" قبل المقارنة، فلا تكتشف اختفاء الحقل إطلاقاً،
-  // ولا يُرسَل أي أمر حذف فعلي — فتبقى البيانات بـFirebase وترجع بعد أي
-  // إعادة تحميل. الكتابة المباشرة هنا تتجاوز هذا القصور تماماً وتضمن الحذف.
-  try{
-    if(fbDb){
-      const fb = window.__fbModular;
-      await fb.set(fb.ref(fbDb, 'master_cases/' + encodeFbKey(key) + '/مراسلات'), null);
-    }
-    try{ await idbSet('master_cases', JSON.stringify(masterCache)); }catch(e){}
-    if(_lastKnownSnapshot[key]) delete _lastKnownSnapshot[key]["مراسلات"];
-  }catch(e){
-    console.error("فشل حذف القضية من المراسلات على Firebase:", e);
-    showToast("⚠️ تعذّر الحذف من الخادم — حاول مرة ثانية", "warn");
-    return;
-  }
+  // deleteMasterField (الآلية العامة — راجع الشرح أعلى تعريفها) تضمن وصول
+  // أمر الحذف لـFirebase بثقة تامة، بلا الحاجة لحل خاص مباشر هنا بعد الآن.
+  deleteMasterField(key, "مراسلات");
+  await saveMaster([key]);
   showToast("🗑️ أُزيلت من المراسلات", "ok");
   renderMrList();
 }
@@ -9371,7 +9392,7 @@ async function bulkSetCaseType(type){
   keys.forEach(key=>{
     if(!masterCache[key]) masterCache[key] = {};
     if(type) masterCache[key]["نوع_القضية"] = type;
-    else delete masterCache[key]["نوع_القضية"];
+    else deleteMasterField(key, "نوع_القضية");
   });
   await saveMaster(keys);
   showToast(type ? `✓ صُنِّفت ${keys.length} قضية كـ"${type}"` : `↺ أُلغي تصنيف ${keys.length} قضية`, "ok");
@@ -9522,7 +9543,7 @@ async function setManualRemainingOverride(key, value){
   const master = masterCache;
   if(!master[key]) master[key] = {};
   master[key]["متبقي_يدوي"] = value;
-  delete master[key]["محصل_يدوي"]; // تجنّب تعارض تعديلين متضاربين معاً
+  deleteMasterField(key, "محصل_يدوي"); // تجنّب تعارض تعديلين متضاربين معاً
   await saveMaster([key]);
   masterCache = master; invalidateMasterCaseNoIndex();
   syncCaseToLawyerSystem(key); // مزامنة بالخلفية (بلا انتظار) — راجع تعريفها أعلاه
@@ -9533,7 +9554,7 @@ async function setManualCollectedOverride(key, value){
   const master = masterCache;
   if(!master[key]) master[key] = {};
   master[key]["محصل_يدوي"] = value;
-  delete master[key]["متبقي_يدوي"]; // تجنّب تعارض تعديلين متضاربين معاً
+  deleteMasterField(key, "متبقي_يدوي"); // تجنّب تعارض تعديلين متضاربين معاً
   await saveMaster([key]);
   masterCache = master; invalidateMasterCaseNoIndex();
   syncCaseToLawyerSystem(key);
@@ -9566,7 +9587,7 @@ async function setManualDefendantOverride(key, value){
   const master = masterCache;
   if(!master[key]) master[key] = {};
   if(value && value.trim()) master[key]["اسم_طرف_يدوي"] = value.trim();
-  else delete master[key]["اسم_طرف_يدوي"]; // فارغ = رجوع للاسم الأصلي من الملف
+  else deleteMasterField(key, "اسم_طرف_يدوي"); // فارغ = رجوع للاسم الأصلي من الملف
   await saveMaster([key]);
   masterCache = master; invalidateMasterCaseNoIndex();
 }
@@ -9574,7 +9595,7 @@ async function setManualCourtOverride(key, value){
   const master = masterCache;
   if(!master[key]) master[key] = {};
   if(value && value.trim()) master[key]["محكمة_يدوية"] = value.trim();
-  else delete master[key]["محكمة_يدوية"]; // فارغ = رجوع للمحكمة الأصلية من الملف
+  else deleteMasterField(key, "محكمة_يدوية"); // فارغ = رجوع للمحكمة الأصلية من الملف
   await saveMaster([key]);
   masterCache = master; invalidateMasterCaseNoIndex();
 }
@@ -9622,7 +9643,7 @@ async function markCaseNeedsClosure(key){
 // عكس markCaseNeedsClosure — إرجاع القضية لمتابعتها النشطة العادية
 async function restoreCaseFromClosure(key){
   const master = masterCache;
-  if(master[key]) delete master[key]["بحاجة_فصل"];
+  if(master[key]) deleteMasterField(key, "بحاجة_فصل");
   await saveMaster([key]);
   masterCache = master; invalidateMasterCaseNoIndex();
 }
@@ -10096,7 +10117,7 @@ async function setStrictDeadline(key){
 }
 
 async function removeStrictDeadline(key){
-  if(masterCache[key]) delete masterCache[key]["موعد_صارم"];
+  if(masterCache[key]) deleteMasterField(key, "موعد_صارم");
   await saveMaster([key]);
   showToast("✓ حُذف الموعد الصارم", "ok");
   applyCasesFilter(true);
