@@ -9010,7 +9010,10 @@ function renderMrTarasulPanel(){
     const row = getRowByKey(key);
     if(!row) return;
     MR_TARASUL_FIELDS.forEach(({field, label, icon})=>{
-      if(mr[field] === MR_TARASUL_VALUE){
+      // مطابقة "تحتوي" لا "تساوي بالضبط" — تلتقط أي صياغة سابقة كُتبت يدوياً
+      // عبر "أخرى" (مثل "بالتراسل") بجانب الخيار الرسمي الجديد "📨 تراسل"،
+      // بلا حاجة لتصحيح كل قضية قديمة يدوياً واحدة واحدة.
+      if(mr[field] && mr[field].includes("تراسل")){
         items.push({key, field, label, icon, caseNo: shortCaseNo(row["رقم الدعوى"]), party: getDefendantForRow(row)});
       }
     });
