@@ -7650,10 +7650,19 @@ function printFollowupSheet(){
 
 function printFinancialSheet(label, rows, total){
   const todayStr = new Date().toLocaleDateString('ar-EG');
+  // تصنيف كل صف حسب الموكّل (نفس منطق getClientSuffixText بالضبط) — يُستخدَم
+  // للفلتر ولملخّص الإجمالي المنفصل لكل شخص داخل الكشف نفسه (بطلب المستخدم)
+  function clientCodeFor(r){
+    const client = getPlaintiffForRow(r) || "";
+    if(client.includes("جابر")) return "J";
+    if(client.includes("حنين")) return "H";
+    return "";
+  }
   const bodyRows = rows.map((r,i)=>{
     const amt = parseFloat(String(r["المبلغ المحول"]||"0").replace(/,/g,"")) || 0;
+    const clientCode = clientCodeFor(r);
     return `
-      <tr data-amt="${amt}">
+      <tr data-amt="${amt}" data-client="${clientCode}">
         <td class="p-del-cell"><button class="p-del-btn" title="حذف من هذه المعاينة فقط">✕</button></td>
         <td class="p-idx">${i+1}</td>
         <td>${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${getClientSuffixText(r)}</td>
@@ -7719,6 +7728,7 @@ function printFinancialSheet(label, rows, total){
   @media print{
     .p-toolbar, .p-note, .p-del-cell, .p-del-btn{display:none !important;}
     #pTable tbody tr.p-hidden{display:none !important;}
+    #pTable tbody tr.p-client-hidden{display:none !important;}
     /* When printed, redistribute widths across remaining 6 columns */
     .p-table th:nth-child(2), .p-table td:nth-child(2){width:4%;}
     .p-table th:nth-child(3), .p-table td:nth-child(3){width:16%;}
@@ -7727,6 +7737,8 @@ function printFinancialSheet(label, rows, total){
     .p-table th:nth-child(6), .p-table td:nth-child(6){width:16%;}
     .p-table th:nth-child(7), .p-table td:nth-child(7){width:14%;}
   }
+  #pTable tbody tr.p-client-hidden{display:none;}
+  .p-filter-btn.active{background:#a9782f !important;color:#fff !important;border-color:#a9782f !important;}
   .p-discount-row td, .p-net-row td{background:#f7f1e6;}
   .p-discount-row .p-amt{color:#8b3a3a;}
   .p-net-row .p-amt{color:#2f5233;}
@@ -7738,6 +7750,11 @@ function printFinancialSheet(label, rows, total){
     <button onclick="doPrint()">🖨️ طباعة الآن</button>
     <button class="secondary" onclick="toggleDiscount()" id="discountBtn">💸 خصم دينار عن كل رديّة</button>
     <button class="secondary" onclick="restoreAll()" id="restoreBtn" style="display:none;">↺ استرجاع كل الرديات المحذوفة</button>
+  </div>
+  <div class="p-toolbar" id="pClientFilterBar">
+    <button class="secondary p-filter-btn active" onclick="filterByClient('')" data-client="">👥 الكل</button>
+    <button class="secondary p-filter-btn" onclick="filterByClient('J')" data-client="J">جابر فقط</button>
+    <button class="secondary p-filter-btn" onclick="filterByClient('H')" data-client="H">حنين فقط</button>
   </div>
   <div class="p-note">💡 يمكنك حذف أي رديّة من هذا الكشف بالضغط على ✕ بجانبها. الحذف يخصم مبلغها من الإجمالي هنا فقط، ولا يمس البيانات الأصلية.</div>
   <div class="p-header">
@@ -7761,6 +7778,11 @@ function printFinancialSheet(label, rows, total){
     </thead>
     <tbody>${bodyRows}</tbody>
     <tfoot>
+      <tr id="pClientBreakdownRow">
+        <td class="p-del-cell"></td>
+        <td colspan="5" class="p-total-label" style="font-size:11px;font-weight:400;">إجمالي جابر: <span id="pTotalJ">0.00</span> — إجمالي حنين: <span id="pTotalH">0.00</span></td>
+        <td></td>
+      </tr>
       <tr>
         <td class="p-del-cell"></td>
         <td colspan="5" class="p-total-label">الإجمالي</td>
@@ -7782,16 +7804,36 @@ function printFinancialSheet(label, rows, total){
   <script>
     var removed = [];
     var discountOn = false;
+    var clientFilter = ''; // '' = الكل، 'J' = جابر فقط، 'H' = حنين فقط (بطلب المستخدم)
     function fmt(n){ return n.toLocaleString('ar',{minimumFractionDigits:2, maximumFractionDigits:2}); }
+    function filterByClient(code){
+      clientFilter = code;
+      document.querySelectorAll('.p-filter-btn').forEach(function(b){
+        b.classList.toggle('active', b.getAttribute('data-client') === code);
+      });
+      document.querySelectorAll('#pTable tbody tr').forEach(function(tr){
+        var matches = !code || tr.getAttribute('data-client') === code;
+        tr.classList.toggle('p-client-hidden', !matches);
+      });
+      updateTotals();
+    }
     function updateTotals(){
-      var live = document.querySelectorAll('#pTable tbody tr:not(.p-hidden)');
-      var sum = 0;
+      var live = Array.prototype.filter.call(
+        document.querySelectorAll('#pTable tbody tr:not(.p-hidden)'),
+        function(tr){ return !tr.classList.contains('p-client-hidden'); }
+      );
+      var sum = 0, sumJ = 0, sumH = 0;
       live.forEach(function(tr, i){
-        sum += parseFloat(tr.getAttribute('data-amt')) || 0;
+        var amt = parseFloat(tr.getAttribute('data-amt')) || 0;
+        sum += amt;
+        var c = tr.getAttribute('data-client');
+        if(c === 'J') sumJ += amt; else if(c === 'H') sumH += amt;
         var idx = tr.querySelector('.p-idx');
         if(idx) idx.textContent = (i+1);
       });
       document.getElementById('pTotal').textContent = fmt(sum);
+      document.getElementById('pTotalJ').textContent = fmt(sumJ);
+      document.getElementById('pTotalH').textContent = fmt(sumH);
       document.getElementById('pCount').textContent = live.length;
       document.getElementById('restoreBtn').style.display = removed.length ? '' : 'none';
 
