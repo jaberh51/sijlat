@@ -593,6 +593,33 @@
     display:flex;align-items:center;justify-content:center;transition:transform .12s ease;
   }
   .mr-save-btn:hover{transform:scale(1.1);background:var(--brass);color:#fff;}
+  .mr-note-pin-btn{
+    background:var(--paper);color:var(--ink-soft);border:1px solid var(--line);border-radius:7px;
+    width:26px;height:26px;flex:none;cursor:pointer;font-size:12px;
+    display:flex;align-items:center;justify-content:center;transition:transform .12s ease, filter .15s ease;
+    filter:grayscale(1) opacity(.55);
+  }
+  .mr-note-pin-btn:hover{transform:scale(1.1);}
+  .mr-note-pin-btn.mr-note-pin-active{
+    filter:none;background:#fef3c7;border-color:#fcd34d;
+  }
+  .mr-note-panel{
+    display:flex;flex-direction:column;gap:6px;margin-bottom:10px;
+    animation:mrNotePanelIn .18s ease;
+  }
+  @keyframes mrNotePanelIn{from{opacity:0;transform:translateY(-4px);}to{opacity:1;transform:translateY(0);}}
+  .mr-note-textarea{
+    width:100%;box-sizing:border-box;font-family:'Tajawal',sans-serif;font-size:12.5px;
+    border:1px solid #fcd34d;border-radius:8px;padding:8px 10px;resize:vertical;min-height:60px;
+    background:#fffbeb;color:var(--ink);
+  }
+  .mr-note-textarea:focus{outline:none;box-shadow:0 0 0 2px #fde68a;}
+  .mr-note-done-btn{
+    align-self:flex-end;background:var(--brass);color:#fff;border:none;border-radius:7px;
+    padding:5px 16px;font-size:11.5px;font-weight:700;cursor:pointer;
+    font-family:'Tajawal',sans-serif;transition:filter .12s ease;
+  }
+  .mr-note-done-btn:hover{filter:brightness(1.1);}
   .mr-delete-btn{
     background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;border-radius:7px;
     width:26px;height:26px;flex:none;cursor:pointer;font-size:12px;
@@ -5867,6 +5894,9 @@ function normalizeEasternDigits(str){
 let mrPinnedKeys = new Map(); // key -> وقت التثبيت (ms)
 let mrPinTimers = new Map();  // key -> معرِّف المؤقت (لإلغاء المؤقت القديم لو أُعيد استدعاء نفس القضية)
 
+// قضايا مفتوح فيها لوح الملاحظة حالياً (بطلب المستخدم — دبوس 📌 لكل قضية)
+let mrOpenNoteKeys = new Set();
+
 // إضاءة + تثبيت مؤقت (ساعة كاملة) لبطاقة قضية موجودة أصلاً بالمراسلات
 // (بطلب المستخدم) — بدل إخفائها من نتائج البحث، نرفعها للمقدمة ونوميض
 // عليها لتلقطها فوراً بلا تمرير.
@@ -8848,6 +8878,7 @@ function goCorrespondence(){
   document.body.classList.remove("mode-remittances");
   mrEditUnlocked = false;
   mrClosedOverride = new Set();
+  mrOpenNoteKeys = new Set(); // تُقفَل كل الملاحظات المفتوحة عند إعادة فتح الصفحة
   // ملاحظة: mrPinnedKeys/mrPinTimers لا تُصفَّر هنا عمداً — التثبيت مصمَّم
   // ليدوم ساعة كاملة عبر تنقّلك بين صفحات النظام، لا يُلغى بمجرد مغادرة
   // صفحة المراسلات والعودة إليها (فقط بانتهاء ساعته الخاصة، أو بإغلاق التطبيق).
@@ -9113,6 +9144,13 @@ function renderMrList(){
     const cardUnlocked = !isComplete || !isConfirmed || (mrEditUnlocked && !mrClosedOverride.has(key));
     const showSaveBtn = isComplete && cardUnlocked;
 
+    // دبوس الملاحظة (بطلب المستخدم — بديل احترافي عن نافذة منبثقة): يتلوّن
+    // لو فيها ملاحظة محفوظة أصلاً، تُفتح/تُطوى ضمن البطاقة نفسها بلا قطع
+    // تدفّق الشاشة، وتُحفَظ فوراً بلا حاجة لوضع تعديل مفتوح (ملاحظة تكميلية
+    // بحتة، مو من الحقول المحمية).
+    const hasNote = !!(mr["ملاحظة"] && mr["ملاحظة"].trim());
+    const noteOpen = mrOpenNoteKeys.has(key);
+
     return `
     <div class="mr-card ${!isConfirmed || !isComplete ? "mr-card-draft" : ""}" data-key="${escapeAttr(key)}">
       <div class="mr-card-header">
@@ -9122,9 +9160,16 @@ function renderMrList(){
         </div>
         <div class="mr-card-actions">
           ${showSaveBtn ? `<button class="mr-save-btn mr-confirm-action" data-key="${escapeAttr(key)}" title="حفظ وإقفال هذي القضية">💾</button>` : ""}
+          <button class="mr-note-pin-btn ${hasNote ? "mr-note-pin-active" : ""} mr-note-pin-action" data-key="${escapeAttr(key)}" title="${hasNote ? "فيها ملاحظة — اضغط للعرض" : "إضافة ملاحظة"}">📌</button>
           ${mrEditUnlocked ? `<button class="mr-delete-btn mr-delete-action" data-key="${escapeAttr(key)}" title="حذف من المراسلات">🗑️</button>` : ""}
         </div>
       </div>
+
+      ${noteOpen ? `
+      <div class="mr-note-panel">
+        <textarea class="mr-note-textarea mr-note-input-action" data-key="${escapeAttr(key)}" placeholder="اكتب ملاحظتك هنا...">${escapeAttr(mr["ملاحظة"] || "")}</textarea>
+        <button class="mr-note-done-btn mr-note-done-action" data-key="${escapeAttr(key)}">✓ موافق</button>
+      </div>` : ""}
 
       <div class="mr-boxes-row">
         ${buildMrBox({icon:"📮", title:"كتاب الحسم", key, field:"حسم_طريقة", fieldBase:"حسم", value:mr["حسم_طريقة"], extraHtml:statusHtml, disabled: arrived || !cardUnlocked, frozen: arrived || !!mr["حسم_مجمَّد"]})}
@@ -9137,6 +9182,33 @@ function renderMrList(){
   // ربط الأحداث بعد البناء (بدل onclick مباشر لتفادي مشاكل تهريب النص بالـkey)
   listEl.querySelectorAll(".mr-delete-action").forEach(btn=>{
     btn.onclick = ()=> removeCaseFromCorrespondence(btn.dataset.key);
+  });
+  listEl.querySelectorAll(".mr-note-pin-action").forEach(btn=>{
+    btn.onclick = ()=>{
+      const key = btn.dataset.key;
+      if(mrOpenNoteKeys.has(key)) mrOpenNoteKeys.delete(key);
+      else mrOpenNoteKeys.add(key);
+      renderMrList();
+    };
+  });
+  listEl.querySelectorAll(".mr-note-done-action").forEach(btn=>{
+    btn.onclick = ()=>{
+      mrOpenNoteKeys.delete(btn.dataset.key);
+      renderMrList();
+    };
+  });
+  listEl.querySelectorAll(".mr-note-input-action").forEach(ta=>{
+    let debounceTimer = null;
+    ta.addEventListener("input", ()=>{
+      clearTimeout(debounceTimer);
+      const key = ta.dataset.key, value = ta.value;
+      debounceTimer = setTimeout(async ()=>{
+        const master = masterCache;
+        if(!master[key] || !master[key]["مراسلات"]) return;
+        master[key]["مراسلات"]["ملاحظة"] = value;
+        await saveMaster([key]);
+      }, 700);
+    });
   });
   listEl.querySelectorAll(".mr-confirm-action").forEach(btn=>{
     btn.onclick = ()=> saveMrCard(btn.dataset.key);
