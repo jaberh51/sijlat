@@ -2727,7 +2727,12 @@ async function fbUpdateViaREST(updates){
 async function fbUpdateWithFallback(updates){
   const fb = window.__fbModular;
   const realtimeAttempt = fb.update(fb.ref(fbDb), updates);
-  const timeout = new Promise((_, reject)=> setTimeout(()=> reject(new Error("realtime_timeout")), 4000));
+  // تقليل مدة الانتظار من 4 ثوانٍ إلى 1.5 ثانية (بطلب المستخدم) — قاعدة
+  // البيانات بمنطقة بعيدة جغرافياً (أمريكا)، فأي بطء بسيط بالشبكة كان يجعل
+  // الانتظار الطويل السابق (4 ثوانٍ) يُهدَر بلا فائدة قبل التحوّل للمسار
+  // الأسرع. 1.5 ثانية كافية لأي اتصال طبيعي، وتقلّل زمن الانتظار المهدور
+  // بأكثر من النصف عند أي بطء فعلي — بلا أي لمس لقاعدة البيانات أو موقعها.
+  const timeout = new Promise((_, reject)=> setTimeout(()=> reject(new Error("realtime_timeout")), 1500));
   try{
     await Promise.race([realtimeAttempt, timeout]);
     return true;
