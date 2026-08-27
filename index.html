@@ -5903,6 +5903,11 @@ let mrOpenNoteKeys = new Set();
 function flashMrCard(key){
   if(mrPinTimers.has(key)) clearTimeout(mrPinTimers.get(key)); // استدعاء متكرر لنفس القضية يجدِّد الساعة من جديد
   mrPinnedKeys.set(key, Date.now()); // وقت تثبيت جديد — يعلو أي قضية مثبَّتة سابقاً
+  // تصفير صندوق البحث ونتائجه تلقائياً (بطلب المستخدم) — بعد الانتقال للقضية
+  // الموجودة أصلاً، ما فيه داعي يبقى صندوق البحث مكتوباً فيه ونتائجه ظاهرة.
+  document.getElementById("mrSearchInput").value = "";
+  document.getElementById("mrSearchResults").style.display = "none";
+  document.getElementById("mrSearchResults").innerHTML = "";
   renderMrList();
   const card = document.querySelector(`.mr-card[data-key="${CSS.escape(key)}"]`);
   if(card){
