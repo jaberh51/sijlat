@@ -563,6 +563,26 @@
   }
   .mr-card-flash{animation:mrCardFlash 30s ease;}
   .mr-search-empty{padding:14px;text-align:center;color:var(--ink-soft);font-size:12.5px;}
+
+  .mr-tarasul-panel{
+    background:linear-gradient(135deg,#fff7e6,#fef3c7);border:1.5px solid #fcd34d;
+    border-radius:14px;padding:14px 16px;margin-bottom:16px;
+  }
+  .mr-tarasul-header{font-size:12.5px;font-weight:700;color:#92400e;margin-bottom:10px;}
+  .mr-tarasul-empty{font-size:12.5px;color:#92400e;text-align:center;padding:6px;}
+  .mr-tarasul-list{display:flex;flex-direction:column;gap:8px;}
+  .mr-tarasul-item{
+    display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+    background:var(--paper-raised);border:1px solid #fde68a;border-radius:10px;padding:8px 12px;
+  }
+  .mr-tarasul-info{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;}
+  .mr-tarasul-icon{font-size:14px;}
+  .mr-tarasul-party{font-weight:700;font-size:12.5px;color:var(--ink);}
+  .mr-tarasul-fieldlabel{font-size:11px;color:var(--ink-soft);background:var(--paper);border-radius:6px;padding:2px 8px;}
+  .mr-tarasul-select{
+    font-family:'Tajawal',sans-serif;font-size:12px;border:1px solid #fcd34d;border-radius:7px;
+    padding:6px 8px;background:#fffbeb;color:var(--ink);cursor:pointer;
+  }
   .mr-toolbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px;}
   .mr-count{font-size:12px;color:var(--ink-soft);font-weight:700;}
   .mr-list{display:flex;flex-direction:column;gap:8px;}
@@ -1814,11 +1834,13 @@ if('serviceWorker' in navigator){
     <div class="fu-page-header">
       <div class="fu-page-title">📬 المراسلات</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn secondary" id="mrTarasulBtn">📨 تبليغات</button>
         <button class="btn secondary" id="mrEditToggleBtn">🔒 تعديل / حذف</button>
         <button class="btn secondary" id="correspondencePageClose">✕ إغلاق والعودة</button>
       </div>
     </div>
     <div class="fu-page-section">
+      <div id="mrTarasulPanel" class="mr-tarasul-panel" style="display:none;"></div>
       <div class="mr-add-box">
         <input type="text" id="mrSearchInput" class="fu-search-input" placeholder="ابحث برقم القضية أو اسم الطرف، ثم دبل-كليك على النتيجة لإضافتها...">
         <div id="mrSearchResults" class="mr-search-results" style="display:none;"></div>
@@ -5880,6 +5902,10 @@ document.getElementById("generalNotesPageClose").onclick = goHome;
 // ===== أحداث صفحة المراسلات =====
 document.getElementById("correspondencePageClose").onclick = goHome;
 document.getElementById("mrEditToggleBtn").onclick = toggleMrEditMode;
+document.getElementById("mrTarasulBtn").onclick = ()=>{
+  mrTarasulPanelOpen = !mrTarasulPanelOpen;
+  renderMrTarasulPanel();
+};
 document.getElementById("mrSortSelect").onchange = renderMrList;
 
 // تطبيع الأرقام العربية الهندية (٠١٢٣٤٥٦٧٨٩) إلى أرقام غربية عادية (0-9) —
@@ -8931,12 +8957,14 @@ function goCorrespondence(){
   mrEditUnlocked = false;
   mrClosedOverride = new Set();
   mrOpenNoteKeys = new Set(); // تُقفَل كل الملاحظات المفتوحة عند إعادة فتح الصفحة
+  mrTarasulPanelOpen = false; // تُقفَل لوحة التبليغات عند إعادة فتح الصفحة
   // ملاحظة: mrPinnedKeys/mrPinTimers لا تُصفَّر هنا عمداً — التثبيت مصمَّم
   // ليدوم ساعة كاملة عبر تنقّلك بين صفحات النظام، لا يُلغى بمجرد مغادرة
   // صفحة المراسلات والعودة إليها (فقط بانتهاء ساعته الخاصة، أو بإغلاق التطبيق).
   document.getElementById("mrEditToggleBtn").textContent = "🔒 تعديل / حذف";
   document.getElementById("mrSearchInput").value = "";
   document.getElementById("mrSearchResults").style.display = "none";
+  document.getElementById("mrTarasulPanel").style.display = "none";
   renderMrList();
 }
 
@@ -8960,6 +8988,74 @@ function getMrRecords(){
   });
 }
 
+// ===== لوحة "📨 تبليغات" (بطلب المستخدم) =====
+// تجمع كل خانة (حسم/مكافأة/حوافز) بأي قضية لسا بحالة "تراسل" — يعني صدرت
+// إلكترونياً من نظام المحكمة لكن لم تُرسَل فعلياً بعد (لا بريد ولا يد). تذكّر
+// المستخدم بسحب نسختها الورقية من المحكمة وإرسالها، مع تحويل سريع لحالتها
+// فور الإرسال الفعلي — بلا حاجة يفتح كل قضية بمفردها ويدوّر عليها بالقائمة.
+const MR_TARASUL_FIELDS = [
+  {field:"حسم_طريقة", label:"كتاب الحسم", icon:"📮"},
+  {field:"مكافأة_طريقة", label:"حجز مكافأة", icon:"💰"},
+  {field:"حوافز_طريقة", label:"حجز حوافز", icon:"🎁"}
+];
+let mrTarasulPanelOpen = false;
+
+function renderMrTarasulPanel(){
+  const panel = document.getElementById("mrTarasulPanel");
+  if(!mrTarasulPanelOpen){ panel.style.display = "none"; return; }
+
+  const items = [];
+  getMrRecords().forEach(key=>{
+    const mr = masterCache[key]["مراسلات"];
+    const row = getRowByKey(key);
+    if(!row) return;
+    MR_TARASUL_FIELDS.forEach(({field, label, icon})=>{
+      if(mr[field] === MR_TARASUL_VALUE){
+        items.push({key, field, label, icon, caseNo: shortCaseNo(row["رقم الدعوى"]), party: getDefendantForRow(row)});
+      }
+    });
+  });
+
+  panel.style.display = "block";
+  if(!items.length){
+    panel.innerHTML = `<div class="mr-tarasul-empty">📭 لا توجد تبليغات بحالة "تراسل" حالياً</div>`;
+    return;
+  }
+
+  panel.innerHTML = `
+    <div class="mr-tarasul-header">📨 ${arabicCount(items.length)} تبليغ بحالة "تراسل" — تحتاج سحب نسختها الورقية من المحكمة وإرسالها</div>
+    <div class="mr-tarasul-list">
+      ${items.map((it, idx)=>`
+        <div class="mr-tarasul-item" data-idx="${idx}">
+          <div class="mr-tarasul-info">
+            <span class="mr-tarasul-icon">${it.icon}</span>
+            <span class="mr-card-caseno">${escapeAttr(it.caseNo)}</span>
+            <span class="mr-tarasul-party">${escapeAttr(it.party)}</span>
+            <span class="mr-tarasul-fieldlabel">${escapeAttr(it.label)}</span>
+          </div>
+          <select class="mr-tarasul-select" data-key="${escapeAttr(it.key)}" data-field="${it.field}">
+            <option value="">تحويل إلى...</option>
+            <option value="باليد">باليد</option>
+            <option value="بريد اردني">بريد اردني</option>
+          </select>
+        </div>
+      `).join("")}
+    </div>
+  `;
+
+  panel.querySelectorAll(".mr-tarasul-select").forEach(sel=>{
+    sel.onchange = async ()=>{
+      if(!sel.value) return;
+      const key = sel.dataset.key, field = sel.dataset.field;
+      await addMrDeliveryMethod(sel.value); // تُضاف للقائمة المشتركة لو جديدة
+      await setMrFieldMethod(key, field, sel.value);
+      showToast(`✓ حُوِّلت إلى "${sel.value}"`, "ok");
+      renderMrTarasulPanel(); // يعيد بناء اللوحة — هذا العنصر يختفي منها تلقائياً
+      renderMrList(); // يحدّث البطاقة الأصلية بالقائمة الرئيسية أيضاً
+    };
+  });
+}
+
 // قائمة "طرق الإرسال" المشتركة لكل خانات المراسلات الثلاث (حسم/مكافأة/حوافز)
 // — تبدأ بثلاث طرق أساسية، وتكبر تلقائياً بأي طريقة جديدة يكتبها المستخدم
 // عبر خيار "أخرى" (بطلب المستخدم)، مزامَنة عبر Firebase فتُشارَك عبر الأجهزة.
@@ -8968,6 +9064,12 @@ function getMrDeliveryMethods(){
   if(appSettings.mrDeliveryMethods && appSettings.mrDeliveryMethods.length) return appSettings.mrDeliveryMethods;
   return MR_DEFAULT_DELIVERY_METHODS;
 }
+
+// "تراسل" — قيمة ثابتة دائمة بأول قائمة كل خانة (بطلب المستخدم): يعني الكتاب
+// صدر إلكترونياً من نظام المحكمة، لسا ما أُرسِل فعلياً (لا بريد ولا يد بعد).
+// يستخدمها زر "📨 تبليغات" أعلى الصفحة لتجميع كل ما يحتاج سحب نسخة ورقية
+// وإرسالها فعلياً.
+const MR_TARASUL_VALUE = "📨 تراسل";
 async function addMrDeliveryMethod(value){
   value = (value || "").trim();
   if(!value) return;
@@ -9154,10 +9256,14 @@ function renderMrList(){
   // الصغير 🧊 يظهر فقط بعد اختيار قيمة فعلية ولم تُجمَّد بعد.
   function buildMrBox({icon, title, key, field, fieldBase, value, extraHtml, disabled, extraOptionValue, frozen}){
     const isNA = extraOptionValue && value === extraOptionValue;
-    const isOther = value && !isNA && !methods.includes(value);
+    const isOther = value && !isNA && value !== MR_TARASUL_VALUE && !methods.includes(value);
     const isDisabled = disabled || frozen;
     const disabledAttr = isDisabled ? "disabled" : "";
+    // "تراسل" خيار ثابت دائم بأول القائمة (بطلب المستخدم) — يعني "صدر
+    // إلكترونياً من نظام المحكمة، لسا ما أُرسِل فعلياً (لا بريد ولا يد)".
+    // يظهر بزر "📨 تبليغات" أعلى الصفحة كتذكير بسحب نسخته الورقية وإرسالها.
     const optionsHtml = [`<option value="">— اختر —</option>`]
+      .concat([`<option value="${escapeAttr(MR_TARASUL_VALUE)}" ${value===MR_TARASUL_VALUE?"selected":""}>${escapeAttr(MR_TARASUL_VALUE)}</option>`])
       .concat(methods.map(m => `<option value="${escapeAttr(m)}" ${value===m?"selected":""}>${escapeAttr(m)}</option>`))
       .concat([`<option value="__other__" ${isOther?"selected":""}>أخرى...</option>`])
       .concat(extraOptionValue ? [`<option value="${escapeAttr(extraOptionValue)}" ${isNA?"selected":""}>${escapeAttr(extraOptionValue)}</option>`] : [])
