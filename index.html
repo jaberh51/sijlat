@@ -11481,13 +11481,13 @@ function showCasesDblClickMenu(e, key){
       <button data-action="edit-defendant">✏️ تعديل اسم الطرف</button>
       <button data-action="edit-court">✏️ تعديل اسم المحكمة</button>
     ` : ''}
-    ${isClosedCase ? `
+    ${(isClosedCase || forceEditActive) ? `
       <button data-action="edit-requested">✏️ تعديل المطلوب</button>
       <button data-action="edit-collected">✏️ تعديل المحصّل</button>
       <button data-action="edit-remaining">✏️ تعديل المتبقي</button>
       <button data-action="edit-avail">✏️ تعديل المتاح</button>
-      <button data-action="delete" class="danger">🗑️ حذف القضية نهائياً</button>
     ` : ''}
+    ${isClosedCase ? `<button data-action="delete" class="danger">🗑️ حذف القضية نهائياً</button>` : ''}
   `;
   document.body.appendChild(menu);
 
@@ -11614,6 +11614,16 @@ function showCasesDblClickMenu(e, key){
       if(input === null) return;
       const num = parseFloat(String(input).replace(",", "."));
       if(isNaN(num)){ showToast("⚠️ قيمة غير صالحة", "warn"); return; }
+      // تأكيد ثانٍ بكلمة السر تحديداً لتعديل "المطلوب" (بطلب المستخدم) —
+      // أكثر الحقول حساسية، يستأهل خطوة تأكيد إضافية بعد تحديد القيمة الجديدة
+      // مباشرة، بمعزل عن كلمة السر الأولى اللي فعَّلت وضع التعديل القسري ككل.
+      const pwd2 = await askPassword(
+        `⚠️ تنبيه: أنت على وشك تغيير "المطلوب" من ${defaultVal} إلى ${num.toFixed(2)} دينار.\n\nهذا تعديل حسّاس يؤثر مباشرة على كل الحسابات المالية لهذي القضية. أدخل كلمة السر للتأكيد النهائي:`
+      );
+      if(!(await verifyPassword(pwd2, LW_STEP_PASS_HASH))){
+        showToast("⚠️ كلمة السر غير صحيحة — أُلغي التعديل", "warn");
+        return;
+      }
       const prevSnap = snapshotManualRecord(key);
       await setManualRequestedOverride(key, num);
       renderCasesPage();
