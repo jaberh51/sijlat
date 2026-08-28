@@ -8632,6 +8632,16 @@ function askInput(title, opts){
       titleEl.textContent = title || "أدخل قيمة";
       input.value = opts.defaultValue || "";
       input.placeholder = opts.placeholder || "";
+      // لوحة مفاتيح رقمية (آلة حاسبة) بدل لوحة الحروف الكاملة — لأي حقل
+      // مبلغ مالي (بطلب المستخدم). تُعاد لوضعها الطبيعي تلقائياً لأي نافذة
+      // نصية عادية لاحقة (نفس الحقل مُستخدَم مشتركاً لكل نداءات askInput).
+      if(opts.numeric){
+        input.setAttribute("inputmode", "decimal");
+        input.setAttribute("pattern", "[0-9]*[.,]?[0-9]*");
+      } else {
+        input.removeAttribute("inputmode");
+        input.removeAttribute("pattern");
+      }
       modal.style.display = "flex";
       setTimeout(()=> { input.focus(); input.select(); }, 50);
       function cleanup(val){
@@ -10693,7 +10703,7 @@ function renderCasesPage(){
         const dataRow = getDedupedRAW().find(r => caseKey(r) === key);
         const fin = dataRow ? getFinancialForRow(dataRow) : null;
         const currentVal = fin && fin.remaining !== null ? fin.remaining.toFixed(2) : "0.00";
-        const input = await askInput("أدخل قيمة المتبقي الصحيحة (دينار):", {type:"text", defaultValue: currentVal});
+        const input = await askInput("أدخل قيمة المتبقي الصحيحة (دينار):", {type:"text", numeric:true, defaultValue: currentVal});
         if(input === null) return; // إلغاء
         const num = parseFloat(String(input).replace(",", "."));
         if(isNaN(num)){
@@ -11556,7 +11566,7 @@ function showCasesDblClickMenu(e, key){
     if(action === "edit-avail"){
       const currentAvail = getRowAvail(row);
       const defaultVal = currentAvail !== null ? currentAvail.toFixed(2) : "0.00";
-      const input = await askInput("أدخل قيمة المتاح الصحيحة (دينار):", {type:"text", defaultValue: defaultVal});
+      const input = await askInput("أدخل قيمة المتاح الصحيحة (دينار):", {type:"text", numeric:true, defaultValue: defaultVal});
       if(input === null) return;
       const num = parseFloat(String(input).replace(",", "."));
       if(isNaN(num)){ showToast("⚠️ قيمة غير صالحة", "warn"); return; }
@@ -11574,7 +11584,7 @@ function showCasesDblClickMenu(e, key){
     if(action === "edit-remaining"){
       const fin = getFinancialForRow(row);
       const defaultVal = fin.remaining !== null ? fin.remaining.toFixed(2) : "0.00";
-      const input = await askInput("أدخل قيمة المتبقي الصحيحة (دينار):", {type:"text", defaultValue: defaultVal});
+      const input = await askInput("أدخل قيمة المتبقي الصحيحة (دينار):", {type:"text", numeric:true, defaultValue: defaultVal});
       if(input === null) return;
       const num = parseFloat(String(input).replace(",", "."));
       if(isNaN(num)){ showToast("⚠️ قيمة غير صالحة", "warn"); return; }
@@ -11592,7 +11602,7 @@ function showCasesDblClickMenu(e, key){
     if(action === "edit-collected"){
       const fin = getFinancialForRow(row);
       const defaultVal = fin.total !== null ? fin.total.toFixed(2) : "0.00";
-      const input = await askInput("أدخل قيمة المحصّل الصحيحة (دينار):", {type:"text", defaultValue: defaultVal});
+      const input = await askInput("أدخل قيمة المحصّل الصحيحة (دينار):", {type:"text", numeric:true, defaultValue: defaultVal});
       if(input === null) return;
       const num = parseFloat(String(input).replace(",", "."));
       if(isNaN(num)){ showToast("⚠️ قيمة غير صالحة", "warn"); return; }
@@ -11610,7 +11620,7 @@ function showCasesDblClickMenu(e, key){
     if(action === "edit-requested"){
       const fin = getFinancialForRow(row);
       const defaultVal = fin.requested !== null ? fin.requested.toFixed(2) : "0.00";
-      const input = await askInput("أدخل قيمة المطلوب الصحيحة (دينار):", {type:"text", defaultValue: defaultVal});
+      const input = await askInput("أدخل قيمة المطلوب الصحيحة (دينار):", {type:"text", numeric:true, defaultValue: defaultVal});
       if(input === null) return;
       const num = parseFloat(String(input).replace(",", "."));
       if(isNaN(num)){ showToast("⚠️ قيمة غير صالحة", "warn"); return; }
