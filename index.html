@@ -2215,8 +2215,6 @@ if('serviceWorker' in navigator){
         <div style="display:flex;gap:8px;align-items:center;">
           <button class="btn secondary" id="casesAnalysisBtn">📊 تحليل الرديات</button>
           <button class="btn secondary" id="casesActionBtn" title="اختيار قضية واتخاذ إجراء رسمي بشأنها (إسقاط، حسم راتب، حجز مكافأة، حجز حوافز، مثابرة)">⚖️ اتخاذ إجراء</button>
-          <button class="btn secondary" id="casesExportLawyerBtn" title="يصدّر ملف إكسيل بالبيانات المالية لكل القضايا المصنَّفة &quot;محامي&quot; — لاستيراده بنظام المحامي لتحديث بياناته المالية الناقصة">📤 تصدير بيانات للمحامي</button>
-          <button class="btn secondary" id="casesPrintBtn">🖨️ طباعة الكل</button>
           <button class="btn secondary" id="casesForceDeleteModeBtn" title="حذف قسري (✕) لمدة 10 ثوانٍ + تعديل قسري لكل الحقول (✏️) لمدة دقيقة، بغضّ النظر عن أي شروط">🗑️✏️ حذف/تعديل قسري</button>
           <button class="btn secondary" id="casesAddDeadlineBtn" title="إضافة موعد صارم لقضية معيّنة — يُنبِّه قسرياً قبله بأسبوعين">⏰ إضافة موعد صارم</button>
           <button class="btn secondary" id="casesPageClose">✕ إغلاق والعودة</button>
@@ -10807,8 +10805,20 @@ function renderCasesPage(){
     if(cell) showColTooltip(e, cell.getAttribute("data-col"));
     // ===== وضع "⚖️ اتخاذ إجراء" (بطلب المستخدم) — منفصل تماماً عن وضع
     // التحديد الجماعي العادي (تصنيف/طباعة)، بلا أي تعارض بينهما. أول قضية
-    // تُضغَط بهذا الوضع تفتح خيارات الإجراء فوراً وتُنهي الوضع تلقائياً. =====
+    // تُضغَط بهذا الوضع تفتح خيارات الإجراء فوراً وتُنهي الوضع تلقائياً.
+    // مقصور فقط على قضايا جابر أو حنين المصنَّفة "شخصي" (بطلب المستخدم) —
+    // أي قضية غير مطابقة تُرفَض برسالة واضحة، ويبقى وضع الاختيار مفعَّلاً
+    // ليحاول قضية أخرى بلا الحاجة يعيد الضغط على الزر من جديد. =====
     if(caseActionPickModeActive){
+      const dataRow = getRowByKey(key);
+      const client = dataRow ? (getPlaintiffForRow(dataRow) || "") : "";
+      const isJaberOrHaneen = client.includes("جابر") || client.includes("حنين");
+      const rec = masterCache[key];
+      const isPersonal = rec && rec["نوع_القضية"] === "شخصي";
+      if(!isJaberOrHaneen || !isPersonal){
+        showToast("⚠️ اتخاذ إجراء متاح فقط لقضايا جابر أو حنين المصنَّفة \"شخصي\" — اختر قضية أخرى", "warn");
+        return;
+      }
       exitCaseActionPickMode();
       selectCaseForAction(key);
       return;
@@ -11504,7 +11514,6 @@ document.getElementById("analysisPageSizeSelect").addEventListener("change", (e)
 });
 
 document.getElementById("casesPageClose").onclick = ()=>{ goHome(); };
-document.getElementById("casesPrintBtn").onclick = ()=>{ printCases(); };
 document.getElementById("casesForceDeleteModeBtn").onclick = activateCasesForceDeleteMode;
 document.getElementById("casesAddDeadlineBtn").onclick = promptAddStrictDeadline;
 
@@ -12254,47 +12263,6 @@ document.getElementById("backupExportBtn").onclick = async ()=>{
   const stamp = new Date().toISOString().slice(0,10);
   XLSX.writeFile(wb, `نسخة_احتياطية_القضايا_${stamp}.xlsx`);
   importStatusEl.textContent = `تم تنزيل نسخة احتياطية تحتوي على ${rows.length} قضية إلى جهازك`;
-};
-
-// ===== تصدير بيانات مالية للمحامي (بطلب المستخدم) =====
-// القضايا نفسها مشتركة بين هذا النظام ونظام المحامي المنفصل، لكن ملف وزارة
-// العدل اللي يحمّله المحامي من حسابه الخاص لا يحتوي أعمدة المبالغ الإجمالية
-// (مطلوب/محصّل/متاح/متبقي) — بعكس ملفاتنا هنا. هذا الزر يصدّر فقط القضايا
-// المصنَّفة "محامي" بأعمدة مطابقة تماماً لما يتوقعه استيراد نظام المحامي،
-// فيستوردها هو بزر "استيراد ملف إكسيل" عنده مباشرة لتحديث بياناته الناقصة —
-// بلا إضافة أي قضية جديدة (فقط تحديث الموجود أصلاً عنده بنفس رقم القضية).
-document.getElementById("casesExportLawyerBtn").onclick = async ()=>{
-  const lawyerRows = getDedupedRAW().filter(r=>{
-    const rec = masterCache[caseKey(r)];
-    return rec && rec["نوع_القضية"] === "محامي";
-  });
-  if(!lawyerRows.length){
-    showToast("⚠️ لا توجد قضايا مصنَّفة \"محامي\" حالياً لتصديرها", "warn");
-    return;
-  }
-  const exportRows = lawyerRows.map(r=>{
-    const rec = masterCache[caseKey(r)];
-    const fin = getFinancialForRow(r);
-    const avail = getRowAvail(r);
-    const collected = getRowCollected(r);
-    return {
-      "رقم الدعوى": shortCaseNo(r["رقم الدعوى"]),
-      "حالة الدعوى": (r["حالة الدعوى"] || (rec && rec["الحالة"]) || "").trim(),
-      "المحكمة": (r["المحكمة"] || (rec && rec["المحكمة"]) || "").trim(),
-      "تاريخ ورود الدعوى": (r["تاريخ ورود الدعوى"] || (rec && rec["تاريخ الورود"]) || "").trim(),
-      "وصف الدعوى": getDescForRow(r) || "",
-      "مجموع المبالغ المطلوبة": fin.requested !== null ? fin.requested : "",
-      "مجموع المبالغ المقبوضة فعليا": collected !== null ? collected : "",
-      "مجموع المبالغ المتاحة للقبض": avail !== null ? avail : "",
-      "مجموع المبالغ المتبقية": fin.remaining !== null ? fin.remaining : ""
-    };
-  });
-  const ws = XLSX.utils.json_to_sheet(exportRows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "بيانات مالية للمحامي");
-  const stamp = new Date().toISOString().slice(0,10);
-  XLSX.writeFile(wb, `بيانات_مالية_للمحامي_${stamp}.xlsx`);
-  showToast(`✓ صُدِّرت ${exportRows.length} قضية — استوردها بنظام المحامي مباشرة`, "ok");
 };
 </script>
 <script>
