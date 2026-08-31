@@ -10396,6 +10396,13 @@ function applyCasesFilter(keepPage){
       } else if(caseType !== typeFilter) return false;
     }
     if(clientFilter && !getPlaintiffForRow(r).includes(clientFilter)) return false;
+    // فلتر "اتخاذ إجراء" (بطلب المستخدم) — يُفعَّل تلقائياً فقط أثناء وضع
+    // اختيار قضية لاتخاذ إجراء بشأنها: يستثني أي قضية موكّلها ليس جابر ولا
+    // حنين، بجانب فلتر "شخصي" العادي (المضبوط تلقائياً على القائمة المنسدلة).
+    if(caseActionFilterActive){
+      const client = getPlaintiffForRow(r) || "";
+      if(!client.includes("جابر") && !client.includes("حنين")) return false;
+    }
     if(courtCityFilter && !normalizeArabicForSearch(getCourtForRow(r)||"").includes(normalizeArabicForSearch(courtCityFilter))) return false;
     if(yearFilter && String(getCaseYearNum(r).year) !== yearFilter) return false;
     if(casesZeroCollected30Active){
@@ -10803,22 +10810,12 @@ function renderCasesPage(){
     // إظهار تلميح باسم العمود بجانب موضع الضغط
     const cell = e.target.closest("td[data-col]");
     if(cell) showColTooltip(e, cell.getAttribute("data-col"));
-    // ===== وضع "⚖️ اتخاذ إجراء" (بطلب المستخدم) — منفصل تماماً عن وضع
-    // التحديد الجماعي العادي (تصنيف/طباعة)، بلا أي تعارض بينهما. أول قضية
-    // تُضغَط بهذا الوضع تفتح خيارات الإجراء فوراً وتُنهي الوضع تلقائياً.
-    // مقصور فقط على قضايا جابر أو حنين المصنَّفة "شخصي" (بطلب المستخدم) —
-    // أي قضية غير مطابقة تُرفَض برسالة واضحة، ويبقى وضع الاختيار مفعَّلاً
-    // ليحاول قضية أخرى بلا الحاجة يعيد الضغط على الزر من جديد. =====
+    // ===== وضع "⚖️ اتخاذ إجراء" (بطلب المستخدم، مُعدَّلة) — منفصل تماماً عن
+    // وضع التحديد الجماعي العادي (تصنيف/طباعة)، بلا أي تعارض بينهما. الجدول
+    // نفسه يُفلتَر تلقائياً عند تفعيل الوضع (راجع enterCaseActionPickMode) —
+    // فكل قضية ظاهرة بالجدول بهذا الوضع مؤهَّلة أصلاً، بلا حاجة لفحص إضافي
+    // هنا. أول قضية تُضغَط تفتح خيارات الإجراء فوراً وتُنهي الوضع تلقائياً. =====
     if(caseActionPickModeActive){
-      const dataRow = getRowByKey(key);
-      const client = dataRow ? (getPlaintiffForRow(dataRow) || "") : "";
-      const isJaberOrHaneen = client.includes("جابر") || client.includes("حنين");
-      const rec = masterCache[key];
-      const isPersonal = rec && rec["نوع_القضية"] === "شخصي";
-      if(!isJaberOrHaneen || !isPersonal){
-        showToast("⚠️ اتخاذ إجراء متاح فقط لقضايا جابر أو حنين المصنَّفة \"شخصي\" — اختر قضية أخرى", "warn");
-        return;
-      }
       exitCaseActionPickMode();
       selectCaseForAction(key);
       return;
@@ -11522,21 +11519,45 @@ document.getElementById("casesAddDeadlineBtn").onclick = promptAddStrictDeadline
 // (منفصل تماماً عن وضع "✅ تحديد" الجماعي العادي، بلا أي تعارض بينهما).
 // أول قضية تُضغَط بهذا الوضع تفتح خيارات الإجراء الخمسة فوراً — قضية واحدة
 // بكل مرة، بلا انتظار تحديد أكثر. توليد كل نموذج فعلياً سيُبنى لاحقاً حرفياً
-// حسب النموذج اللي يُرفَق لكل نوع إجراء. =====
+// حسب النموذج اللي يُرفَق لكل نوع إجراء.
+// الفلترة (بطلب المستخدم — مُعدَّلة): بدل رفض القضايا الغير مطابقة عند
+// الضغط عليها، الجدول نفسه يُفلتَر تلقائياً عند تفعيل الوضع (فلتر "شخصي" +
+// فلتر جابر/حنين المخصَّص) — فما يظهر بالجدول أصلاً إلا القضايا المؤهَّلة،
+// وترجع الفلاتر لوضعها السابق تلقائياً بعد الاختيار أو الإلغاء. =====
 let _caseActionSelectedKey = null;
 let caseActionPickModeActive = false;
+let caseActionFilterActive = false;
+let _caseActionSavedFilters = null; // {typeFilter, clientFilter} — لاستعادتها بعد انتهاء الوضع
 
 function enterCaseActionPickMode(){
   caseActionPickModeActive = true;
+  caseActionFilterActive = true;
   const banner = document.getElementById("caseActionPickBanner");
   if(banner) banner.style.display = "flex";
   document.getElementById("casesTbody").classList.add("cases-action-pick-mode");
+  // حفظ الفلاتر الحالية لاستعادتها لاحقاً، ثم ضبطها تلقائياً على "شخصي"
+  // (فلتر جابر/حنين المخصَّص يُطبَّق بمنطق إضافي داخل applyCasesFilter نفسها،
+  // بما إن القائمة المنسدلة تسمح باختيار موكّل واحد بس بكل مرة).
+  const typeSelect = document.getElementById("casesTypeFilter");
+  const clientSelect = document.getElementById("casesClientFilter");
+  _caseActionSavedFilters = {typeFilter: typeSelect.value, clientFilter: clientSelect.value};
+  typeSelect.value = "شخصي";
+  clientSelect.value = "";
+  applyCasesFilter(true);
 }
 function exitCaseActionPickMode(){
   caseActionPickModeActive = false;
+  caseActionFilterActive = false;
   const banner = document.getElementById("caseActionPickBanner");
   if(banner) banner.style.display = "none";
   document.getElementById("casesTbody").classList.remove("cases-action-pick-mode");
+  // استعادة الفلاتر لوضعها قبل تفعيل وضع "اتخاذ إجراء"
+  if(_caseActionSavedFilters){
+    document.getElementById("casesTypeFilter").value = _caseActionSavedFilters.typeFilter;
+    document.getElementById("casesClientFilter").value = _caseActionSavedFilters.clientFilter;
+    _caseActionSavedFilters = null;
+    applyCasesFilter(true);
+  }
 }
 
 function closeCaseActionModal(){
