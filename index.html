@@ -815,6 +815,11 @@
   .cases-row{cursor:pointer;transition:background .1s;}
   .cases-row:hover td{background:#f0f4ff !important;}
   .cases-row-selected td{background:#e0e7ff !important;border-right:3px solid #6b3fa0;}
+  /* وضع "اتخاذ إجراء" (بطلب المستخدم) — إشارة بصرية واضحة إن الجدول بانتظار
+     ضغطة لاختيار قضية بشأنها إجراء، تختلف عن تمييز الصف العادي/التحديد الجماعي. */
+  #casesTbody.cases-action-pick-mode .cases-row{outline:2px dashed transparent;}
+  #casesTbody.cases-action-pick-mode .cases-row:hover td{background:#fef3c7 !important;}
+  #casesTbody.cases-action-pick-mode .cases-row:hover{outline-color:#d4a017;}
   .cases-action-col{text-align:center;width:40px;}
   .cases-remove-btn{
     background:none;border:1px solid #fca5a5;color:#dc2626;border-radius:6px;
@@ -2181,33 +2186,20 @@ if('serviceWorker' in navigator){
   </div>
 </div>
 
-<!-- نافذة "اتخاذ إجراء" (بطلب المستخدم) — اختيار قضية ثم عرض خيارات الإجراءات
-     الخمسة (إسقاط/حسم راتب/حجز مكافأة/حجز حوافز/مثابرة). حالياً هيكل الاختيار
-     فقط — توليد النماذج الفعلية سيُبنى لاحقاً حرفياً حسب كل نموذج يُرفَق. -->
+<!-- نافذة خيارات "اتخاذ إجراء" (بطلب المستخدم) — تظهر مباشرة فور اختيار
+     قضية من الجدول (وضع الاختيار أعلاه). حالياً هيكل الخيارات فقط — توليد
+     النماذج الفعلية سيُبنى لاحقاً حرفياً حسب كل نموذج يُرفَق. -->
 <div id="caseActionModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;padding:16px;">
   <div style="background:var(--paper,#fff);border-radius:14px;padding:24px 20px;width:100%;max-width:420px;max-height:85vh;overflow-y:auto;box-shadow:0 8px 32px rgba(0,0,0,.25);direction:rtl;font-family:'Tajawal',sans-serif;">
     <div style="font-weight:700;font-size:16px;margin-bottom:14px;color:var(--ink,#222);">⚖️ اتخاذ إجراء</div>
-
-    <!-- المرحلة 1: اختيار القضية -->
-    <div id="caseActionStep1">
-      <input id="caseActionSearchInput" type="text" placeholder="ابحث برقم القضية أو اسم الطرف..."
-        style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-family:'Tajawal',sans-serif;font-size:14px;margin-bottom:10px;box-sizing:border-box;">
-      <div id="caseActionSearchResults" style="max-height:320px;overflow-y:auto;"></div>
+    <div id="caseActionSelectedCase" style="background:var(--brass-soft,#f7f1e6);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-weight:700;font-size:13.5px;"></div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button class="btn secondary case-action-choice" data-action="اسقاط" style="text-align:right;">📤 إسقاط</button>
+      <button class="btn secondary case-action-choice" data-action="حسم_راتب" style="text-align:right;">💰 حسم راتب</button>
+      <button class="btn secondary case-action-choice" data-action="حجز_مكافأة" style="text-align:right;">🎁 حجز مكافأة</button>
+      <button class="btn secondary case-action-choice" data-action="حجز_حوافز" style="text-align:right;">🎉 حجز حوافز</button>
+      <button class="btn secondary case-action-choice" data-action="مثابرة" style="text-align:right;">🔁 مثابرة</button>
     </div>
-
-    <!-- المرحلة 2: اختيار نوع الإجراء (تظهر بعد اختيار قضية) -->
-    <div id="caseActionStep2" style="display:none;">
-      <div id="caseActionSelectedCase" style="background:var(--brass-soft,#f7f1e6);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-weight:700;font-size:13.5px;"></div>
-      <div style="display:flex;flex-direction:column;gap:8px;">
-        <button class="btn secondary case-action-choice" data-action="اسقاط" style="text-align:right;">📤 إسقاط</button>
-        <button class="btn secondary case-action-choice" data-action="حسم_راتب" style="text-align:right;">💰 حسم راتب</button>
-        <button class="btn secondary case-action-choice" data-action="حجز_مكافأة" style="text-align:right;">🎁 حجز مكافأة</button>
-        <button class="btn secondary case-action-choice" data-action="حجز_حوافز" style="text-align:right;">🎉 حجز حوافز</button>
-        <button class="btn secondary case-action-choice" data-action="مثابرة" style="text-align:right;">🔁 مثابرة</button>
-      </div>
-      <button id="caseActionBackBtn" class="btn secondary" style="margin-top:14px;width:100%;">↩ رجوع لاختيار قضية أخرى</button>
-    </div>
-
     <div style="display:flex;justify-content:flex-end;margin-top:16px;">
       <button id="caseActionCloseBtn" class="btn secondary" style="padding:8px 18px;">إغلاق</button>
     </div>
@@ -2229,6 +2221,14 @@ if('serviceWorker' in navigator){
           <button class="btn secondary" id="casesAddDeadlineBtn" title="إضافة موعد صارم لقضية معيّنة — يُنبِّه قسرياً قبله بأسبوعين">⏰ إضافة موعد صارم</button>
           <button class="btn secondary" id="casesPageClose">✕ إغلاق والعودة</button>
         </div>
+      </div>
+
+      <!-- بانر إرشادي (بطلب المستخدم) — يظهر فقط عند تفعيل وضع "اتخاذ إجراء":
+           يعلّم المستخدم إنه بانتظار الضغط على أي صف بالجدول لاختيار القضية.
+           اضغط أي صف فيفتح فوراً خيارات الإجراء الخمسة، أو "إلغاء" للخروج. -->
+      <div id="caseActionPickBanner" class="fu-page-section" style="display:none;background:linear-gradient(135deg,#fef3c7,#fde68a);border:1.5px solid #d4a017;border-radius:12px;padding:10px 16px;align-items:center;justify-content:space-between;gap:10px;">
+        <span style="font-weight:700;font-size:13px;color:#78350f;">⚖️ اضغط على أي قضية بالجدول لاختيار إجراء بشأنها...</span>
+        <button id="caseActionPickCancelBtn" class="btn secondary" style="padding:5px 14px;font-size:12px;">إلغاء</button>
       </div>
 
       <div class="fu-page-section" id="casesTopBox1">
@@ -10805,6 +10805,14 @@ function renderCasesPage(){
     // إظهار تلميح باسم العمود بجانب موضع الضغط
     const cell = e.target.closest("td[data-col]");
     if(cell) showColTooltip(e, cell.getAttribute("data-col"));
+    // ===== وضع "⚖️ اتخاذ إجراء" (بطلب المستخدم) — منفصل تماماً عن وضع
+    // التحديد الجماعي العادي (تصنيف/طباعة)، بلا أي تعارض بينهما. أول قضية
+    // تُضغَط بهذا الوضع تفتح خيارات الإجراء فوراً وتُنهي الوضع تلقائياً. =====
+    if(caseActionPickModeActive){
+      exitCaseActionPickMode();
+      selectCaseForAction(key);
+      return;
+    }
     // تحديد/إلغاء تحديد الصف — فقط إن كان وضع التحديد مُفعَّلاً صراحةً
     if(!casesSelectModeActive) return;
     if(casesSelected.has(key)) casesSelected.delete(key);
@@ -11500,48 +11508,32 @@ document.getElementById("casesPrintBtn").onclick = ()=>{ printCases(); };
 document.getElementById("casesForceDeleteModeBtn").onclick = activateCasesForceDeleteMode;
 document.getElementById("casesAddDeadlineBtn").onclick = promptAddStrictDeadline;
 
-// ===== "اتخاذ إجراء" (بطلب المستخدم) — اختيار قضية ثم نوع إجراء رسمي بشأنها.
-// حالياً هيكل الاختيار فقط؛ توليد كل نموذج فعلياً سيُبنى حرفياً حسب النموذج
-// اللي يُرفَق لاحقاً لكل نوع إجراء (إسقاط/حسم راتب/حجز مكافأة/حجز حوافز/مثابرة). =====
+// ===== "⚖️ اتخاذ إجراء" (بطلب المستخدم، مُعدَّلة حسب اتفاقنا) — بدل نافذة
+// بحث منفصلة، الضغط على الزر يفعّل وضع اختيار مباشر من جدول القضايا نفسه
+// (منفصل تماماً عن وضع "✅ تحديد" الجماعي العادي، بلا أي تعارض بينهما).
+// أول قضية تُضغَط بهذا الوضع تفتح خيارات الإجراء الخمسة فوراً — قضية واحدة
+// بكل مرة، بلا انتظار تحديد أكثر. توليد كل نموذج فعلياً سيُبنى لاحقاً حرفياً
+// حسب النموذج اللي يُرفَق لكل نوع إجراء. =====
 let _caseActionSelectedKey = null;
+let caseActionPickModeActive = false;
 
-function openCaseActionModal(){
-  document.getElementById("caseActionModal").style.display = "flex";
-  document.getElementById("caseActionStep1").style.display = "block";
-  document.getElementById("caseActionStep2").style.display = "none";
-  document.getElementById("caseActionSearchInput").value = "";
-  document.getElementById("caseActionSearchResults").innerHTML = "";
-  _caseActionSelectedKey = null;
-  setTimeout(()=> document.getElementById("caseActionSearchInput").focus(), 50);
+function enterCaseActionPickMode(){
+  caseActionPickModeActive = true;
+  const banner = document.getElementById("caseActionPickBanner");
+  if(banner) banner.style.display = "flex";
+  document.getElementById("casesTbody").classList.add("cases-action-pick-mode");
 }
+function exitCaseActionPickMode(){
+  caseActionPickModeActive = false;
+  const banner = document.getElementById("caseActionPickBanner");
+  if(banner) banner.style.display = "none";
+  document.getElementById("casesTbody").classList.remove("cases-action-pick-mode");
+}
+
 function closeCaseActionModal(){
   document.getElementById("caseActionModal").style.display = "none";
+  _caseActionSelectedKey = null;
 }
-
-const _runCaseActionSearch = debounce((qRaw)=>{
-  const resultsEl = document.getElementById("caseActionSearchResults");
-  const q = normalizeEasternDigits(qRaw);
-  if(!q){ resultsEl.innerHTML = ""; return; }
-  const matches = getDedupedRAW().filter(r=>{
-    const caseNo = normalizeEasternDigits(r["رقم الدعوى"]||"");
-    return caseNo.includes(q) || getDefendantForRow(r).includes(q) || getPlaintiffForRow(r).includes(q);
-  }).slice(0, 15);
-  if(!matches.length){
-    resultsEl.innerHTML = `<div style="padding:12px;text-align:center;color:var(--ink-soft,#888);font-size:12.5px;">لا نتائج مطابقة</div>`;
-    return;
-  }
-  resultsEl.innerHTML = matches.map(r=>{
-    const key = caseKey(r);
-    return `<div class="case-action-result-item" data-key="${escapeAttr(key)}"
-      style="display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--line,#eee);">
-      <span style="font-weight:700;color:var(--brass,#a5793a);white-space:nowrap;">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}</span>
-      <span style="color:var(--ink-soft,#555);font-size:12.5px;overflow:hidden;text-overflow:ellipsis;">${escapeAttr(getDefendantForRow(r))}</span>
-    </div>`;
-  }).join("");
-  resultsEl.querySelectorAll(".case-action-result-item").forEach(item=>{
-    item.onclick = ()=> selectCaseForAction(item.dataset.key);
-  });
-}, 250);
 
 function selectCaseForAction(key){
   const row = getRowByKey(key);
@@ -11549,20 +11541,15 @@ function selectCaseForAction(key){
   _caseActionSelectedKey = key;
   document.getElementById("caseActionSelectedCase").textContent =
     `${shortCaseNo(row["رقم الدعوى"])} — ${getDefendantForRow(row)}`;
-  document.getElementById("caseActionStep1").style.display = "none";
-  document.getElementById("caseActionStep2").style.display = "block";
+  document.getElementById("caseActionModal").style.display = "flex";
 }
 
-document.getElementById("casesActionBtn").onclick = openCaseActionModal;
-document.getElementById("caseActionCloseBtn").onclick = closeCaseActionModal;
-document.getElementById("caseActionBackBtn").onclick = ()=>{
-  document.getElementById("caseActionStep1").style.display = "block";
-  document.getElementById("caseActionStep2").style.display = "none";
-  _caseActionSelectedKey = null;
+document.getElementById("casesActionBtn").onclick = ()=>{
+  if(caseActionPickModeActive){ exitCaseActionPickMode(); return; } // ضغطة ثانية = إلغاء
+  enterCaseActionPickMode();
 };
-document.getElementById("caseActionSearchInput").addEventListener("input", (e)=>{
-  _runCaseActionSearch(e.target.value.trim());
-});
+document.getElementById("caseActionPickCancelBtn").onclick = exitCaseActionPickMode;
+document.getElementById("caseActionCloseBtn").onclick = closeCaseActionModal;
 document.querySelectorAll(".case-action-choice").forEach(btn=>{
   btn.onclick = ()=>{
     // كل نوع إجراء سيُبنى له توليد نموذج فعلي حرفياً حسب النموذج المُرفَق —
