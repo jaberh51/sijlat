@@ -11535,12 +11535,15 @@ function enterCaseActionPickMode(){
   const banner = document.getElementById("caseActionPickBanner");
   if(banner) banner.style.display = "flex";
   document.getElementById("casesTbody").classList.add("cases-action-pick-mode");
-  // حفظ الفلاتر الحالية لاستعادتها لاحقاً، ثم ضبطها تلقائياً على "شخصي"
-  // (فلتر جابر/حنين المخصَّص يُطبَّق بمنطق إضافي داخل applyCasesFilter نفسها،
-  // بما إن القائمة المنسدلة تسمح باختيار موكّل واحد بس بكل مرة).
+  // حفظ الفلاتر الحالية لاستعادتها لاحقاً، ثم ضبطها تلقائياً على "قيد
+  // التنفيذ" + "شخصي" (فلتر جابر/حنين المخصَّص يُطبَّق بمنطق إضافي داخل
+  // applyCasesFilter نفسها، بما إن القائمة المنسدلة تسمح باختيار موكّل واحد
+  // بس بكل مرة).
+  const statusSelect = document.getElementById("casesStatusFilter");
   const typeSelect = document.getElementById("casesTypeFilter");
   const clientSelect = document.getElementById("casesClientFilter");
-  _caseActionSavedFilters = {typeFilter: typeSelect.value, clientFilter: clientSelect.value};
+  _caseActionSavedFilters = {statusFilter: statusSelect.value, typeFilter: typeSelect.value, clientFilter: clientSelect.value};
+  statusSelect.value = "قيد التنفيذ";
   typeSelect.value = "شخصي";
   clientSelect.value = "";
   applyCasesFilter(true);
@@ -11553,6 +11556,7 @@ function exitCaseActionPickMode(){
   document.getElementById("casesTbody").classList.remove("cases-action-pick-mode");
   // استعادة الفلاتر لوضعها قبل تفعيل وضع "اتخاذ إجراء"
   if(_caseActionSavedFilters){
+    document.getElementById("casesStatusFilter").value = _caseActionSavedFilters.statusFilter;
     document.getElementById("casesTypeFilter").value = _caseActionSavedFilters.typeFilter;
     document.getElementById("casesClientFilter").value = _caseActionSavedFilters.clientFilter;
     _caseActionSavedFilters = null;
