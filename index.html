@@ -10905,7 +10905,8 @@ function printLawyerRequest_HasmRatib(key){
 function printLawyerRequest_Isqat(key){
   const row = getRowByKey(key);
   if(!row){ showToast("⚠️ تعذّر إيجاد بيانات هذه القضية", "warn"); return; }
-  const caseNo = shortCaseNo(row["رقم الدعوى"]);
+  // بصيغة "رقم/سنة" بفاصلة مائلة (بطلب المستخدم — بلا كلمة "رقم القضية" إطلاقاً)
+  const caseNo = shortCaseNo(row["رقم الدعوى"]).replace(/-/g, "/");
   const today = getAccurateNow();
   const day = String(today.getDate()).padStart(2,'0');
   const month = String(today.getMonth()+1).padStart(2,'0');
@@ -10915,6 +10916,7 @@ function printLawyerRequest_Isqat(key){
       body{font-family:'Amiri',Tajawal,Arial,serif;direction:rtl;padding:40px 50px;font-size:16px;line-height:2.6;}
       .req-top{font-weight:700;text-align:center;margin-bottom:20px;}
       .req-caseno{font-weight:700;margin-bottom:40px;}
+      .req-blank-line{height:1.6em;}
       .req-body-label{font-weight:700;}
       .req-body{text-align:right;}
       .req-signatures{display:flex;justify-content:space-between;margin-top:70px;font-weight:700;}
@@ -10922,13 +10924,15 @@ function printLawyerRequest_Isqat(key){
     </style></head>
     <body>
       <div class="req-top">ما بعد</div>
-      <div class="req-caseno">رقم القضية      ${escapeAttr(caseNo)}</div>
+      <div class="req-caseno">${escapeAttr(caseNo)}</div>
+      <div class="req-blank-line"></div>
+      <div class="req-blank-line"></div>
       <div class="req-body">
         <span class="req-body-label">حضر المحكوم له وقال</span><br>
         التمس <b>اسقاط القضية واعتبارها منفذه ومنتهيه</b>  وللطلب ترفـــــع الأوراق الى رئـــــــيس التنفيـــــــــذ تحريرا في ${day} / ${month} / 2026
       </div>
       <div class="req-signatures">
-        <span>المحكوم له</span>
+        <span>المحكـــــــــــــوم له</span>
         <span>مأمور التنفيذ</span>
       </div>
     </body></html>`;
