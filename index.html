@@ -11189,26 +11189,39 @@ function getMonthColumnValue(r, monthIndex, months){
   const thisMonth = months[monthIndex];
   const balanceDiff = getMonthRawValue(r, thisMonth.id) - getMonthRawValue(r, prevMonth.id);
 
-  const prevDate = prevMonth.updatedAt ? new Date(prevMonth.updatedAt) : null;
   const thisDate = thisMonth.updatedAt ? new Date(thisMonth.updatedAt) : null;
   // احتياط: أشهر قديمة جُمِّدت قبل تسجيل تاريخ التحديث — لا بيانات تواريخ
   // كافية لحساب مجموع المعاملات، فنكتفي بفرق الرصيد وحده.
-  if(!prevDate || !thisDate) return Math.max(balanceDiff, 0);
+  if(!thisDate) return Math.max(balanceDiff, 0);
 
   const rec = masterCache[caseKey(r)];
   const transactions = (rec && rec["معاملات مالية"]) || [];
+  // ===== إصلاح جذري ثانٍ (بطلب المستخدم — محاكاة رياضية أثبتت إن الإصلاح
+  // الأول وحده غير كافٍ) =====
+  // "فرق الرصيد" (balanceDiff) نفسه يتضخّم ويُظهر مبلغاً متراكماً من أشهر
+  // سابقة لو المبلغ بقي بلا سحب بين تجميدين — بغضّ النظر عن مدى دقة نافذة
+  // تاريخ المعاملات. الحل: لو فيه سجل معاملات فعلي أصلاً لهذي القضية، نثق
+  // بمجموع معاملات الشهر التقويمي **بالكامل** (بلا مقارنته بفرق الرصيد إطلاقاً)
+  // — فرق الرصيد يبقى فقط احتياطاً أخيراً للقضايا اللي ما عندها أي سجل
+  // معاملات إطلاقاً (حالات نادرة، بيانات قديمة جداً).
+  if(!transactions.length) return Math.max(balanceDiff, 0);
+
+  const calYear = thisDate.getFullYear();
+  const calMonth = thisDate.getMonth(); // 0-indexed
+  const monthStart = new Date(calYear, calMonth, 1, 0, 0, 0);
+  const monthEnd = new Date(calYear, calMonth + 1, 0, 23, 59, 59); // آخر يوم بنفس الشهر التقويمي
+
   let txnSum = 0;
   transactions.forEach(t=>{
     const d = parseDate(t["تاريخ الشيك/الحوالة"]);
     if(!d) return;
-    if(d > prevDate && d <= thisDate){
+    if(d >= monthStart && d <= monthEnd){
       txnSum += parseNum(t["المبلغ المحول"]) || 0;
     }
   });
 
   // "صفر" حدّ أدنى مطلق دائماً — صافي أي شهر لا يجب أن يكون سالباً أبداً
-  // (السحب ليس "وصولاً سلبياً"، هو ببساطة "لا شيء جديد وصل هذا الشهر")
-  return Math.max(txnSum, balanceDiff, 0);
+  return Math.max(txnSum, 0);
 }
 
 // تجميد قيمة "المتاح للقبض" الحالية لكل القضايا تحت شهر جديد (أو تحديث شهر
