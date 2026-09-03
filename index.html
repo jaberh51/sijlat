@@ -11347,11 +11347,13 @@ function applyAnalysisFilter(){
 
   analysisFilteredRows = analysisAllRows.filter(r=>{
     const key = caseKey(r);
-    // استبعاد دائم وتلقائي (بلا أي زر أو خيار) — تسوية خارج المحكمة أو
-    // بحاجة إلى فصل، بنفس آلية صفحة "متابعة مع المحامي" تماماً. هذه القضايا
-    // لن تصلها أي رديّة جديدة مستقبلاً، فلا داعي لظهورها في هذا التحليل إطلاقاً.
+    // استبعاد دائم وتلقائي (بلا أي زر أو خيار) — تسوية خارج المحكمة، بحاجة
+    // إلى فصل، أو مفصولة فعلياً (بطلب المستخدم — أُضيف الشرط الثالث)، بنفس
+    // آلية صفحة "متابعة مع المحامي" تماماً. هذه القضايا لن تصلها أي رديّة
+    // جديدة مستقبلاً، فلا داعي لظهورها في هذا التحليل إطلاقاً.
     if(isCaseRemoved(key)) return false;
     if(isCaseNeedsClosure(key)) return false;
+    if((r["حالة الدعوى"]||"").trim() === "فصل") return false;
     if(hasAvailFilter && lastMonth){
       const avail = getMonthRawValue(r, lastMonth.id);
       if(!(avail > 0)) return false;
