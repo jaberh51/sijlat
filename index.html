@@ -10745,11 +10745,12 @@ function renderCasesPage(){
       ? `<span class="cases-type-badge cases-type-badge-${caseTypeVal === 'شخصي' ? 'personal' : 'lawyer'}">${caseTypeVal === 'شخصي' ? '🙋 شخصي' : '⚖️ محامي'}</span>`
       : "";
     // ===== شارة إكمال المراسلات حسب "الماليات" (بطلب المستخدم — مُعدَّلة
-    // لتكون تدريجية) =====
+    // لتكون تدريجية، ولون الحسم بالذات يعكس وجود فلوس فعلية أو لا) =====
     // تظهر فقط لو فلتر "الماليات" مفعَّل على جهة محدَّدة (بلا "الكل"). تعرض
-    // عدد ✓ بقدر ما اكتمل فعلياً لحد الآن (مو "الكل أو ولا شي"): ✓ واحدة لو
-    // وصل الحسم بس، ✓✓ لو وصل الحسم واكتملت المكافأة (باليد/بريد) أيضاً،
-    // وهكذا. وزارة الصحة/أخرى فقط تضيف خانة الحوافز الثالثة للعدّ.
+    // عدد ✓ بقدر ما اكتمل فعلياً لحد الآن: أول ✓ (الحسم) تكون **خضراء** لو
+    // فيه فلوس فعلية بالقضية (متاح/محصّل)، أو **حمراء** لو الكتاب صدر
+    // وأُرسِل (بريد/باليد) لكن بلا أي فلوس وصلت بعد. باقي الشارات (مكافأة/
+    // حوافز) تبقى خضراء دائماً عند اكتمالها.
     const financierFilterVal = document.getElementById("casesFinancierFilter").value;
     let financierBadge = "";
     if(financierFilterVal && financierFilterVal !== "بلا"){
@@ -10761,13 +10762,16 @@ function renderCasesPage(){
       const mukafaaDone = !!mr["مكافأة_مجمَّد"];
       const hawafizDone = !!mr["حوافز_مجمَّد"];
       const needsHawafiz = financierFilterVal === "وزارة الصحة" || financierFilterVal === "أخرى";
-      let doneCount = 0;
-      if(hasmDone) doneCount++;
-      if(mukafaaDone) doneCount++;
-      if(needsHawafiz && hawafizDone) doneCount++;
       const requiredCount = needsHawafiz ? 3 : 2;
-      if(doneCount > 0){
-        financierBadge = `<span class="cases-financier-badge" title="${doneCount} من ${requiredCount} مكتمل (${financierFilterVal})">${"✓".repeat(doneCount)}</span>`;
+      const checkmarks = [];
+      if(hasmDone){
+        const hasmColor = arrived ? "#16a34a" : "#dc2626";
+        checkmarks.push(`<span style="color:${hasmColor};">✓</span>`);
+      }
+      if(mukafaaDone) checkmarks.push(`<span style="color:#16a34a;">✓</span>`);
+      if(needsHawafiz && hawafizDone) checkmarks.push(`<span style="color:#16a34a;">✓</span>`);
+      if(checkmarks.length){
+        financierBadge = `<span class="cases-financier-badge" title="${checkmarks.length} من ${requiredCount} مكتمل (${financierFilterVal})">${checkmarks.join("")}</span>`;
       }
     }
     const deadlineRec = caseTypeRec && caseTypeRec["موعد_صارم"];
