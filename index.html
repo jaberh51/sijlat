@@ -10786,10 +10786,15 @@ function renderCasesPage(){
     const defNameSmallClass = def.length > 20 ? " cases-cell-longtext" : "";
     const courtNameSmallClass = courtDisplayName.length > 8 ? " cases-cell-longtext" : "";
     const statusSmallClass = status === "قيد التنفيذ" ? " cases-badge-onelines" : "";
+    // خانة "المحكمة" تُستبدَل بالكامل بشارة الإكمال طول ما فلتر "الماليات"
+    // مفعَّل (بطلب المستخدم) — ترجع تعرض اسم المحكمة تلقائياً بمجرد إلغاء الفلتر.
+    const courtCellContent = (financierFilterVal && financierFilterVal !== "بلا")
+      ? (financierBadge || "")
+      : escapeAttr(courtDisplayName);
     return `<tr class="cases-row${selected?' cases-row-selected':''}${rowBgClass}${dblClickClass} ${getClientRowClass(r)}" data-key="${escapeAttr(key)}">
-      <td class="cases-cell-no" data-col="رقم القضية">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${finishedBadge}${caseTypeBadge}${financierBadge}${deadlineBadge}</td>
+      <td class="cases-cell-no" data-col="رقم القضية">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${finishedBadge}${caseTypeBadge}${deadlineBadge}</td>
       <td data-col="الطرف" class="cases-cell-name ${defNameSmallClass}" title="${escapeAttr(def)}">${escapeAttr(def)}</td>
-      <td data-col="المحكمة" class="${courtNameSmallClass}">${escapeAttr(courtDisplayName)}</td>
+      <td data-col="المحكمة" class="${courtNameSmallClass}">${courtCellContent}</td>
       <td data-col="الحالة"><span class="cases-badge ${statusClass}${statusSmallClass}">${escapeAttr(status)}</span></td>
       <td class="amt-col amt-req" data-col="📋 المطلوب">${fmt(req)}</td>
       <td class="amt-col amt-col-collected" data-col="✓ المحصّل">${fmt(collected)}</td>
