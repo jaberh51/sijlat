@@ -10744,11 +10744,12 @@ function renderCasesPage(){
     const caseTypeBadge = caseTypeVal
       ? `<span class="cases-type-badge cases-type-badge-${caseTypeVal === 'شخصي' ? 'personal' : 'lawyer'}">${caseTypeVal === 'شخصي' ? '🙋 شخصي' : '⚖️ محامي'}</span>`
       : "";
-    // ===== شارة إكمال المراسلات حسب "الماليات" (بطلب المستخدم) =====
-    // تظهر فقط لو فلتر "الماليات" مفعَّل على جهة محدَّدة (بلا "الكل") — كل
-    // جهة تتطلّب عدد مختلف من الخانات المجمَّدة بصفحة المراسلات لتُعتبَر
-    // "مكتملة": وزارة التربية/أمن عام/الجيش العربي/سلاح الجو = خانتان
-    // (حسم+مكافأة) فقط، ووزارة الصحة/أخرى = الثلاث خانات معاً.
+    // ===== شارة إكمال المراسلات حسب "الماليات" (بطلب المستخدم — مُعدَّلة
+    // لتكون تدريجية) =====
+    // تظهر فقط لو فلتر "الماليات" مفعَّل على جهة محدَّدة (بلا "الكل"). تعرض
+    // عدد ✓ بقدر ما اكتمل فعلياً لحد الآن (مو "الكل أو ولا شي"): ✓ واحدة لو
+    // وصل الحسم بس، ✓✓ لو وصل الحسم واكتملت المكافأة (باليد/بريد) أيضاً،
+    // وهكذا. وزارة الصحة/أخرى فقط تضيف خانة الحوافز الثالثة للعدّ.
     const financierFilterVal = document.getElementById("casesFinancierFilter").value;
     let financierBadge = "";
     if(financierFilterVal && financierFilterVal !== "بلا"){
@@ -10760,12 +10761,13 @@ function renderCasesPage(){
       const mukafaaDone = !!mr["مكافأة_مجمَّد"];
       const hawafizDone = !!mr["حوافز_مجمَّد"];
       const needsHawafiz = financierFilterVal === "وزارة الصحة" || financierFilterVal === "أخرى";
+      let doneCount = 0;
+      if(hasmDone) doneCount++;
+      if(mukafaaDone) doneCount++;
+      if(needsHawafiz && hawafizDone) doneCount++;
       const requiredCount = needsHawafiz ? 3 : 2;
-      const isComplete = needsHawafiz
-        ? (hasmDone && mukafaaDone && hawafizDone)
-        : (hasmDone && mukafaaDone);
-      if(isComplete){
-        financierBadge = `<span class="cases-financier-badge" title="مكتمل الإرسال (${financierFilterVal}) — ${requiredCount} من ${requiredCount}">${"✓".repeat(requiredCount)}</span>`;
+      if(doneCount > 0){
+        financierBadge = `<span class="cases-financier-badge" title="${doneCount} من ${requiredCount} مكتمل (${financierFilterVal})">${"✓".repeat(doneCount)}</span>`;
       }
     }
     const deadlineRec = caseTypeRec && caseTypeRec["موعد_صارم"];
