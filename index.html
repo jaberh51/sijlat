@@ -2269,6 +2269,7 @@ if('serviceWorker' in navigator){
             <option value="الجيش العربي">الجيش العربي</option>
             <option value="سلاح الجو">سلاح الجو</option>
             <option value="أخرى">أخرى</option>
+            <option value="بلا">بلا (غير مصنَّفة)</option>
           </select>
           <select id="casesCourtCityFilter" class="cases-select">
             <option value="">كل المحاكم</option>
@@ -10441,10 +10442,14 @@ function applyCasesFilter(keepPage){
     }
     if(clientFilter && !getPlaintiffForRow(r).includes(clientFilter)) return false;
     // فلتر "الماليات" (بطلب المستخدم) — يصنّف القضايا حسب الجهة المالية
-    // المسؤولة عن الحسم (نفس آلية نوع_القضية بالضبط، حقل مختلف).
+    // المسؤولة عن الحسم (نفس آلية نوع_القضية بالضبط، حقل مختلف). "بلا" حالة
+    // خاصة (زي فلتر "بلا" بشخصي/محامي) — تعرض القضايا غير المصنَّفة إطلاقاً.
     if(financierFilter){
       const rec = masterCache[caseKey(r)];
-      if(!rec || rec["الماليات"] !== financierFilter) return false;
+      const financierVal = (rec && rec["الماليات"]) || "";
+      if(financierFilter === "بلا"){
+        if(financierVal !== "") return false;
+      } else if(financierVal !== financierFilter) return false;
     }
     // فلتر "اتخاذ إجراء" (بطلب المستخدم) — يُفعَّل تلقائياً فقط أثناء وضع
     // اختيار قضية لاتخاذ إجراء بشأنها: يستثني أي قضية موكّلها ليس جابر ولا
@@ -10746,7 +10751,7 @@ function renderCasesPage(){
     // (حسم+مكافأة) فقط، ووزارة الصحة/أخرى = الثلاث خانات معاً.
     const financierFilterVal = document.getElementById("casesFinancierFilter").value;
     let financierBadge = "";
-    if(financierFilterVal){
+    if(financierFilterVal && financierFilterVal !== "بلا"){
       const mr = (caseTypeRec && caseTypeRec["مراسلات"]) || {};
       const collected = getRowCollected(r);
       const avail = getRowAvail(r);
