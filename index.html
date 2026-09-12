@@ -518,6 +518,11 @@
   }
   .cases-type-badge-personal{background:#ede9fe;color:#6d28d9;}
   .cases-type-badge-lawyer{background:#dbeafe;color:#1d4ed8;}
+  .cases-financier-badge{
+    display:inline-block;margin-inline-start:6px;font-size:11px;font-weight:900;
+    color:#166534;background:#dcfce7;border:1px solid #86efac;border-radius:6px;
+    padding:1px 6px;white-space:nowrap;cursor:help;letter-spacing:1px;
+  }
   .cases-deadline-badge{
     display:inline-block;margin-inline-start:6px;font-size:10px;font-weight:900;
     color:#fff;border-radius:6px;padding:2px 7px;white-space:nowrap;cursor:pointer;
@@ -2256,6 +2261,15 @@ if('serviceWorker' in navigator){
             <option value="جابر">جابر فقط</option>
             <option value="حنين">حنين فقط</option>
           </select>
+          <select id="casesFinancierFilter" class="cases-select">
+            <option value="">الماليات (الكل)</option>
+            <option value="أمن عام">أمن عام</option>
+            <option value="وزارة التربية">وزارة التربية</option>
+            <option value="وزارة الصحة">وزارة الصحة</option>
+            <option value="الجيش العربي">الجيش العربي</option>
+            <option value="سلاح الجو">سلاح الجو</option>
+            <option value="أخرى">أخرى</option>
+          </select>
           <select id="casesCourtCityFilter" class="cases-select">
             <option value="">كل المحاكم</option>
           </select>
@@ -2280,6 +2294,18 @@ if('serviceWorker' in navigator){
           <button class="btn secondary" id="casesMarkPersonalBtn" style="font-size:11.5px;padding:6px 14px;">🏷️ تصنيف: شخصي</button>
           <button class="btn secondary" id="casesMarkLawyerBtn" style="font-size:11.5px;padding:6px 14px;">🏷️ تصنيف: محامي</button>
           <button class="btn secondary" id="casesClearTypeBtn" style="font-size:11.5px;padding:6px 14px;">↺ إلغاء التصنيف</button>
+        </div>
+        <!-- شريط تصنيف "الماليات" الجماعي (بطلب المستخدم) — نفس آلية شخصي/محامي
+             بالضبط، بس لتحديد الجهة المالية المسؤولة عن حسم كل قضية. -->
+        <div id="casesFinancierBulkBar" style="display:none;align-items:center;gap:8px;margin-top:10px;padding:10px 14px;background:var(--brass-soft);border-radius:10px;flex-wrap:wrap;">
+          <span id="casesFinancierBulkCount" style="font-weight:700;font-size:12.5px;"></span>
+          <button class="btn secondary cases-financier-btn" data-financier="أمن عام" style="font-size:11px;padding:5px 12px;">🏷️ أمن عام</button>
+          <button class="btn secondary cases-financier-btn" data-financier="وزارة التربية" style="font-size:11px;padding:5px 12px;">🏷️ وزارة التربية</button>
+          <button class="btn secondary cases-financier-btn" data-financier="وزارة الصحة" style="font-size:11px;padding:5px 12px;">🏷️ وزارة الصحة</button>
+          <button class="btn secondary cases-financier-btn" data-financier="الجيش العربي" style="font-size:11px;padding:5px 12px;">🏷️ الجيش العربي</button>
+          <button class="btn secondary cases-financier-btn" data-financier="سلاح الجو" style="font-size:11px;padding:5px 12px;">🏷️ سلاح الجو</button>
+          <button class="btn secondary cases-financier-btn" data-financier="أخرى" style="font-size:11px;padding:5px 12px;">🏷️ أخرى</button>
+          <button class="btn secondary" id="casesClearFinancierBtn" style="font-size:11px;padding:5px 12px;">↺ إلغاء</button>
         </div>
       </div>
     </div>
@@ -9539,11 +9565,16 @@ let casesSelectModeActive = false; // التحديد بالضغط على الص�
 function updateCasesTypeBulkBar(){
   const bar = document.getElementById("casesTypeBulkBar");
   const countEl = document.getElementById("casesTypeBulkCount");
+  const financierBar = document.getElementById("casesFinancierBulkBar");
+  const financierCountEl = document.getElementById("casesFinancierBulkCount");
   if(casesSelected.size > 0){
     bar.style.display = "flex";
     countEl.textContent = `${casesSelected.size} قضية مُحدَّدة —`;
+    financierBar.style.display = "flex";
+    financierCountEl.textContent = `${casesSelected.size} قضية مُحدَّدة —`;
   } else {
     bar.style.display = "none";
+    financierBar.style.display = "none";
   }
 }
 
@@ -9558,6 +9589,24 @@ async function bulkSetCaseType(type){
   });
   await saveMaster(keys);
   showToast(type ? `✓ صُنِّفت ${keys.length} قضية كـ"${type}"` : `↺ أُلغي تصنيف ${keys.length} قضية`, "ok");
+  casesSelected.clear();
+  updateCasesTypeBulkBar();
+  casesAllRows = getCasesRows();
+  applyCasesFilter(true);
+}
+
+// تصنيف الجهة المالية (الماليات) لكل القضايا المُحدَّدة دفعة واحدة (بطلب
+// المستخدم) — نفس آلية bulkSetCaseType بالضبط، بحقل مختلف.
+async function bulkSetFinancier(financier){
+  const keys = [...casesSelected];
+  if(!keys.length) return;
+  keys.forEach(key=>{
+    if(!masterCache[key]) masterCache[key] = {};
+    if(financier) masterCache[key]["الماليات"] = financier;
+    else deleteMasterField(key, "الماليات");
+  });
+  await saveMaster(keys);
+  showToast(financier ? `✓ صُنِّفت ${keys.length} قضية كـ"${financier}"` : `↺ أُلغي تصنيف الماليات لـ${keys.length} قضية`, "ok");
   casesSelected.clear();
   updateCasesTypeBulkBar();
   casesAllRows = getCasesRows();
@@ -10339,6 +10388,7 @@ function applyCasesFilter(keepPage){
   const status = document.getElementById("casesStatusFilter").value;
   const typeFilter = document.getElementById("casesTypeFilter").value;
   const clientFilter = document.getElementById("casesClientFilter").value;
+  const financierFilter = document.getElementById("casesFinancierFilter").value;
   const courtSelect = document.getElementById("casesCourtCityFilter");
   // تعبئة قائمة المحاكم ديناميكياً من البيانات الفعلية — تبقى محدَّثة تلقائياً
   // مهما تغيّرت المحاكم مستقبلاً، بلا الحاجة لتعديل الكود يدوياً كل مرة.
@@ -10390,6 +10440,12 @@ function applyCasesFilter(keepPage){
       } else if(caseType !== typeFilter) return false;
     }
     if(clientFilter && !getPlaintiffForRow(r).includes(clientFilter)) return false;
+    // فلتر "الماليات" (بطلب المستخدم) — يصنّف القضايا حسب الجهة المالية
+    // المسؤولة عن الحسم (نفس آلية نوع_القضية بالضبط، حقل مختلف).
+    if(financierFilter){
+      const rec = masterCache[caseKey(r)];
+      if(!rec || rec["الماليات"] !== financierFilter) return false;
+    }
     // فلتر "اتخاذ إجراء" (بطلب المستخدم) — يُفعَّل تلقائياً فقط أثناء وضع
     // اختيار قضية لاتخاذ إجراء بشأنها: يستثني أي قضية موكّلها ليس جابر ولا
     // حنين، بجانب فلتر "شخصي" العادي (المضبوط تلقائياً على القائمة المنسدلة).
@@ -10683,6 +10739,30 @@ function renderCasesPage(){
     const caseTypeBadge = caseTypeVal
       ? `<span class="cases-type-badge cases-type-badge-${caseTypeVal === 'شخصي' ? 'personal' : 'lawyer'}">${caseTypeVal === 'شخصي' ? '🙋 شخصي' : '⚖️ محامي'}</span>`
       : "";
+    // ===== شارة إكمال المراسلات حسب "الماليات" (بطلب المستخدم) =====
+    // تظهر فقط لو فلتر "الماليات" مفعَّل على جهة محدَّدة (بلا "الكل") — كل
+    // جهة تتطلّب عدد مختلف من الخانات المجمَّدة بصفحة المراسلات لتُعتبَر
+    // "مكتملة": وزارة التربية/أمن عام/الجيش العربي/سلاح الجو = خانتان
+    // (حسم+مكافأة) فقط، ووزارة الصحة/أخرى = الثلاث خانات معاً.
+    const financierFilterVal = document.getElementById("casesFinancierFilter").value;
+    let financierBadge = "";
+    if(financierFilterVal){
+      const mr = (caseTypeRec && caseTypeRec["مراسلات"]) || {};
+      const collected = getRowCollected(r);
+      const avail = getRowAvail(r);
+      const arrived = (collected !== null && collected > 0.009) || (avail !== null && avail > 0.009);
+      const hasmDone = arrived || !!mr["حسم_مجمَّد"];
+      const mukafaaDone = !!mr["مكافأة_مجمَّد"];
+      const hawafizDone = !!mr["حوافز_مجمَّد"];
+      const needsHawafiz = financierFilterVal === "وزارة الصحة" || financierFilterVal === "أخرى";
+      const requiredCount = needsHawafiz ? 3 : 2;
+      const isComplete = needsHawafiz
+        ? (hasmDone && mukafaaDone && hawafizDone)
+        : (hasmDone && mukafaaDone);
+      if(isComplete){
+        financierBadge = `<span class="cases-financier-badge" title="مكتمل الإرسال (${financierFilterVal}) — ${requiredCount} من ${requiredCount}">${"✓".repeat(requiredCount)}</span>`;
+      }
+    }
     const deadlineRec = caseTypeRec && caseTypeRec["موعد_صارم"];
     let deadlineBadge = "";
     if(deadlineRec){
@@ -10696,7 +10776,7 @@ function renderCasesPage(){
     const courtNameSmallClass = courtDisplayName.length > 8 ? " cases-cell-longtext" : "";
     const statusSmallClass = status === "قيد التنفيذ" ? " cases-badge-onelines" : "";
     return `<tr class="cases-row${selected?' cases-row-selected':''}${rowBgClass}${dblClickClass} ${getClientRowClass(r)}" data-key="${escapeAttr(key)}">
-      <td class="cases-cell-no" data-col="رقم القضية">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${finishedBadge}${caseTypeBadge}${deadlineBadge}</td>
+      <td class="cases-cell-no" data-col="رقم القضية">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${finishedBadge}${caseTypeBadge}${financierBadge}${deadlineBadge}</td>
       <td data-col="الطرف" class="cases-cell-name ${defNameSmallClass}" title="${escapeAttr(def)}">${escapeAttr(def)}</td>
       <td data-col="المحكمة" class="${courtNameSmallClass}">${escapeAttr(courtDisplayName)}</td>
       <td data-col="الحالة"><span class="cases-badge ${statusClass}${statusSmallClass}">${escapeAttr(status)}</span></td>
@@ -11988,6 +12068,10 @@ document.getElementById("casesHideThirdSegment").addEventListener("change", ()=>
 document.getElementById("casesMarkPersonalBtn").onclick = ()=> bulkSetCaseType("شخصي");
 document.getElementById("casesMarkLawyerBtn").onclick = ()=> bulkSetCaseType("محامي");
 document.getElementById("casesClearTypeBtn").onclick = ()=> bulkSetCaseType(null);
+document.querySelectorAll(".cases-financier-btn").forEach(btn=>{
+  btn.onclick = ()=> bulkSetFinancier(btn.dataset.financier);
+});
+document.getElementById("casesClearFinancierBtn").onclick = ()=> bulkSetFinancier(null);
 
 document.getElementById("casesPageSizeSelect").value = String(CASES_PAGE_SIZE);
 document.getElementById("casesSelectModeToggle").onclick = ()=>{
