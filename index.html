@@ -11277,6 +11277,12 @@ function getMonthRawValue(r, monthId){
 //       ردية مؤرَّخة مرفقة معها، فلن تظهر في حساب المعاملات وحده.
 //   نأخذ "الأكبر" بينهما (وليس المجموع) لأن "المتاح" رقم تراكمي يشمل عادة
 //   أثر الرديات المؤرَّخة أصلاً ضمنه، فجمع الطريقتين قد يُضاعف نفس المبلغ.
+// ===== إعادة بناء جذرية بطلب المستخدم — بعد نقاش طويل، القرار النهائي:
+// الاعتماد **حصراً** على "المتاح" من ملف القضايا (بلا أي علاقة بتواريخ ملف
+// الرديات إطلاقاً). المعادلة بسيطة وواضحة: قيمة أي شهر = المتاح الحالي
+// ناقص المتاح المسجَّل بالشهر السابق مباشرة. مثال المستخدم:
+//   مطلوب=100، شهر 8: متاح=10 (متبقي=90) → شهر 9: متاح=20 (متبقي=80)
+//   إذن: شهر 8 = 10 (القيمة الخام الأولى)، شهر 9 = 20-10 = 10 (الفرق)
 function getMonthColumnValue(r, monthIndex, months){
   if(monthIndex === 0){
     return getMonthRawValue(r, months[monthIndex].id);
@@ -11284,61 +11290,9 @@ function getMonthColumnValue(r, monthIndex, months){
   const prevMonth = months[monthIndex-1];
   const thisMonth = months[monthIndex];
   const balanceDiff = getMonthRawValue(r, thisMonth.id) - getMonthRawValue(r, prevMonth.id);
-
-  // ===== إصلاح جذري ثالث (بطلب المستخدم — اكتُشف بمقارنة شهر 8 وشهر 9
-  // متطابقين تماماً) =====
-  // "تاريخ آخر تحديث" (updatedAt) يتحرَّك بحرية مع أي ضغطة "🔄 تحديث الشهر
-  // الأخير" — استخدامه وحده كحدود للشهر التقويمي كان يسبِّب تصادماً: لو
-  // حدَّثت شهراً سابقاً بعد ما دخلنا شهراً تالياً فعلياً، ينزاح تاريخه لنفس
-  // الشهر التالي، فيتشارك الشهران **نفس نافذة التاريخ بالضبط** ويظهران
-  // متطابقين. الحل: نعتمد الآن على "calendarMonth" — حقل ثابت يُسجَّل **مرة
-  // واحدة فقط** عند إنشاء العمود لأول مرة ولا يتغيّر أبداً بعدها، بمعزل تام
-  // عن أي تحديث لاحق.
-  // ترقيع تلقائي للأشهر القديمة (6/7/8) اللي أُنشئت قبل هذا الحقل: تسمية كل
-  // شهر ("6"، "7"، "8"...) تطابق فعلياً رقم الشهر الميلادي نفسه بنظامك
-  // (بطلب المستخدم — شهر 8 = أغسطس، شهر 9 = سبتمبر) — نستنتج calendarMonth
-  // مباشرة من رقم التسمية، بلا حاجة لحذف وإعادة إنشاء أي عمود قديم.
-  let calYear, calMonth;
-  const labelAsMonthNum = parseInt(thisMonth.label, 10);
-  if(thisMonth.calendarMonth){
-    const [y, m] = thisMonth.calendarMonth.split("-").map(Number);
-    calYear = y; calMonth = m;
-  } else if(!isNaN(labelAsMonthNum) && labelAsMonthNum >= 1 && labelAsMonthNum <= 12){
-    calYear = getAccurateNow().getFullYear(); // بلا عبور سنة حتى الآن بنظامك — الأشهر كلها بنفس السنة الحالية
-    calMonth = labelAsMonthNum - 1; // 0-indexed
-  } else if(thisMonth.updatedAt){
-    const d = new Date(thisMonth.updatedAt);
-    calYear = d.getFullYear(); calMonth = d.getMonth();
-  } else {
-    return Math.max(balanceDiff, 0); // لا بيانات تاريخ كافية إطلاقاً — احتياط أخير
-  }
-
-  const rec = masterCache[caseKey(r)];
-  const transactions = (rec && rec["معاملات مالية"]) || [];
-  // ===== إصلاح جذري ثانٍ (بطلب المستخدم — محاكاة رياضية أثبتت إن الإصلاح
-  // الأول وحده غير كافٍ) =====
-  // "فرق الرصيد" (balanceDiff) نفسه يتضخّم ويُظهر مبلغاً متراكماً من أشهر
-  // سابقة لو المبلغ بقي بلا سحب بين تجميدين — بغضّ النظر عن مدى دقة نافذة
-  // تاريخ المعاملات. الحل: لو فيه سجل معاملات فعلي أصلاً لهذي القضية، نثق
-  // بمجموع معاملات الشهر التقويمي **بالكامل** (بلا مقارنته بفرق الرصيد إطلاقاً)
-  // — فرق الرصيد يبقى فقط احتياطاً أخيراً للقضايا اللي ما عندها أي سجل
-  // معاملات إطلاقاً (حالات نادرة، بيانات قديمة جداً).
-  if(!transactions.length) return Math.max(balanceDiff, 0);
-
-  const monthStart = new Date(calYear, calMonth, 1, 0, 0, 0);
-  const monthEnd = new Date(calYear, calMonth + 1, 0, 23, 59, 59); // آخر يوم بنفس الشهر التقويمي
-
-  let txnSum = 0;
-  transactions.forEach(t=>{
-    const d = parseDate(t["تاريخ الشيك/الحوالة"]);
-    if(!d) return;
-    if(d >= monthStart && d <= monthEnd){
-      txnSum += parseNum(t["المبلغ المحول"]) || 0;
-    }
-  });
-
   // "صفر" حدّ أدنى مطلق دائماً — صافي أي شهر لا يجب أن يكون سالباً أبداً
-  return Math.max(txnSum, 0);
+  // (نقصان المتاح يعني تحصيلاً/سحباً فعلياً، لا "وصولاً سلبياً" لهذا الشهر)
+  return Math.max(balanceDiff, 0);
 }
 
 // تجميد قيمة "المتاح للقبض" الحالية لكل القضايا تحت شهر جديد (أو تحديث شهر
