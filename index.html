@@ -11285,10 +11285,26 @@ function getMonthColumnValue(r, monthIndex, months){
   const thisMonth = months[monthIndex];
   const balanceDiff = getMonthRawValue(r, thisMonth.id) - getMonthRawValue(r, prevMonth.id);
 
-  const thisDate = thisMonth.updatedAt ? new Date(thisMonth.updatedAt) : null;
-  // احتياط: أشهر قديمة جُمِّدت قبل تسجيل تاريخ التحديث — لا بيانات تواريخ
-  // كافية لحساب مجموع المعاملات، فنكتفي بفرق الرصيد وحده.
-  if(!thisDate) return Math.max(balanceDiff, 0);
+  // ===== إصلاح جذري ثالث (بطلب المستخدم — اكتُشف بمقارنة شهر 8 وشهر 9
+  // متطابقين تماماً) =====
+  // "تاريخ آخر تحديث" (updatedAt) يتحرَّك بحرية مع أي ضغطة "🔄 تحديث الشهر
+  // الأخير" — استخدامه وحده كحدود للشهر التقويمي كان يسبِّب تصادماً: لو
+  // حدَّثت شهراً سابقاً بعد ما دخلنا شهراً تالياً فعلياً، ينزاح تاريخه لنفس
+  // الشهر التالي، فيتشارك الشهران **نفس نافذة التاريخ بالضبط** ويظهران
+  // متطابقين. الحل: نعتمد الآن على "calendarMonth" — حقل ثابت يُسجَّل **مرة
+  // واحدة فقط** عند إنشاء العمود لأول مرة ولا يتغيّر أبداً بعدها، بمعزل تام
+  // عن أي تحديث لاحق. للأشهر القديمة اللي أُنشئت قبل هذا الحقل (بلا
+  // calendarMonth محفوظة)، نسقط احتياطياً لنفس منطق updatedAt القديم.
+  let calYear, calMonth;
+  if(thisMonth.calendarMonth){
+    const [y, m] = thisMonth.calendarMonth.split("-").map(Number);
+    calYear = y; calMonth = m;
+  } else if(thisMonth.updatedAt){
+    const d = new Date(thisMonth.updatedAt);
+    calYear = d.getFullYear(); calMonth = d.getMonth();
+  } else {
+    return Math.max(balanceDiff, 0); // لا بيانات تاريخ كافية إطلاقاً — احتياط أخير
+  }
 
   const rec = masterCache[caseKey(r)];
   const transactions = (rec && rec["معاملات مالية"]) || [];
@@ -11302,8 +11318,6 @@ function getMonthColumnValue(r, monthIndex, months){
   // معاملات إطلاقاً (حالات نادرة، بيانات قديمة جداً).
   if(!transactions.length) return Math.max(balanceDiff, 0);
 
-  const calYear = thisDate.getFullYear();
-  const calMonth = thisDate.getMonth(); // 0-indexed
   const monthStart = new Date(calYear, calMonth, 1, 0, 0, 0);
   const monthEnd = new Date(calYear, calMonth + 1, 0, 23, 59, 59); // آخر يوم بنفس الشهر التقويمي
 
@@ -11389,7 +11403,11 @@ async function ensureFirstMonth(){
   let months = getAnalysisMonths();
   if(months.length > 0) return;
   const monthId = "m" + Date.now();
-  months = [{id: monthId, label: "6", updatedAt: getAccurateNow().toISOString()}];
+  const now = getAccurateNow();
+  // calendarMonth: الشهر التقويمي الحقيقي لهذا العمود — يُثبَّت هنا مرة واحدة
+  // فقط عند الإنشاء ولا يتغيّر أبداً بعدها، حتى لو استخدمت "🔄 تحديث الشهر
+  // الأخير" لاحقاً (راجع الشرح الكامل عند getMonthColumnValue).
+  months = [{id: monthId, label: "6", updatedAt: now.toISOString(), calendarMonth: `${now.getFullYear()}-${now.getMonth()}`}];
   saveAnalysisMonths(months);
   await freezeNewMonth(monthId);
 }
@@ -11405,7 +11423,10 @@ async function addAnalysisMonth(){
   const lastNum = parseInt(lastLabel, 10);
   const nextLabel = isNaN(lastNum) ? String(months.length + 1) : String(lastNum + 1);
   const monthId = "m" + Date.now();
-  months.push({id: monthId, label: nextLabel});
+  const now = getAccurateNow();
+  // calendarMonth ثابتة الآن (راجع الشرح أعلى ensureFirstMonth) — هذا العمود
+  // سيمثِّل دائماً نفس الشهر التقويمي اللي أُنشئ فيه، بغضّ النظر عن أي تحديث لاحق.
+  months.push({id: monthId, label: nextLabel, calendarMonth: `${now.getFullYear()}-${now.getMonth()}`});
   saveAnalysisMonths(months);
   await freezeNewMonth(monthId);
   showToast(`✓ تمت إضافة الشهر ${nextLabel}`, "ok");
