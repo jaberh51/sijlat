@@ -11555,7 +11555,21 @@ function renderAnalysisPage(){
     const refreshBtn = isLast
       ? `<button class="analysis-month-refresh" id="analysisRefreshLastBtn" title="تحديث هذا الشهر بأحدث الأرقام">🔄</button>`
       : "";
-    return `<th class="al-th-month${isLast ? " is-last" : ""}">${refreshBtn}<div>${escapeAttr(m.label)}</div></th>`;
+    // 🔍 تشخيص مؤقت (يُحذَف فور حل المشكلة) — يعرض بالضبط الشهر/السنة التقويمية
+    // اللي يستخدمها الحساب لهذا العمود، عشان نتأكد هل الإصلاح يشتغل فعلياً أو لا.
+    const labelAsMonthNum = parseInt(m.label, 10);
+    let debugCal = "";
+    if(m.calendarMonth){
+      debugCal = `ثابت:${m.calendarMonth}`;
+    } else if(!isNaN(labelAsMonthNum) && labelAsMonthNum >= 1 && labelAsMonthNum <= 12){
+      debugCal = `من التسمية:${getAccurateNow().getFullYear()}-${labelAsMonthNum}`;
+    } else if(m.updatedAt){
+      const d = new Date(m.updatedAt);
+      debugCal = `من updatedAt:${d.getFullYear()}-${d.getMonth()+1}`;
+    } else {
+      debugCal = "بلا أي بيانات!";
+    }
+    return `<th class="al-th-month${isLast ? " is-last" : ""}">${refreshBtn}<div>${escapeAttr(m.label)}</div><div style="font-size:8px;color:#dc2626;">${debugCal}</div></th>`;
   }).join("");
 
   const rowsHtml = pageRows.map(r=>{
