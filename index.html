@@ -11293,12 +11293,19 @@ function getMonthColumnValue(r, monthIndex, months){
   // الشهر التالي، فيتشارك الشهران **نفس نافذة التاريخ بالضبط** ويظهران
   // متطابقين. الحل: نعتمد الآن على "calendarMonth" — حقل ثابت يُسجَّل **مرة
   // واحدة فقط** عند إنشاء العمود لأول مرة ولا يتغيّر أبداً بعدها، بمعزل تام
-  // عن أي تحديث لاحق. للأشهر القديمة اللي أُنشئت قبل هذا الحقل (بلا
-  // calendarMonth محفوظة)، نسقط احتياطياً لنفس منطق updatedAt القديم.
+  // عن أي تحديث لاحق.
+  // ترقيع تلقائي للأشهر القديمة (6/7/8) اللي أُنشئت قبل هذا الحقل: تسمية كل
+  // شهر ("6"، "7"، "8"...) تطابق فعلياً رقم الشهر الميلادي نفسه بنظامك
+  // (بطلب المستخدم — شهر 8 = أغسطس، شهر 9 = سبتمبر) — نستنتج calendarMonth
+  // مباشرة من رقم التسمية، بلا حاجة لحذف وإعادة إنشاء أي عمود قديم.
   let calYear, calMonth;
+  const labelAsMonthNum = parseInt(thisMonth.label, 10);
   if(thisMonth.calendarMonth){
     const [y, m] = thisMonth.calendarMonth.split("-").map(Number);
     calYear = y; calMonth = m;
+  } else if(!isNaN(labelAsMonthNum) && labelAsMonthNum >= 1 && labelAsMonthNum <= 12){
+    calYear = getAccurateNow().getFullYear(); // بلا عبور سنة حتى الآن بنظامك — الأشهر كلها بنفس السنة الحالية
+    calMonth = labelAsMonthNum - 1; // 0-indexed
   } else if(thisMonth.updatedAt){
     const d = new Date(thisMonth.updatedAt);
     calYear = d.getFullYear(); calMonth = d.getMonth();
