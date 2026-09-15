@@ -11580,9 +11580,10 @@ function renderAnalysisPage(){
     let debugRawRow = "";
     if(rowIdx === 0){
       const rec = masterCache[caseKey(r)];
-      const txCount = (rec && rec["معاملات مالية"] && rec["معاملات مالية"].length) || 0;
+      const txns = (rec && rec["معاملات مالية"]) || [];
       const rawVals = months.map(m => `${m.label}:${getMonthRawValue(r, m.id).toFixed(2)}`).join(" | ");
-      debugRawRow = `<tr><td colspan="99" style="font-size:9px;color:#dc2626;background:#fef2f2;padding:4px 8px;">🔍 خام كل شهر (${def}): ${rawVals} — عدد المعاملات المسجَّلة: ${txCount}</td></tr>`;
+      const txnDetails = txns.map((t,idx)=> `#${idx+1}: تاريخ="${t["تاريخ الشيك/الحوالة"]||"فارغ"}" مبلغ=${t["المبلغ المحول"]||"فارغ"}`).join("  ||  ");
+      debugRawRow = `<tr><td colspan="99" style="font-size:9px;color:#dc2626;background:#fef2f2;padding:4px 8px;">🔍 خام كل شهر (${def}): ${rawVals} — المعاملات: ${txnDetails || "لا شي"}</td></tr>`;
     }
     const monthCellsHtml = months.map((m,i)=>{
       const val = getMonthColumnValue(r, i, months);
