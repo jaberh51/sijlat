@@ -11572,14 +11572,24 @@ function renderAnalysisPage(){
     return `<th class="al-th-month${isLast ? " is-last" : ""}">${refreshBtn}<div>${escapeAttr(m.label)}</div><div style="font-size:8px;color:#dc2626;">${debugCal}</div></th>`;
   }).join("");
 
-  const rowsHtml = pageRows.map(r=>{
+  const rowsHtml = pageRows.map((r, rowIdx)=>{
     const def = getDefendantForRow(r);
+    // 🔍 تشخيص مؤقت إضافي (يُحذَف فور حل المشكلة) — لأول صف بس، نعرض القيم
+    // الخام المخزَّنة فعلياً لكل شهر + عدد المعاملات المسجَّلة لهذي القضية،
+    // عشان نكتشف السبب الحقيقي وراء تكرار نفس الرقم بعدة أعمدة معاً.
+    let debugRawRow = "";
+    if(rowIdx === 0){
+      const rec = masterCache[caseKey(r)];
+      const txCount = (rec && rec["معاملات مالية"] && rec["معاملات مالية"].length) || 0;
+      const rawVals = months.map(m => `${m.label}:${getMonthRawValue(r, m.id).toFixed(2)}`).join(" | ");
+      debugRawRow = `<tr><td colspan="99" style="font-size:9px;color:#dc2626;background:#fef2f2;padding:4px 8px;">🔍 خام كل شهر (${def}): ${rawVals} — عدد المعاملات المسجَّلة: ${txCount}</td></tr>`;
+    }
     const monthCellsHtml = months.map((m,i)=>{
       const val = getMonthColumnValue(r, i, months);
       const cls = val > 0 ? "positive" : "zero";
       return `<td class="al-month ${cls}">${fmtAmt(val)}</td>`;
     }).join("");
-    return `<tr>
+    return `${debugRawRow}<tr>
       <td class="al-party">${escapeAttr(def)}</td>
       ${monthCellsHtml}
     </tr>`;
