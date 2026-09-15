@@ -11578,7 +11578,7 @@ function renderAnalysisPage(){
     // الخام المخزَّنة فعلياً لكل شهر + عدد المعاملات المسجَّلة لهذي القضية،
     // عشان نكتشف السبب الحقيقي وراء تكرار نفس الرقم بعدة أعمدة معاً.
     let debugRawRow = "";
-    if(rowIdx === 0){
+    if(rowIdx === 0 || rowIdx === 1){
       const rec = masterCache[caseKey(r)];
       const txns = (rec && rec["معاملات مالية"]) || [];
       const rawVals = months.map(m => `${m.label}:${getMonthRawValue(r, m.id).toFixed(2)}`).join(" | ");
