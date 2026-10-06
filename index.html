@@ -2285,7 +2285,6 @@ if('serviceWorker' in navigator){
           </select>
           <span id="casesCount" class="cases-count">0 قضية</span>
           <button id="casesSelectModeToggle" class="btn secondary" style="font-size:11.5px;padding:6px 14px;">☑️ تحديد</button>
-          <button id="casesPrintBtn" class="btn secondary" style="font-size:11.5px;padding:6px 14px;" title="يطبع فقط القضايا المطابقة للفلتر الحالي (أو المحدَّدة إن كان وضع التحديد مفعَّلاً)">🖨️ طباعة الكل</button>
           <label class="closure-checkbox-label" title="إخفاء المقطعين الثاني والثالث من الأسماء">
             <input type="checkbox" id="casesHideThirdSegment">
             🙈
@@ -2361,6 +2360,9 @@ if('serviceWorker' in navigator){
         <div id="casesEmpty" class="fu-search-hint" style="display:none;">لا توجد قضايا مطابقة</div>
       </div>
       <div class="cases-pager" id="casesPager"></div>
+      <div style="display:flex;justify-content:center;padding:4px 4px 16px;">
+        <button id="casesPrintFilteredBtn" class="btn secondary" style="font-size:12.5px;padding:7px 18px;" title="يطبع فقط القضايا المطابقة للفلتر الحالي أعلى الصفحة">🖨️ طباعة النتائج المفلترة</button>
+      </div>
     </div>
   </div>
 </div>
@@ -11106,9 +11108,9 @@ function openLwPrintRequestsModal(){
 
 function printCases(){
   const fmt = (n)=> n !== null ? n.toLocaleString('ar',{minimumFractionDigits:2,maximumFractionDigits:2}) : "—";
-  const rowsToPrint = casesSelected.size > 0
-    ? casesFilteredRows.filter(r => casesSelected.has(caseKey(r)))
-    : casesFilteredRows;
+  // تطبع دائماً القضايا المطابقة للفلتر الحالي فقط — بلا أي علاقة بالتحديد
+  // (وضع "☑️ تحديد" مُستقل تماماً عن هذا الزر بطلب المستخدم)
+  const rowsToPrint = casesFilteredRows;
 
   const rows = rowsToPrint.map(r=>{
     const key = caseKey(r);
@@ -11140,7 +11142,7 @@ function printCases(){
     td{padding:6px 8px;border-bottom:1px solid #eee;}
     h2{font-size:15px;}p{font-size:12px;color:#666;}</style></head>
     <body>
-    <h2>📁 سجل القضايا${casesSelected.size>0?' — مختارة':''}</h2>
+    <h2>📁 سجل القضايا — نتائج الفلتر</h2>
     <p>${new Date().toLocaleDateString('ar-EG')} — ${rowsToPrint.length} قضية</p>
     <table><thead><tr>
       <th>رقم القضية</th><th>الطرف</th><th>المحكمة</th><th>الحالة</th>
@@ -12094,7 +12096,7 @@ document.getElementById("casesSelectModeToggle").onclick = ()=>{
     updateCasesTypeBulkBar();
   }
 };
-document.getElementById("casesPrintBtn").onclick = ()=>{ printCases(); };
+document.getElementById("casesPrintFilteredBtn").onclick = ()=>{ printCases(); };
 document.getElementById("casesPageSizeSelect").addEventListener("change", (e)=>{
   CASES_PAGE_SIZE = parseInt(e.target.value, 10);
   localStorage.setItem('cases_page_size', String(CASES_PAGE_SIZE));
