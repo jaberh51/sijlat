@@ -11112,7 +11112,7 @@ function printCases(){
   // (وضع "☑️ تحديد" مُستقل تماماً عن هذا الزر بطلب المستخدم)
   const rowsToPrint = casesFilteredRows;
 
-  const rows = rowsToPrint.map(r=>{
+  const rows = rowsToPrint.map((r, idx)=>{
     const key = caseKey(r);
     const rec = masterCache[key];
     const status = (r["حالة الدعوى"]||"").trim();
@@ -11124,20 +11124,22 @@ function printCases(){
     if(req !== null) rem = req - (collected || 0);
     const avail = getRowAvail(r);
     return `<tr>
-      <td class="c0">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${getClientSuffixText(r)}</td>
-      <td class="c1">${escapeAttr(def)}</td>
-      <td class="c2">${escapeAttr(displayCourtName(r["المحكمة"]))}</td>
-      <td class="c3">${escapeAttr(status)}</td>
-      <td class="c4" style="text-align:center">${fmt(req)}</td>
-      <td class="c5" style="text-align:center;color:#065f46">${fmt(collected)}</td>
-      <td class="c6" style="text-align:center;color:${rem&&rem>0?'#991b1b':'#065f46'}">${fmt(rem)}</td>
-      <td class="c7" style="text-align:center;color:#1d4ed8">${fmt(avail)}</td>
+      <td class="c0" style="text-align:center;color:#666">${idx+1}</td>
+      <td class="c1">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${getClientSuffixText(r)}</td>
+      <td class="c2">${escapeAttr(def)}</td>
+      <td class="c3">${escapeAttr(displayCourtName(r["المحكمة"]))}</td>
+      <td class="c4">${escapeAttr(status)}</td>
+      <td class="c5" style="text-align:center">${fmt(req)}</td>
+      <td class="c6" style="text-align:center;color:#065f46">${fmt(collected)}</td>
+      <td class="c7" style="text-align:center;color:${rem&&rem>0?'#991b1b':'#065f46'}">${fmt(rem)}</td>
+      <td class="c8" style="text-align:center;color:#1d4ed8">${fmt(avail)}</td>
     </tr>`;
   }).join("");
 
+  // عمود "م" = ترقيم تلقائي متسلسل (1، 2، 3...) حسب ترتيب النتائج المفلترة.
   // أعمدة الطباعة — يمكن إخفاء أي عمود أو مجموعة أعمدة من شريط التحكم أعلى
   // نافذة الطباعة قبل الطباعة الفعلية (الشريط نفسه لا يظهر بالورقة المطبوعة).
-  const PRINT_COLS = ["رقم القضية","الطرف","المحكمة","الحالة","📋 المطلوب","✓ المحصّل","⏳ المتبقي","💰 المتاح"];
+  const PRINT_COLS = ["م","رقم القضية","الطرف","المحكمة","الحالة","📋 المطلوب","✓ المحصّل","⏳ المتبقي","💰 المتاح"];
   const colToggles = PRINT_COLS.map((c,i)=>
     `<label><input type="checkbox" checked data-col="${i}"> ${c}</label>`).join("");
   const headCells = PRINT_COLS.map((c,i)=>`<th class="c${i}">${c}</th>`).join("");
