@@ -11124,35 +11124,71 @@ function printCases(){
     if(req !== null) rem = req - (collected || 0);
     const avail = getRowAvail(r);
     return `<tr>
-      <td>${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${getClientSuffixText(r)}</td>
-      <td>${escapeAttr(def)}</td>
-      <td>${escapeAttr(displayCourtName(r["المحكمة"]))}</td>
-      <td>${escapeAttr(status)}</td>
-      <td style="text-align:center">${fmt(req)}</td>
-      <td style="text-align:center;color:#065f46">${fmt(collected)}</td>
-      <td style="text-align:center;color:${rem&&rem>0?'#991b1b':'#065f46'}">${fmt(rem)}</td>
-      <td style="text-align:center;color:#1d4ed8">${fmt(avail)}</td>
+      <td class="c0">${escapeAttr(shortCaseNo(r["رقم الدعوى"]))}${getClientSuffixText(r)}</td>
+      <td class="c1">${escapeAttr(def)}</td>
+      <td class="c2">${escapeAttr(displayCourtName(r["المحكمة"]))}</td>
+      <td class="c3">${escapeAttr(status)}</td>
+      <td class="c4" style="text-align:center">${fmt(req)}</td>
+      <td class="c5" style="text-align:center;color:#065f46">${fmt(collected)}</td>
+      <td class="c6" style="text-align:center;color:${rem&&rem>0?'#991b1b':'#065f46'}">${fmt(rem)}</td>
+      <td class="c7" style="text-align:center;color:#1d4ed8">${fmt(avail)}</td>
     </tr>`;
   }).join("");
 
-  const html = `<html><head><meta charset="utf-8">
+  // أعمدة الطباعة — يمكن إخفاء أي عمود أو مجموعة أعمدة من شريط التحكم أعلى
+  // نافذة الطباعة قبل الطباعة الفعلية (الشريط نفسه لا يظهر بالورقة المطبوعة).
+  const PRINT_COLS = ["رقم القضية","الطرف","المحكمة","الحالة","📋 المطلوب","✓ المحصّل","⏳ المتبقي","💰 المتاح"];
+  const colToggles = PRINT_COLS.map((c,i)=>
+    `<label><input type="checkbox" checked data-col="${i}"> ${c}</label>`).join("");
+  const headCells = PRINT_COLS.map((c,i)=>`<th class="c${i}">${c}</th>`).join("");
+
+  const html = `<html><head><meta charset="utf-8"><title>سجل القضايا</title>
     <style>body{font-family:Tajawal,Arial,sans-serif;direction:rtl;padding:20px;}
     table{width:100%;border-collapse:collapse;font-size:12px;margin-top:14px;}
     th{background:#f3f4f6;padding:8px;border-bottom:2px solid #ddd;font-weight:700;}
     td{padding:6px 8px;border-bottom:1px solid #eee;}
-    h2{font-size:15px;}p{font-size:12px;color:#666;}</style></head>
+    h2{font-size:15px;}p{font-size:12px;color:#666;}
+    .pc-bar{position:sticky;top:0;background:#fff8e6;border:1px solid #e5c97a;border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:13px;z-index:5;}
+    .pc-bar .pc-title{font-weight:700;margin-bottom:8px;}
+    .pc-cols{display:flex;flex-wrap:wrap;gap:6px 14px;margin-bottom:10px;}
+    .pc-cols label{cursor:pointer;white-space:nowrap;}
+    .pc-actions{display:flex;flex-wrap:wrap;gap:8px;}
+    .pc-actions button{font-family:inherit;font-size:13px;padding:6px 14px;border-radius:8px;border:1px solid #c9a646;background:#fff;cursor:pointer;}
+    .pc-actions button.pc-main{background:#b8892b;color:#fff;border-color:#b8892b;font-weight:700;}
+    @media print{.pc-bar{display:none !important;} body{padding:0;}}
+    </style><style id="pcHide"></style></head>
     <body>
+    <div class="pc-bar">
+      <div class="pc-title">✂️ اختر الأعمدة التي تريد طباعتها (أزل العلامة لحذف العمود):</div>
+      <div class="pc-cols">${colToggles}</div>
+      <div class="pc-actions">
+        <button type="button" id="pcAll">إظهار الكل</button>
+        <button type="button" id="pcNone">إخفاء الكل</button>
+        <button type="button" class="pc-main" id="pcPrint">🖨️ طباعة</button>
+      </div>
+    </div>
     <h2>📁 سجل القضايا — نتائج الفلتر</h2>
     <p>${new Date().toLocaleDateString('ar-EG')} — ${rowsToPrint.length} قضية</p>
-    <table><thead><tr>
-      <th>رقم القضية</th><th>الطرف</th><th>المحكمة</th><th>الحالة</th>
-      <th>📋 المطلوب</th><th>✓ المحصّل</th><th>⏳ المتبقي</th><th>💰 المتاح</th>
-    </tr></thead><tbody>${rows}</tbody></table>
+    <table><thead><tr>${headCells}</tr></thead><tbody>${rows}</tbody></table>
+    <script>
+      (function(){
+        var boxes = document.querySelectorAll('.pc-cols input');
+        function apply(){
+          var css = '';
+          boxes.forEach(function(b){ if(!b.checked) css += '.c'+b.dataset.col+'{display:none !important;}'; });
+          document.getElementById('pcHide').textContent = css;
+        }
+        boxes.forEach(function(b){ b.onchange = apply; });
+        document.getElementById('pcAll').onclick = function(){ boxes.forEach(function(b){ b.checked = true; }); apply(); };
+        document.getElementById('pcNone').onclick = function(){ boxes.forEach(function(b){ b.checked = false; }); apply(); };
+        document.getElementById('pcPrint').onclick = function(){ window.print(); };
+      })();
+    <\/script>
     </body></html>`;
   const w = window.open('','_blank');
   w.document.write(html);
   w.document.close();
-  w.print();
+  // لا طباعة تلقائية — المستخدم يختار الأعمدة أولاً ثم يضغط "🖨️ طباعة"
 }
 
 function goCases(){
